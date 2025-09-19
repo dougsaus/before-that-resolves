@@ -46,48 +46,124 @@ export function extractResponseText(result: RunResult<any, any>): string {
  * @returns Number of tool calls made
  */
 export function countToolCalls(result: RunResult<any, any>): number {
-  // Access the private _modelResponses property via state
-  const state = result.state as any;
+  // Primary method: Count from newItems (most accurate)
+  if (result.newItems && Array.isArray(result.newItems)) {
+    const toolCallCount = result.newItems.filter(
+      (item: any) => item.type === 'tool_call_item'
+    ).length;
 
-  if (!state || !state._modelResponses || !Array.isArray(state._modelResponses)) {
-    return 0;
+    if (toolCallCount > 0) {
+      return toolCallCount;
+    }
   }
 
-  // Count tool calls across all model responses
-  return state._modelResponses
-    .filter((r: any) => r.toolCalls && r.toolCalls.length > 0)
-    .reduce((count: number, r: any) => count + (r.toolCalls?.length || 0), 0);
+  // Fallback: Count from rawResponses
+  if (result.rawResponses && Array.isArray(result.rawResponses)) {
+    return result.rawResponses.reduce((count: number, response: any) => {
+      if (response.toolCalls && Array.isArray(response.toolCalls)) {
+        return count + response.toolCalls.length;
+      }
+      return count;
+    }, 0);
+  }
+
+  return 0;
 }
 
 /**
  * Get all tool call details from a run
  * @param result The result from run() function
  * @returns Array of tool call details
+ *
+ * FIXED: This now correctly extracts tool calls from newItems which contains
+ * both the tool_call_item and tool_call_output_item objects with full details.
  */
 export function getToolCallDetails(result: RunResult<any, any>): Array<{
   name: string;
   arguments: any;
   result?: any;
+  callId?: string;
+  status?: string;
 }> {
-  const state = result.state as any;
   const toolCalls: any[] = [];
 
-  if (!state || !state._modelResponses || !Array.isArray(state._modelResponses)) {
-    return toolCalls;
+  // Primary method: Extract from newItems (most reliable in v0.1.3)
+  if (result.newItems && Array.isArray(result.newItems)) {
+    // Get tool call items and their corresponding outputs
+    const toolCallItems = result.newItems.filter(
+      (item: any) => item.type === 'tool_call_item'
+    );
+
+    const toolOutputItems = result.newItems.filter(
+      (item: any) => item.type === 'tool_call_output_item'
+    );
+
+    // Match calls with their outputs using callId
+    toolCallItems.forEach((callItem: any) => {
+      const callId = callItem.rawItem?.callId;
+      const outputItem = toolOutputItems.find(
+        (out: any) => out.rawItem?.callId === callId
+      ) as any; // Type assertion to bypass strict typing
+
+      // Parse arguments if they're a JSON string
+      let parsedArguments = callItem.rawItem?.arguments;
+      if (typeof parsedArguments === 'string') {
+        try {
+          parsedArguments = JSON.parse(parsedArguments);
+        } catch (e) {
+          // Keep as string if parsing fails
+        }
+      }
+
+      // Extract the result - it might be in different places depending on the structure
+      let result = undefined;
+      if (outputItem) {
+        result = outputItem.rawItem?.output ||
+                 outputItem.rawItem?.result ||
+                 outputItem.output ||
+                 outputItem.rawItem;
+      }
+
+      toolCalls.push({
+        name: callItem.rawItem?.name || 'unknown',
+        arguments: parsedArguments || {},
+        result: result,
+        callId: callId,
+        status: callItem.rawItem?.status || 'completed',
+      });
+    });
+
+    // If we found tool calls, return them
+    if (toolCalls.length > 0) {
+      return toolCalls;
+    }
   }
 
-  // Extract tool calls from model responses
-  state._modelResponses.forEach((response: any) => {
-    if (response.toolCalls && Array.isArray(response.toolCalls)) {
-      response.toolCalls.forEach((call: any) => {
-        toolCalls.push({
-          name: call.function?.name || 'unknown',
-          arguments: call.function?.arguments || {},
-          result: call.result
+  // Fallback method: Extract from rawResponses (doesn't include results)
+  if (result.rawResponses && Array.isArray(result.rawResponses)) {
+    result.rawResponses.forEach((response: any) => {
+      if (response.toolCalls && Array.isArray(response.toolCalls)) {
+        response.toolCalls.forEach((tc: any) => {
+          let parsedArguments = tc.function?.arguments;
+          if (typeof parsedArguments === 'string') {
+            try {
+              parsedArguments = JSON.parse(parsedArguments);
+            } catch (e) {
+              // Keep as string if parsing fails
+            }
+          }
+
+          toolCalls.push({
+            name: tc.function?.name || tc.name || 'unknown',
+            arguments: parsedArguments || {},
+            // Note: Results are not available in rawResponses
+            callId: tc.id,
+            status: tc.status || 'unknown',
+          });
         });
-      });
-    }
-  });
+      }
+    });
+  }
 
   return toolCalls;
 }

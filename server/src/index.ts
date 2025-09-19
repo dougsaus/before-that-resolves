@@ -23,7 +23,7 @@ app.get('/health', (_req, res) => {
  * This endpoint runs your Card Oracle Agent
  */
 app.post('/api/agent/query', async (req, res) => {
-  const { query } = req.body;
+  const { query, devMode } = req.body;
 
   if (!query) {
     res.status(400).json({
@@ -34,10 +34,10 @@ app.post('/api/agent/query', async (req, res) => {
   }
 
   try {
-    console.log(`\n📨 Received query: "${query}"`);
+    console.log(`\n📨 Received query: "${query}" ${devMode ? '(Dev Mode)' : ''}`);
 
-    // Execute the Card Oracle Agent
-    const result = await executeCardOracle(query);
+    // Execute the Card Oracle Agent with optional dev mode
+    const result = await executeCardOracle(query, devMode || false);
 
     res.json(result);
   } catch (error: any) {

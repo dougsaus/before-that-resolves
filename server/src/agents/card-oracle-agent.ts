@@ -7,7 +7,7 @@ import {
   randomCommanderTool,
   checkCommanderLegalityTool
 } from '../tools/card-tools';
-import { extractResponseText, countToolCalls } from '../utils/agent-helpers';
+import { extractResponseText, countToolCalls, getToolCallDetails } from '../utils/agent-helpers';
 
 /**
  * LESSON 1: Your First Agent!
@@ -36,24 +36,35 @@ export const cardOracleAgent = new Agent({
   model: openaiConfig.model || 'gpt-4o',
 
   // System instructions define the agent's personality and knowledge
-  instructions: `You are the Card Oracle, an expert on Magic: The Gathering cards and the Commander/EDH format.
+  instructions: `You are the Card Oracle, a Magic: The Gathering assistant that provides real-time, accurate card information.
 
-Your role is to help players with:
-- Finding specific cards and their details
-- Explaining card rulings and interactions
-- Checking commander legality
-- Suggesting commanders for different playstyles
-- Understanding card text and abilities
+CRITICAL REQUIREMENTS:
+- You have NO inherent knowledge of Magic: The Gathering cards
+- You MUST use the provided tools for ALL card information
+- NEVER answer questions about cards from memory
+- ALWAYS search for cards using the tools, even if the question seems simple
 
-You have access to the entire Scryfall database of Magic cards. Be helpful, accurate, and enthusiastic about Magic!
+Your role is to help players by using the Scryfall database tools:
+- search_card: For finding specific cards by name
+- advanced_search: For complex queries (color, type, power, etc.)
+- get_card_rulings: For official rulings on cards
+- random_commander: For suggesting random legendary creatures
+- check_commander_legality: For verifying if a card can be a commander
 
-When discussing cards:
-- Always mention the mana cost and type
+IMPORTANT: Magic cards are constantly being updated with new oracle text, rulings, and errata. Card information changes frequently with each set release. Therefore, you MUST:
+1. ALWAYS use tools to get current information
+2. NEVER rely on any training data about cards
+3. If asked about a card, use search_card or advanced_search
+4. If asked about rulings, use get_card_rulings
+5. If asked for a random commander, use random_commander
+
+When you receive card data from tools:
+- Present the mana cost and type
 - Explain important abilities clearly
 - Note the color identity for Commander purposes
 - Mention power/toughness for creatures
 
-Remember: Commander is a singleton format (only one of each card except basic lands) with 100-card decks led by a legendary creature.`,
+Remember: You are a tool-based assistant. Your value comes from providing real-time, accurate data from Scryfall, not from any pre-existing knowledge.`,
 
   // Tools the agent can use
   tools: [
@@ -69,22 +80,12 @@ Remember: Commander is a singleton format (only one of each card except basic la
 
 /**
  * Execute the Card Oracle Agent
- *
- * LEARNING POINT: Using the run() function with Agent!
- * The agent will:
- * 1. Analyze the query
- * 2. Decide which tools to use (if any)
- * 3. Call the tools with appropriate parameters
- * 4. Synthesize the results into a response
  */
-export async function executeCardOracle(query: string) {
+export async function executeCardOracle(query: string, devMode: boolean = false) {
   console.log('🎴 Card Oracle Agent executing query:', query);
+  const startTime = Date.now();
 
   try {
-    // Run the agent using the run function
-    // In @openai/agents v0.1.3, run() accepts either:
-    // 1. A string directly: run(agent, "query")
-    // 2. An array of input items: run(agent, [{ role: 'user', content: 'query' }])
     const result = await run(
       cardOracleAgent,
       [
@@ -95,15 +96,32 @@ export async function executeCardOracle(query: string) {
       ]
     );
 
-    // Use helper functions to extract data from the result
     const responseText = extractResponseText(result);
     const toolCallCount = countToolCalls(result);
+    const totalDuration = Date.now() - startTime;
 
-    return {
+    const response: any = {
       success: true,
       response: responseText || 'No response generated.',
       toolCalls: toolCallCount
     };
+
+    // Include detailed metadata if in dev mode
+    if (devMode) {
+      const toolCallDetails = getToolCallDetails(result);
+      const state = result.state as any;
+
+      response.metadata = {
+        toolCalls: toolCallDetails,
+        totalDuration,
+        modelResponses: state?._modelResponses?.length || 0,
+        tokensUsed: state?._totalTokens || null
+      };
+
+      console.log('📊 Dev Mode - Metadata:', response.metadata);
+    }
+
+    return response;
   } catch (error: any) {
     console.error('❌ Card Oracle Agent error:', error);
     return {

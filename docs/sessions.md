@@ -725,6 +725,142 @@ Lesson 1 successfully completed! Built a working Card Oracle Agent that answers 
 
 ---
 
+## Session 6: UI Enhancement with MTG Symbols & Developer Mode
+**Date**: September 19, 2025 (Late Evening)
+**Model**: Claude Opus 4.1
+**Focus**: Professional UI improvements with real MTG symbols and developer mode
+
+### Major Accomplishments
+
+#### 1. UI Cleanup & Developer Mode
+- **Removed all learning references from user interface**:
+  - Eliminated "Lesson 1" text and learning objectives
+  - Renamed components to production names (CardOracleTest → CardOracle)
+  - Created clean separation between user and developer experiences
+
+- **Implemented Developer Mode**:
+  - Toggle via `Ctrl+Shift+D`, URL parameter `?dev=true`, or env variable
+  - Created `DevModeContext` for state management
+  - Built `DevPanel` component for agent metadata display
+  - Shows tool calls, execution time, and detailed parameters
+
+#### 2. Real MTG Symbol Implementation
+- **Installed Mana Font** (andrewgioia/mana-font):
+  - Professional MTG symbols via icon font
+  - Supports all mana colors, hybrid, Phyrexian, and special symbols
+  - Scalable vector icons that look crisp at any size
+
+- **Created Symbol Components**:
+  - `ManaSymbol.tsx` - Renders individual mana symbols
+  - `ManaCost.tsx` - Parses and displays complete mana costs
+  - Maps text notation (`{R}`, `{U}`, etc.) to visual symbols
+
+#### 3. Rich Text Rendering
+- **Built RichMTGText Component**:
+  - Converts mana symbols (`{R}` → 🔴, `{U}` → 🔵, etc.)
+  - Handles markdown formatting (**bold**, *italic*, ### headers)
+  - Preserves line breaks and formatting
+  - Authentic card text display matching printed cards
+
+- **Enhanced Response Formatting**:
+  - Mana costs display as actual symbols
+  - Tap symbol (`{T}`) renders properly
+  - Headers format correctly (### becomes proper headings)
+  - Color words remain as text (authentic to cards)
+
+#### 4. Developer Info Section
+- **Created DeveloperInfo Component**:
+  - Shows aggregated tool statistics (name × count)
+  - Displays execution timing per tool
+  - Collapsible detail view for individual calls
+  - Only visible in developer mode
+  - Clean, non-intrusive design
+
+#### 5. Agent Behavior Improvements
+- **Enforced Tool Usage**:
+  - Modified instructions to prohibit using training knowledge
+  - Agent now MUST use tools for all card information
+  - Results in consistent tool tracking and metadata
+  - Better demonstration of SDK capabilities
+
+### Technical Implementation
+
+#### Component Architecture
+```
+client/src/
+├── components/
+│   ├── CardOracle.tsx        # Main card query component
+│   ├── ManaSymbol.tsx        # Symbol rendering
+│   ├── RichMTGText.tsx       # Text formatting
+│   ├── DeveloperInfo.tsx     # Tool statistics
+│   └── DevPanel.tsx          # Developer mode panel
+└── contexts/
+    └── DevModeContext.tsx     # Developer mode state
+```
+
+#### Symbol Mapping
+```typescript
+'{W}' → White mana symbol
+'{U}' → Blue mana symbol
+'{B}' → Black mana symbol
+'{R}' → Red mana symbol
+'{G}' → Green mana symbol
+'{C}' → Colorless mana
+'{T}' → Tap symbol
+'{X}' → Variable mana
+```
+
+### Bug Fixes & Improvements
+
+1. **Fixed Tool Tracking**:
+   - SDK agent corrected `getToolCallDetails` to use `newItems`
+   - Tool calls now properly captured with arguments and results
+   - Metadata correctly displays in developer mode
+
+2. **Fixed Text Processing**:
+   - Proper regex patterns for markdown and symbols
+   - Headers now render as HTML elements
+   - Removed color word replacement (keeping authentic to cards)
+
+3. **TypeScript Fixes**:
+   - Resolved compilation errors in agent-helpers.ts
+   - Type assertions for SDK result structures
+   - Proper handling of RunItem types
+
+### Visual Improvements
+
+#### Before
+- Plain text: "Mana Cost: {2}{U}{B}"
+- No formatting for headers
+- Basic tool count display
+
+#### After
+- Rich display: "Mana Cost: ②🔵⚫"
+- Proper headings and formatting
+- Detailed tool execution metrics
+- Professional MTG appearance
+
+### Testing Results
+
+Successfully tested with various cards:
+- Lightning Bolt: `{R}` displays as red mana symbol
+- Atraxa: `{G}{W}{U}{B}` shows all four color symbols
+- Nicol Bolas: Complex costs like `{4}{U}{B}{B}{R}` render correctly
+- Llanowar Elves: `{T}: Add {G}` shows tap and green symbols
+
+### Key Learnings
+
+1. **Icon fonts provide professional appearance** without custom graphics
+2. **Developer mode separation** keeps production UI clean
+3. **Context-aware rendering** preserves authentic card text style
+4. **Tool enforcement** creates better learning examples
+
+### Session Summary
+
+Transformed the UI from a learning prototype to a professional MTG tool. Real mana symbols via the Mana font create an authentic Magic experience. Developer mode provides valuable debugging without cluttering the user interface. The app now looks and feels like a genuine Commander assistant while maintaining its educational value for SDK learning.
+
+---
+
 *Last Updated: September 19, 2025*
 *Primary Author: Claude (Opus 4.1) with human collaboration*
-*Status: Lesson 1 complete, ready to commit - "Before that resolves... we mastered basic agents!"*
+*Status: UI complete with MTG symbols - "Before that resolves... we made it beautiful!"*

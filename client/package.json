@@ -13,6 +13,7 @@
     "@before-that-resolves/shared": "file:../shared",
     "axios": "^1.6.2",
     "clsx": "^2.0.0",
+    "mana-font": "^1.18.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^6.20.1",
