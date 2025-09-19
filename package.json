@@ -1,0 +1,36 @@
+{
+  "name": "before-that-resolves",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Master Commander deck building and @openai/agents SDK through the stack",
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "npm run dev --workspace=client",
+    "dev:server": "npm run dev --workspace=server",
+    "build": "npm run build:shared && npm run build:client && npm run build:server",
+    "build:client": "npm run build --workspace=client",
+    "build:server": "npm run build --workspace=server",
+    "build:shared": "npm run build --workspace=shared",
+    "clean": "rm -rf node_modules client/node_modules server/node_modules shared/node_modules",
+    "install-all": "npm install"
+  },
+  "keywords": [
+    "mtg",
+    "commander",
+    "edh",
+    "openai",
+    "agents",
+    "react",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
