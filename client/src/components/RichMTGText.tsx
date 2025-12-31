@@ -27,7 +27,6 @@ export function RichMTGText({ text }: RichMTGTextProps) {
       // This regex matches: headers, mana symbols, bold text, italic text, or regular text
       const pattern = /(^#{1,6}\s+.+$)|(\{[^}]+\})|(\*\*[^*]+\*\*)|(\*[^*]+\*)|([^{*#]+)/gm;
       let match;
-      let lastIndex = 0;
 
       while ((match = pattern.exec(processedLine)) !== null) {
         const [fullMatch, header, manaSymbol, boldText, italicText] = match;
@@ -62,7 +61,6 @@ export function RichMTGText({ text }: RichMTGTextProps) {
           lineElements.push(<span key={`text-${key++}`}>{fullMatch}</span>);
         }
 
-        lastIndex = pattern.lastIndex;
       }
 
       elements.push(...lineElements);

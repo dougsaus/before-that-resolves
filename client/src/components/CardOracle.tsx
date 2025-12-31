@@ -9,7 +9,6 @@ export function CardOracle() {
   const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toolCalls, setToolCalls] = useState<number | null>(null);
   const { isDevMode, setAgentMetadata } = useDevMode();
 
   const exampleQueries = [
@@ -27,7 +26,6 @@ export function CardOracle() {
     setLoading(true);
     setError(null);
     setResponse(null);
-    setToolCalls(null);
 
     try {
       const result = await axios.post('http://localhost:3001/api/agent/query', {
@@ -37,7 +35,6 @@ export function CardOracle() {
 
       if (result.data.success) {
         setResponse(result.data.response);
-        setToolCalls(result.data.toolCalls || 0);
 
         if (isDevMode && result.data.metadata) {
           setAgentMetadata(result.data.metadata);

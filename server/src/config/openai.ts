@@ -1,8 +1,27 @@
-import { OpenAI } from 'openai';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
-// Load environment variables
-dotenv.config();
+function loadEnvFromNearest(): string | null {
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    const candidate = path.join(dir, '.env');
+    if (fs.existsSync(candidate)) {
+      dotenv.config({ path: candidate });
+      return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  dotenv.config();
+  return null;
+}
+
+const envPath = loadEnvFromNearest();
+if (process.env.NODE_ENV !== 'production' && envPath) {
+  console.log(`✅ Loaded environment from ${envPath}`);
+}
 
 /**
  * OpenAI Client Configuration
@@ -16,15 +35,10 @@ if (!process.env.OPENAI_API_KEY) {
   console.error('⚠️  OPENAI_API_KEY not found in environment variables!');
   console.error('   Please create a .env file with your OpenAI API key');
   console.error('   Copy .env.example to .env and add your key');
+} else if (process.env.NODE_ENV !== 'production') {
+  const keyTail = process.env.OPENAI_API_KEY.slice(-4);
+  console.log(`🔑 OPENAI_API_KEY loaded (…${keyTail})`);
 }
-
-// Create and export the OpenAI client
-export const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-  // You can adjust these defaults
-  maxRetries: 3,
-  timeout: 30000, // 30 seconds
-});
 
 // Export configuration values
 export const openaiConfig = {

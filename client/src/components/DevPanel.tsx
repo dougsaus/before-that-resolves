@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDevMode } from '../contexts/DevModeContext';
 
 export function DevPanel() {
-  const { isDevMode, toggleDevMode, agentMetadata } = useDevMode();
+  const { isDevMode, agentMetadata } = useDevMode();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (!isDevMode) return null;
