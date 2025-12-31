@@ -32,7 +32,7 @@ Through building this MTG assistant, you will learn to:
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **State Management**: Zustand for global state, React Context for UI
 - **Agent SDK**: @openai/agents + Zod validation
-- **APIs**: Scryfall, EDHREC, Moxfield, TCGPlayer
+- **APIs**: Scryfall, EDHREC, TCGPlayer
 - **Backend**: Express.js API server for agent execution
 - **Database**: PostgreSQL for deck storage (Supabase)
 - **Deployment**: Frontend on Vercel, API on Railway

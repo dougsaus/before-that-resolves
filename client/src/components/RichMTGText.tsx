@@ -1,108 +1,205 @@
-import React from 'react';
-import { ManaSymbol, ManaCost } from './ManaSymbol';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { ManaSymbol } from './ManaSymbol';
 
 interface RichMTGTextProps {
   text: string;
 }
 
-export function RichMTGText({ text }: RichMTGTextProps) {
-  // Process the text to handle various formatting
-  const processText = (input: string): React.ReactNode[] => {
-    const elements: React.ReactNode[] = [];
-    let key = 0;
+function renderManaSymbols(value: string): React.ReactNode[] {
+  const parts = value.split(/(\{[^}]+\})/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('{') && part.endsWith('}')) {
+      return <ManaSymbol key={`mana-${index}`} symbol={part} size="small" />;
+    }
+    return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
+  });
+}
 
-    // Split by lines first to preserve line breaks
-    const lines = input.split('\n');
-
-    lines.forEach((line, lineIndex) => {
-      if (lineIndex > 0) {
-        elements.push(<br key={`br-${key++}`} />);
-      }
-
-      // Process each line for formatting
-      let processedLine = line;
-      const lineElements: React.ReactNode[] = [];
-
-      // Pattern to match various elements we want to format
-      // This regex matches: headers, mana symbols, bold text, italic text, or regular text
-      const pattern = /(^#{1,6}\s+.+$)|(\{[^}]+\})|(\*\*[^*]+\*\*)|(\*[^*]+\*)|([^{*#]+)/gm;
-      let match;
-
-      while ((match = pattern.exec(processedLine)) !== null) {
-        const [fullMatch, header, manaSymbol, boldText, italicText] = match;
-
-        if (header) {
-          // It's a markdown header
-          const level = header.match(/^(#{1,6})/)?.[0].length || 3;
-          const text = header.replace(/^#{1,6}\s+/, '');
-
-          if (level === 3) {
-            lineElements.push(<h3 key={`header-${key++}`} className="font-bold text-lg mb-2">{text}</h3>);
-          } else if (level === 2) {
-            lineElements.push(<h2 key={`header-${key++}`} className="font-bold text-xl mb-2">{text}</h2>);
-          } else {
-            lineElements.push(<h4 key={`header-${key++}`} className="font-bold mb-1">{text}</h4>);
-          }
-        } else if (manaSymbol) {
-          // It's a mana symbol - replace with icon
-          lineElements.push(
-            <ManaSymbol key={`mana-${key++}`} symbol={manaSymbol} size="small" />
-          );
-        } else if (boldText) {
-          // Bold text (strip the ** markers)
-          const text = boldText.slice(2, -2);
-          lineElements.push(<strong key={`bold-${key++}`}>{text}</strong>);
-        } else if (italicText) {
-          // Italic text (strip the * markers)
-          const text = italicText.slice(1, -1);
-          lineElements.push(<em key={`italic-${key++}`}>{text}</em>);
-        } else {
-          // Regular text - keep as is
-          lineElements.push(<span key={`text-${key++}`}>{fullMatch}</span>);
-        }
-
-      }
-
-      elements.push(...lineElements);
+function renderInline(node: React.ReactNode): React.ReactNode {
+  if (typeof node === 'string') {
+    return renderManaSymbols(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, index) => (
+      <React.Fragment key={`inline-${index}`}>{renderInline(child)}</React.Fragment>
+    ));
+  }
+  if (React.isValidElement(node)) {
+    const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+    return React.cloneElement(element, {
+      children: renderInline(element.props.children)
     });
+  }
+  return node;
+}
 
-    return elements;
-  };
+function getTextContent(node: React.ReactNode): string {
+  if (typeof node === 'string') {
+    return node;
+  }
+  if (Array.isArray(node)) {
+    return node.map(getTextContent).join('');
+  }
+  if (React.isValidElement(node)) {
+    const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+    return getTextContent(element.props.children);
+  }
+  return '';
+}
 
-  // Parse specific sections if they exist
-  const renderSection = () => {
-    // Check if this looks like a mana cost line
-    if (text.includes('Mana Cost:')) {
-      const parts = text.split('Mana Cost:');
-      const beforeCost = parts[0];
-      const afterCostParts = parts[1]?.split('\n') || [];
-      const manaCostLine = afterCostParts[0];
-      const restOfText = afterCostParts.slice(1).join('\n');
+function getScryfallImageUrl(cardName: string) {
+  const encoded = encodeURIComponent(cardName.trim());
+  return `https://api.scryfall.com/cards/named?exact=${encoded}&format=image&version=normal`;
+}
 
-      return (
-        <>
-          {beforeCost && processText(beforeCost)}
-          {manaCostLine && (
-            <>
-              <span className="font-semibold">Mana Cost: </span>
-              <ManaCost cost={manaCostLine.trim()} />
-              {restOfText && (
-                <>
-                  <br />
-                  {processText(restOfText)}
-                </>
-              )}
-            </>
-          )}
-        </>
-      );
+export function RichMTGText({ text }: RichMTGTextProps) {
+  const [hoverCard, setHoverCard] = useState<{
+    label: string;
+    href?: string;
+    rect: DOMRect;
+  } | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const anchorRef = useRef<HTMLAnchorElement | null>(null);
+
+  const imageUrl = useMemo(() => {
+    if (!hoverCard?.label) return null;
+    return getScryfallImageUrl(hoverCard.label);
+  }, [hoverCard?.label]);
+
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const update = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  const hoverPosition = useMemo(() => {
+    if (!hoverCard) return null;
+    const margin = 12;
+    const popupWidth = 272;
+    const popupHeight = 360;
+
+    let left = hoverCard.rect.left + hoverCard.rect.width / 2 - popupWidth / 2;
+    left = Math.max(margin, Math.min(left, viewport.width - popupWidth - margin));
+
+    let top = hoverCard.rect.top - popupHeight - margin;
+    if (top < margin) {
+      top = hoverCard.rect.bottom + margin;
     }
 
-    // Otherwise, process the entire text
-    return processText(text);
+    return { left, top };
+  }, [hoverCard, viewport.height, viewport.width]);
+
+  const clearHideTimer = () => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
   };
 
-  return <div className="text-gray-100 leading-relaxed">{renderSection()}</div>;
+  const scheduleHide = () => {
+    clearHideTimer();
+    hideTimerRef.current = window.setTimeout(() => {
+      setHoverCard(null);
+    }, 250);
+  };
+
+  useEffect(() => {
+    if (!hoverCard) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      const overAnchor = anchorRef.current?.contains(target || null);
+      const overPopup = popupRef.current?.contains(target || null);
+      if (!overAnchor && !overPopup) {
+        scheduleHide();
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [hoverCard]);
+
+  return (
+    <div className="text-gray-100 leading-relaxed">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-3">{renderInline(children)}</p>,
+          li: ({ children }) => <li className="mb-1">{renderInline(children)}</li>,
+          strong: ({ children }) => <strong>{renderInline(children)}</strong>,
+          em: ({ children }) => <em>{renderInline(children)}</em>,
+          h1: ({ children }) => <h1 className="text-xl font-bold mb-3">{renderInline(children)}</h1>,
+          h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{renderInline(children)}</h2>,
+          h3: ({ children }) => <h3 className="text-base font-bold mb-2">{renderInline(children)}</h3>,
+          a: ({ href, children }) => {
+            const label = getTextContent(children);
+            return (
+              <span className="inline-flex items-center">
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-cyan-200 hover:text-cyan-100 underline underline-offset-2"
+                  onMouseEnter={(event) => {
+                    if (!label) return;
+                    clearHideTimer();
+                    anchorRef.current = event.currentTarget;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setHoverCard({ label, href, rect });
+                  }}
+                  onMouseLeave={scheduleHide}
+                >
+                  {label || children}
+                </a>
+              </span>
+            );
+          },
+          code: (props) => {
+            const { inline, children } = props as {
+              inline?: boolean;
+              children?: React.ReactNode;
+            };
+            return inline ? (
+              <code className="px-1 py-0.5 rounded bg-gray-800 text-gray-100">{children}</code>
+            ) : (
+              <pre className="rounded bg-gray-800 p-3 overflow-x-auto">
+                <code className="text-gray-100">{children}</code>
+              </pre>
+            );
+          }
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+      {hoverCard && imageUrl && hoverPosition && createPortal(
+        <div
+          className="fixed z-50"
+          style={{ left: hoverPosition.left, top: hoverPosition.top }}
+          onMouseEnter={() => clearHideTimer()}
+          onMouseLeave={scheduleHide}
+          ref={popupRef}
+        >
+          <div className="rounded-lg border border-gray-700 bg-gray-900 p-2 shadow-2xl">
+            <img
+              src={imageUrl}
+              alt={hoverCard.label}
+              className="h-auto w-auto max-h-80 max-w-64 rounded object-contain"
+              loading="lazy"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 // Additional component for rendering card names with appropriate styling

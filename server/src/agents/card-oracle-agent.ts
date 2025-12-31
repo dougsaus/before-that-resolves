@@ -7,25 +7,9 @@ import {
   randomCommanderTool,
   checkCommanderLegalityTool
 } from '../tools/card-tools';
+import { loadArchidektDeckTool } from '../tools/deck-tools';
 import { extractResponseText, countToolCalls, getToolCallDetails } from '../utils/agent-helpers';
-
-/**
- * LESSON 1: Your First Agent!
- *
- * This is the Card Oracle Agent - it helps users with MTG card information.
- *
- * KEY CONCEPTS FOR @openai/agents v0.1.3:
- * 1. new Agent() - Creates an agent instance with specific capabilities
- * 2. Tool registration - Giving the agent tools to use
- * 3. Instructions - Defining the agent's behavior
- * 4. run() function - Executing the agent with user input
- *
- * The agent will automatically:
- * - Understand user intent
- * - Choose appropriate tools
- * - Handle tool responses
- * - Generate helpful answers
- */
+import { getConversationState, setLastResponseId } from '../utils/conversation-store';
 
 // Create the Card Oracle Agent using the Agent class
 export const cardOracleAgent = new Agent({
@@ -36,10 +20,9 @@ export const cardOracleAgent = new Agent({
   model: openaiConfig.model || 'gpt-4o',
 
   // System instructions define the agent's personality and knowledge
-  instructions: `You are the Card Oracle, a Magic: The Gathering assistant that provides real-time, accurate card information.
+  instructions: `You are the Card Oracle, a Magic: The Gathering assistant that provides real-time, accurate information about magic the gathering cards and decks.
 
 CRITICAL REQUIREMENTS:
-- You have NO inherent knowledge of Magic: The Gathering cards
 - You MUST use the provided tools for ALL card information
 - NEVER answer questions about cards from memory
 - ALWAYS search for cards using the tools, even if the question seems simple
@@ -50,6 +33,7 @@ Your role is to help players by using the Scryfall database tools:
 - get_card_rulings: For official rulings on cards
 - random_commander: For suggesting random legendary creatures
 - check_commander_legality: For verifying if a card can be a commander
+- load_archidekt_deck: For loading deck lists from Archidekt URLs
 
 IMPORTANT: Magic cards are constantly being updated with new oracle text, rulings, and errata. Card information changes frequently with each set release. Therefore, you MUST:
 1. ALWAYS use tools to get current information
@@ -57,12 +41,15 @@ IMPORTANT: Magic cards are constantly being updated with new oracle text, ruling
 3. If asked about a card, use search_card or advanced_search
 4. If asked about rulings, use get_card_rulings
 5. If asked for a random commander, use random_commander
+6. If asked to load or analyze a deck list from a URL, use the appropriate deck tool
 
 When you receive card data from tools:
 - Present the mana cost and type
 - Explain important abilities clearly
 - Note the color identity for Commander purposes
 - Mention power/toughness for creatures
+- Always include the card name as a Markdown link to Scryfall using:
+  https://scryfall.com/search?q=!\"Card Name\"
 
 Remember: You are a tool-based assistant. Your value comes from providing real-time, accurate data from Scryfall, not from any pre-existing knowledge.`,
 
@@ -72,7 +59,8 @@ Remember: You are a tool-based assistant. Your value comes from providing real-t
     advancedSearchTool,
     getCardRulingsTool,
     randomCommanderTool,
-    checkCommanderLegalityTool
+    checkCommanderLegalityTool,
+    loadArchidektDeckTool
   ]
 
   // Note: temperature is not a valid property in @openai/agents v0.1.3
@@ -81,11 +69,20 @@ Remember: You are a tool-based assistant. Your value comes from providing real-t
 /**
  * Execute the Card Oracle Agent
  */
-export async function executeCardOracle(query: string, devMode: boolean = false) {
+export async function executeCardOracle(
+  query: string,
+  devMode: boolean = false,
+  conversationId?: string
+) {
   console.log('🎴 Card Oracle Agent executing query:', query);
   const startTime = Date.now();
 
   try {
+    const runOptions = conversationId
+      ? {
+        previousResponseId: getConversationState(conversationId).lastResponseId
+      }
+      : undefined;
     const result = await run(
       cardOracleAgent,
       [
@@ -93,8 +90,12 @@ export async function executeCardOracle(query: string, devMode: boolean = false)
           role: 'user',
           content: query
         }
-      ]
+      ],
+      runOptions
     );
+    if (conversationId) {
+      setLastResponseId(conversationId, result.lastResponseId);
+    }
 
     const responseText = extractResponseText(result);
     const toolCallCount = countToolCalls(result);
