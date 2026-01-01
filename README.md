@@ -37,6 +37,13 @@ npm -v
 2. Create an API key in your account
 3. Keep it private
 
+## Create an OpenAI Account (ChatGPT + API)
+
+1. Visit https://chat.openai.com and create a ChatGPT account (or sign in if you already have one).
+2. Visit https://platform.openai.com and sign in with the same account.
+3. Go to “API keys” and create a new key.
+4. Copy the key somewhere safe and keep it private.
+
 ## Set the API Key
 
 You can set the key in your shell or in a `.env` file.
@@ -78,3 +85,24 @@ Then open http://localhost:5173 in your browser.
 
 - If you see “OPENAI_API_KEY not found,” double‑check your `.env` file or terminal export.
 - If the app can’t connect, make sure the server is running on port 3001.
+
+## Running Tests
+
+Frontend unit tests:
+
+```bash
+npm run test --workspace=client
+```
+
+Backend unit tests:
+
+```bash
+npm run test --workspace=server
+```
+
+Live integration tests (calls the OpenAI API and require a real key):
+
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+npm run test:live --workspace=server
+```
