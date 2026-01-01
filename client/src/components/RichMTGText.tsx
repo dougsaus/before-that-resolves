@@ -55,13 +55,23 @@ function getScryfallImageUrl(cardName: string) {
   return `https://api.scryfall.com/cards/named?exact=${encoded}&format=image&version=normal`;
 }
 
+function normalizeMarkdownLinks(value: string): string {
+  const cleaned = value.replace(/\\n/g, ' ');
+  return cleaned.replace(/\[([\s\S]*?)\]\(([\s\S]*?)\)/g, (_, label, url) => {
+    const normalizedLabel = String(label).replace(/\s+/g, ' ').trim();
+    const urlWithSpaces = String(url).replace(/\s+/g, ' ').trim();
+    const normalizedUrl = urlWithSpaces.replace(/ /g, '%20');
+    return `[${normalizedLabel}](${normalizedUrl})`;
+  });
+}
+
 export function RichMTGText({ text }: RichMTGTextProps) {
+  const normalizedText = useMemo(() => normalizeMarkdownLinks(text), [text]);
   const [hoverCard, setHoverCard] = useState<{
     label: string;
     href?: string;
     rect: DOMRect;
   } | null>(null);
-  const hideTimerRef = useRef<number | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
 
@@ -89,42 +99,30 @@ export function RichMTGText({ text }: RichMTGTextProps) {
     let left = hoverCard.rect.left + hoverCard.rect.width / 2 - popupWidth / 2;
     left = Math.max(margin, Math.min(left, viewport.width - popupWidth - margin));
 
-    let top = hoverCard.rect.top - popupHeight - margin;
-    if (top < margin) {
-      top = hoverCard.rect.bottom + margin;
+    const aboveTop = hoverCard.rect.top - popupHeight - margin;
+    if (aboveTop >= margin) {
+      const bottom = viewport.height - hoverCard.rect.top + margin;
+      return { left, bottom, placement: 'above' as const };
     }
 
-    return { left, top };
+    const top = hoverCard.rect.bottom + margin;
+    return { left, top, placement: 'below' as const };
   }, [hoverCard, viewport.height, viewport.width]);
-
-  const clearHideTimer = () => {
-    if (hideTimerRef.current !== null) {
-      window.clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-  };
-
-  const scheduleHide = () => {
-    clearHideTimer();
-    hideTimerRef.current = window.setTimeout(() => {
-      setHoverCard(null);
-    }, 250);
-  };
 
   useEffect(() => {
     if (!hoverCard) return;
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const handleDocumentClick = (event: MouseEvent) => {
       const target = event.target as Node | null;
       const overAnchor = anchorRef.current?.contains(target || null);
       const overPopup = popupRef.current?.contains(target || null);
       if (!overAnchor && !overPopup) {
-        scheduleHide();
+        setHoverCard(null);
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    document.addEventListener('click', handleDocumentClick);
+    return () => document.removeEventListener('click', handleDocumentClick);
   }, [hoverCard]);
 
   return (
@@ -150,12 +148,10 @@ export function RichMTGText({ text }: RichMTGTextProps) {
                   className="text-cyan-200 hover:text-cyan-100 underline underline-offset-2"
                   onMouseEnter={(event) => {
                     if (!label) return;
-                    clearHideTimer();
                     anchorRef.current = event.currentTarget;
                     const rect = event.currentTarget.getBoundingClientRect();
                     setHoverCard({ label, href, rect });
                   }}
-                  onMouseLeave={scheduleHide}
                 >
                   {label || children}
                 </a>
@@ -177,21 +173,23 @@ export function RichMTGText({ text }: RichMTGTextProps) {
           }
         }}
       >
-        {text}
+        {normalizedText}
       </ReactMarkdown>
       {hoverCard && imageUrl && hoverPosition && createPortal(
         <div
           className="fixed z-50"
-          style={{ left: hoverPosition.left, top: hoverPosition.top }}
-          onMouseEnter={() => clearHideTimer()}
-          onMouseLeave={scheduleHide}
+          style={
+            hoverPosition.placement === 'above'
+              ? { left: hoverPosition.left, bottom: hoverPosition.bottom }
+              : { left: hoverPosition.left, top: hoverPosition.top }
+          }
           ref={popupRef}
         >
           <div className="rounded-lg border border-gray-700 bg-gray-900 p-2 shadow-2xl">
             <img
               src={imageUrl}
               alt={hoverCard.label}
-              className="h-auto w-auto max-h-80 max-w-64 rounded object-contain"
+              className="h-auto w-auto max-h-96 max-w-72 rounded object-contain"
               loading="lazy"
             />
           </div>

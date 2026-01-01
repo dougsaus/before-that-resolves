@@ -37,7 +37,7 @@ describe('CardOracle chat UI', () => {
   it('renders deck loader and chat input', () => {
     renderCardOracle();
 
-    expect(screen.getByText('Load a deck list URL')).toBeInTheDocument();
+    expect(screen.getByText('Deck list URL to discuss with The Oracle')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('https://archidekt.com/decks/...')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Type a question to the Oracle...')).toBeInTheDocument();
   });
@@ -121,7 +121,7 @@ describe('CardOracle chat UI', () => {
 
     const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
-    await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+    await user.click(screen.getByRole('button', { name: 'Summarize Deck' }));
 
     await waitFor(() => {
       expect(screen.getByText('Deck summary response')).toBeInTheDocument();
@@ -169,5 +169,27 @@ describe('CardOracle chat UI', () => {
     const link = await screen.findByRole('link', { name: 'Sol Ring' });
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noreferrer');
+  });
+
+  it('normalizes multi-line markdown links in agent messages', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post.mockResolvedValue({
+      data: {
+        success: true,
+        response: '[Rhox\\n Faithmender](https://scryfall.com/search?q=!\"Rhox\\n Faithmender\")'
+      }
+    });
+
+    renderCardOracle();
+
+    const input = screen.getByPlaceholderText('Type a question to the Oracle...');
+    await user.type(input, 'Link normalize');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    const link = await screen.findByRole('link', { name: 'Rhox Faithmender' });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://scryfall.com/search?q=!%22Rhox%20Faithmender%22'
+    );
   });
 });

@@ -23,7 +23,14 @@ describe('app routes', () => {
 
     expect(response.body.success).toBe(true);
     expect(response.body.conversationId).toBe('conv-123');
-    expect(execute).toHaveBeenCalledWith('Hello there', false, 'conv-123');
+    expect(execute).toHaveBeenCalledWith(
+      'Hello there',
+      false,
+      'conv-123',
+      undefined,
+      undefined,
+      undefined
+    );
   });
 
   it('uses the provided conversationId', async () => {
@@ -46,7 +53,14 @@ describe('app routes', () => {
 
     expect(response.body.conversationId).toBe('conv-abc');
     expect(getOrCreateConversationId).not.toHaveBeenCalled();
-    expect(execute).toHaveBeenCalledWith('Ping', false, 'conv-abc');
+    expect(execute).toHaveBeenCalledWith(
+      'Ping',
+      false,
+      'conv-abc',
+      undefined,
+      undefined,
+      undefined
+    );
   });
 
   it('validates required query', async () => {

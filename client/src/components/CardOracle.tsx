@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useDevMode } from '../contexts/DevModeContext';
 import { RichMTGText } from './RichMTGText';
@@ -11,7 +11,13 @@ function createConversationId() {
   return `conv_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-export function CardOracle() {
+type CardOracleProps = {
+  model?: string;
+  reasoningEffort?: 'low' | 'medium' | 'high';
+  verbosity?: 'low' | 'medium' | 'high';
+};
+
+export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProps) {
   const [query, setQuery] = useState('');
   const [deckUrl, setDeckUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +26,11 @@ export function CardOracle() {
   const [messages, setMessages] = useState<
     Array<{ id: string; role: 'user' | 'agent' | 'error'; content: string }>
   >([]);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, loading]);
 
   const submitQuery = async (text: string, options?: { hideUserMessage?: boolean }) => {
     if (!text.trim()) return;
@@ -36,7 +47,10 @@ export function CardOracle() {
       const result = await axios.post('http://localhost:3001/api/agent/query', {
         query: text,
         devMode: isDevMode,
-        conversationId
+        conversationId,
+        model,
+        reasoningEffort: reasoningEffort || undefined,
+        verbosity
       });
 
       if (result.data.success) {
@@ -106,52 +120,52 @@ export function CardOracle() {
     setConversationId(createConversationId());
     setMessages([]);
     setAgentMetadata(null);
+    setDeckUrl('');
   };
 
   return (
     <div className="w-[50vw] max-w-none mx-auto p-4 flex-none flex flex-col min-h-0 h-full">
       <div className="bg-gray-800/50 backdrop-blur rounded-lg p-4 shadow-xl flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-        <h2 className="text-2xl font-bold mb-4 flex items-center">
-          <i className="ms ms-planeswalker mr-2"></i>
-          Card Oracle
-        </h2>
-
-        <div className="mb-6">
-          <label className="block text-gray-300 mb-2">Load a deck list URL</label>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={deckUrl}
-              onChange={(e) => setDeckUrl(e.target.value)}
-              placeholder="https://archidekt.com/decks/..."
-              className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              disabled={loading}
-            />
-            <button
-              type="button"
-              onClick={handleLoadDeck}
-              disabled={loading || !deckUrl.trim()}
-              className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
-            >
-              Load Deck
-            </button>
-          </div>
-          <div className="mt-2 text-xs text-gray-500">
-            Supports public decks from Archidekt.
-          </div>
-        </div>
-
-        <div className="flex justify-end mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold">
+            The Oracle - Your Magic:The Gathering AI Agent
+          </h2>
           <button
             type="button"
             onClick={handleRestartConversation}
-            className="text-sm text-gray-400 hover:text-gray-200 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors"
+            className="text-sm text-gray-300 hover:text-gray-100 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors"
           >
-            Restart conversation
+            New Conversation
           </button>
         </div>
 
         <div className="flex flex-col flex-1 min-h-0 bg-gray-900/40 rounded-lg border border-gray-700 overflow-hidden">
+          <div className="border-b border-gray-700 p-4 bg-gray-900/70">
+            <label className="block text-gray-300 text-sm mb-2">
+              Deck list URL to discuss with The Oracle
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={deckUrl}
+                onChange={(e) => setDeckUrl(e.target.value)}
+                placeholder="https://archidekt.com/decks/..."
+                className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={handleLoadDeck}
+                disabled={loading || !deckUrl.trim()}
+                className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                Summarize Deck
+              </button>
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              Supports public decks from Archidekt.
+            </div>
+          </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-gray-500 text-sm">
@@ -204,9 +218,10 @@ export function CardOracle() {
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={handleSubmit} className="border-t border-gray-700 p-3 bg-gray-900/70">
+          <form onSubmit={handleSubmit} className="border-t border-gray-700 p-4 bg-gray-900/70">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -219,7 +234,7 @@ export function CardOracle() {
               <button
                 type="submit"
                 disabled={loading || !query.trim()}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                className="px-6 py-2 w-[10.5rem] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
                 Send
               </button>

@@ -8,63 +8,51 @@ import {
   checkCommanderLegalityTool
 } from '../tools/card-tools';
 import { loadArchidektDeckTool } from '../tools/deck-tools';
+import { commanderBracketTool } from '../tools/bracket-tool';
 import { extractResponseText, countToolCalls, getToolCallDetails } from '../utils/agent-helpers';
 import { getConversationState, setLastResponseId } from '../utils/conversation-store';
+import { loadPrompt } from '../utils/prompt-loader';
 
-// Create the Card Oracle Agent using the Agent class
-export const cardOracleAgent = new Agent({
-  // Agent name (optional)
-  name: 'Card Oracle',
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+type ModelSettingsReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | null;
+export type TextVerbosity = 'low' | 'medium' | 'high';
 
-  // Model configuration
-  model: openaiConfig.model || 'gpt-4o',
+export function toModelReasoningEffort(
+  effort?: ReasoningEffort
+): ModelSettingsReasoningEffort | undefined {
+  if (!effort) return undefined;
+  return effort;
+}
 
-  // System instructions define the agent's personality and knowledge
-  instructions: `You are the Card Oracle, a Magic: The Gathering assistant that provides real-time, accurate information about magic the gathering cards and decks.
+function createCardOracleAgent(
+  model?: string,
+  reasoningEffort?: ReasoningEffort,
+  verbosity?: TextVerbosity
+) {
+  const normalizedEffort = toModelReasoningEffort(reasoningEffort);
+  const modelSettings = normalizedEffort || verbosity
+    ? {
+      ...(normalizedEffort ? { reasoning: { effort: normalizedEffort } } : {}),
+      ...(verbosity ? { text: { verbosity } } : {})
+    }
+    : undefined;
 
-CRITICAL REQUIREMENTS:
-- You MUST use the provided tools for ALL card information
-- NEVER answer questions about cards from memory
-- ALWAYS search for cards using the tools, even if the question seems simple
-
-Your role is to help players by using the Scryfall database tools:
-- search_card: For finding specific cards by name
-- advanced_search: For complex queries (color, type, power, etc.)
-- get_card_rulings: For official rulings on cards
-- random_commander: For suggesting random legendary creatures
-- check_commander_legality: For verifying if a card can be a commander
-- load_archidekt_deck: For loading deck lists from Archidekt URLs
-
-IMPORTANT: Magic cards are constantly being updated with new oracle text, rulings, and errata. Card information changes frequently with each set release. Therefore, you MUST:
-1. ALWAYS use tools to get current information
-2. NEVER rely on any training data about cards
-3. If asked about a card, use search_card or advanced_search
-4. If asked about rulings, use get_card_rulings
-5. If asked for a random commander, use random_commander
-6. If asked to load or analyze a deck list from a URL, use the appropriate deck tool
-
-When you receive card data from tools:
-- Present the mana cost and type
-- Explain important abilities clearly
-- Note the color identity for Commander purposes
-- Mention power/toughness for creatures
-- Always include the card name as a Markdown link to Scryfall using:
-  https://scryfall.com/search?q=!\"Card Name\"
-
-Remember: You are a tool-based assistant. Your value comes from providing real-time, accurate data from Scryfall, not from any pre-existing knowledge.`,
-
-  // Tools the agent can use
-  tools: [
-    searchCardTool,
-    advancedSearchTool,
-    getCardRulingsTool,
-    randomCommanderTool,
-    checkCommanderLegalityTool,
-    loadArchidektDeckTool
-  ]
-
-  // Note: temperature is not a valid property in @openai/agents v0.1.3
-});
+  return new Agent({
+    name: 'Card Oracle',
+    model: model || openaiConfig.model || 'gpt-4o',
+    modelSettings,
+    instructions: loadPrompt('card-oracle.md'),
+    tools: [
+      searchCardTool,
+      advancedSearchTool,
+      getCardRulingsTool,
+      randomCommanderTool,
+      checkCommanderLegalityTool,
+      loadArchidektDeckTool,
+      commanderBracketTool
+    ]
+  });
+}
 
 /**
  * Execute the Card Oracle Agent
@@ -72,7 +60,10 @@ Remember: You are a tool-based assistant. Your value comes from providing real-t
 export async function executeCardOracle(
   query: string,
   devMode: boolean = false,
-  conversationId?: string
+  conversationId?: string,
+  model?: string,
+  reasoningEffort?: ReasoningEffort,
+  verbosity?: TextVerbosity
 ) {
   console.log('🎴 Card Oracle Agent executing query:', query);
   const startTime = Date.now();
@@ -80,9 +71,11 @@ export async function executeCardOracle(
   try {
     const runOptions = conversationId
       ? {
-        previousResponseId: getConversationState(conversationId).lastResponseId
+        previousResponseId: getConversationState(conversationId).lastResponseId,
+        context: { model, reasoningEffort, verbosity }
       }
-      : undefined;
+      : { context: { model, reasoningEffort, verbosity } };
+    const cardOracleAgent = createCardOracleAgent(model, reasoningEffort, verbosity);
     const result = await run(
       cardOracleAgent,
       [

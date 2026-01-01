@@ -28,7 +28,7 @@ export function createApp(deps: AppDeps = {}) {
   });
 
   app.post('/api/agent/query', async (req, res) => {
-    const { query, devMode, conversationId } = req.body;
+    const { query, devMode, conversationId, model, reasoningEffort, verbosity } = req.body;
 
     if (!query) {
       res.status(400).json({
@@ -42,7 +42,14 @@ export function createApp(deps: AppDeps = {}) {
       console.log(`\n📨 Received query: "${query}" ${devMode ? '(Dev Mode)' : ''}`);
       const activeConversationId = conversationId || getConversationId();
 
-      const result = await execute(query, devMode || false, activeConversationId);
+      const result = await execute(
+        query,
+        devMode || false,
+        activeConversationId,
+        model,
+        reasoningEffort,
+        verbosity
+      );
 
       res.json({ ...result, conversationId: activeConversationId });
     } catch (error: any) {
