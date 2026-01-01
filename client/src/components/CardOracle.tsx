@@ -20,6 +20,11 @@ type CardOracleProps = {
 export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProps) {
   const [query, setQuery] = useState('');
   const [deckUrl, setDeckUrl] = useState('');
+  const [deckAnalysisOptions, setDeckAnalysisOptions] = useState({
+    summary: true,
+    winCons: true,
+    bracket: true
+  });
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
@@ -104,7 +109,17 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
 
   const handleLoadDeck = async () => {
     if (!deckUrl.trim()) return;
-    const prompt = `Load this Commander deck and summarize it for me: ${deckUrl}`;
+    const analysisSections = [
+      deckAnalysisOptions.summary ? 'Summarize the deck providing insights like color identity, overall theme and archetypes of the deck, and how the deck should be played without getting too deep on the specifics of individual cards. ' : null,
+      deckAnalysisOptions.winCons ? 'Summarize the Win Conditions present in the deck and a detailed summary of the cards that enable them. ' : null,
+      deckAnalysisOptions.bracket ? 'Provide an assessment of what bracket the deck is likely to be along with detailed justification, going into details about specific cards and interactions when necessary. ' : null
+    ].filter(Boolean) as string[];
+
+    if (analysisSections.length === 0) return;
+
+    const prompt = `Analyze this Commander deck: ${deckUrl}\n\nPlease provide the following in order:\n${analysisSections
+      .map((section, index) => `${index + 1}) ${section}`)
+      .join('\n')}`;
     await submitQuery(prompt, { hideUserMessage: true });
   };
 
@@ -156,11 +171,64 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
               <button
                 type="button"
                 onClick={handleLoadDeck}
-                disabled={loading || !deckUrl.trim()}
+                disabled={
+                  loading ||
+                  !deckUrl.trim() ||
+                  (!deckAnalysisOptions.summary &&
+                    !deckAnalysisOptions.winCons &&
+                    !deckAnalysisOptions.bracket)
+                }
                 className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
-                Summarize Deck
+                Analyze Deck
               </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-300">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={deckAnalysisOptions.summary}
+                  onChange={(e) =>
+                    setDeckAnalysisOptions((prev) => ({
+                      ...prev,
+                      summary: e.target.checked
+                    }))
+                  }
+                  disabled={loading}
+                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                />
+                Summarize
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={deckAnalysisOptions.winCons}
+                  onChange={(e) =>
+                    setDeckAnalysisOptions((prev) => ({
+                      ...prev,
+                      winCons: e.target.checked
+                    }))
+                  }
+                  disabled={loading}
+                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                />
+                Find win cons
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={deckAnalysisOptions.bracket}
+                  onChange={(e) =>
+                    setDeckAnalysisOptions((prev) => ({
+                      ...prev,
+                      bracket: e.target.checked
+                    }))
+                  }
+                  disabled={loading}
+                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                />
+                Assess bracket
+              </label>
             </div>
             <div className="mt-2 text-xs text-gray-500">
               Supports public decks from Archidekt.

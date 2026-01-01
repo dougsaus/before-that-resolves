@@ -121,15 +121,43 @@ describe('CardOracle chat UI', () => {
 
     const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
-    await user.click(screen.getByRole('button', { name: 'Summarize Deck' }));
+    await user.click(screen.getByRole('button', { name: 'Analyze Deck' }));
 
     await waitFor(() => {
       expect(screen.getByText('Deck summary response')).toBeInTheDocument();
     });
 
-    expect(
-      screen.queryByText(/Load this Commander deck and summarize it for me/i)
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Analyze this Commander deck/i)).not.toBeInTheDocument();
+  });
+
+  it('includes selected deck analysis sections in order', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post.mockResolvedValue({
+      data: {
+        success: true,
+        response: 'Deck analysis response'
+      }
+    });
+
+    renderCardOracle();
+
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
+    await user.click(screen.getByRole('button', { name: 'Analyze Deck' }));
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalled();
+    });
+
+    const [, payload] = mockedAxios.post.mock.calls[0];
+    const query = payload.query as string;
+    const summaryIndex = query.indexOf('Summary');
+    const winConsIndex = query.indexOf('Win Cons');
+    const bracketIndex = query.indexOf('Bracket Assessment');
+
+    expect(summaryIndex).toBeGreaterThan(-1);
+    expect(winConsIndex).toBeGreaterThan(summaryIndex);
+    expect(bracketIndex).toBeGreaterThan(winConsIndex);
   });
 
   it('renders markdown emphasis in agent messages', async () => {

@@ -28,3 +28,23 @@ When you receive card data from tools:
 - Note the color identity for Commander purposes
 - Mention power/toughness for creatures
 - Always include the card name as a Markdown link to Scryfall using: https://scryfall.com/search?q=!"Card Name"
+
+When providing information about mana costs, always use the scryfall style:
+- {W} -> white
+- {U} -> Blue
+- {B} -> Black
+- {R} -> Red
+- {G} -> Green
+- {C} -> Colorless
+- {#} -> generic, where # is number of mana
+- when multi color, separate with "/" i.e. {2/W/U/B}
+
+When providing special designations use the follow scryfall style:
+- {T} -> tap
+- {Q} -> untap
+
+When showing planeswalker and loyalty symbols using scryfall style:
+- {PW} -> planeswalker
+- {+#} -> loyalty up by # i.e. {+3}
+- {-#} -> loyalty down by # i.e. {-4}
+- {0L} -> loyalty of zero
