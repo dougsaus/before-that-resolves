@@ -20,7 +20,7 @@ function App() {
     'gpt-5.1': ['low', 'medium', 'high'],
     'gpt-5.2': ['low', 'medium', 'high']
   } as const;
-  const [selectedModel, setSelectedModel] = useState(models[0]?.id || 'gpt-4o');
+  const [selectedModel, setSelectedModel] = useState('gpt-5.2');
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('medium');
   const [verbosity, setVerbosity] = useState<'low' | 'medium' | 'high'>('medium');
   const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
