@@ -135,5 +135,3 @@ Game Changers should generally be cards that easily and dramatically warp Comman
 
 High-mana value cards. If you're spending tons of mana on something in Commander, it's going to be strong. We want to keep the focus on cards that can change the game in the earlier turns, where it can be most frustrating to have somebody run away with the game before people have been able to develop.
 Legends that are just powerful commanders. The easiest thing to opt out of is someone's commander. If someone says, "I want to play Yuriko," you know exactly what that means and it's easy to prompt a conversation. If something is also wildly powerful in the 99, or simply unfun all around, we're fine leaving it on the list, but power alone isn't a reason to list it as a Game Changer. 
-
-

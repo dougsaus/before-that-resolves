@@ -1,8 +1,14 @@
+import fs from 'fs';
+import path from 'path';
 import { Agent } from '@openai/agents';
-import { openaiConfig } from '../config/openai';
-import { loadPrompt } from '../utils/prompt-loader';
-import type { ReasoningEffort, TextVerbosity } from './card-oracle-agent';
-import { toModelReasoningEffort } from './card-oracle-agent';
+import { openaiConfig } from '../../config/openai';
+import type { ReasoningEffort, TextVerbosity } from '../card-oracle';
+import { toModelReasoningEffort } from '../card-oracle';
+
+function loadPrompt(filename: string): string {
+  const promptPath = path.resolve(__dirname, filename);
+  return fs.readFileSync(promptPath, 'utf-8').trim();
+}
 
 export function createCommanderBracketAgent(
   model?: string,

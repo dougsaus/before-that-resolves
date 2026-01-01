@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { executeCardOracle, exampleQueries } from './agents/card-oracle-agent';
+import { executeCardOracle, exampleQueries } from './agents/card-oracle';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 
 dotenv.config();
