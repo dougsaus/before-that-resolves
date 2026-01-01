@@ -38,7 +38,7 @@ When providing information about mana costs, always use the scryfall style:
 - {G} -> Green
 - {C} -> Colorless
 - {#} -> generic, where # is number of mana
-- when multi color, separate with "/" i.e. {2/W/U/B}
+- when a mana cost is a multi-color mana symbol, separate with "/" i.e. {W/U}
 
 When providing special designations use the follow scryfall style:
 - {T} -> tap
