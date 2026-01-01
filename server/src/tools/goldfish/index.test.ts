@@ -7,6 +7,7 @@ vi.mock('../../services/deck', () => ({
 }));
 
 type ToolSet = typeof import('./index');
+type CardRef = { id: string; name: string };
 
 function buildDeck(cardCount: number, commanderName: string) {
   const cards = [{ name: commanderName, quantity: 1 }];
@@ -22,11 +23,15 @@ function buildDeck(cardCount: number, commanderName: string) {
   };
 }
 
+type ToolInvoker = {
+  invoke: (runContext: any, input: string, details?: any) => Promise<any>;
+};
+
 async function invokeTool<TInput, TResult>(
-  tool: { invoke: (context: unknown, input: TInput, details?: unknown) => Promise<TResult> },
+  tool: ToolInvoker,
   input: TInput
 ): Promise<TResult> {
-  return tool.invoke(undefined, JSON.stringify(input) as TInput, undefined);
+  return tool.invoke(undefined, JSON.stringify(input), undefined);
 }
 
 async function loadTools(): Promise<ToolSet> {
@@ -43,17 +48,26 @@ describe('goldfish tools', () => {
     mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    const loadResult = await invokeTool(tools.loadDeck, {
+    const loadResult = await invokeTool<
+      { deckUrl: string },
+      { ok: boolean; error?: string; cardCount?: number }
+    >(tools.loadDeck, {
       deckUrl: 'https://archidekt.com/decks/123456/example'
     });
     expect(loadResult.ok).toBe(true);
 
-    const resetResult = await invokeTool(tools.reset, { seed: 1 });
+    const resetResult = await invokeTool<
+      { seed: number },
+      { zones: { commandCount: number; libraryCount: number; handCount: number } }
+    >(tools.reset, { seed: 1 });
     expect(resetResult.zones.commandCount).toBe(1);
     expect(resetResult.zones.libraryCount).toBe(99);
     expect(resetResult.zones.handCount).toBe(0);
 
-    const commandZone = await invokeTool(tools.zoneContents, { zone: 'command' });
+    const commandZone = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'command' }
+    );
     expect(commandZone.cards[0]?.name).toBe("Atraxa, Praetors' Voice");
   });
 
@@ -61,7 +75,10 @@ describe('goldfish tools', () => {
     mockFetchArchidektDeck.mockResolvedValue(buildDeck(99, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    const loadResult = await invokeTool(tools.loadDeck, {
+    const loadResult = await invokeTool<
+      { deckUrl: string },
+      { ok: boolean; error?: string; cardCount?: number }
+    >(tools.loadDeck, {
       deckUrl: 'https://archidekt.com/decks/123456/example'
     });
 
@@ -74,10 +91,10 @@ describe('goldfish tools', () => {
 
     await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
     await invokeTool(tools.reset, { seed: 42 });
-    const peekOne = await invokeTool(tools.peek, { n: 5 });
+    const peekOne = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 5 });
 
     await invokeTool(tools.reset, { seed: 42 });
-    const peekTwo = await invokeTool(tools.peek, { n: 5 });
+    const peekTwo = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 5 });
 
     expect(peekOne.cards.map((card) => card.name)).toEqual(
       peekTwo.cards.map((card) => card.name)
@@ -91,15 +108,24 @@ describe('goldfish tools', () => {
     await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
     await invokeTool(tools.reset, { seed: 5 });
 
-    const drawResult = await invokeTool(tools.draw, { n: 2 });
+    const drawResult = await invokeTool<{ n: number }, { cards: CardRef[]; libraryCount: number }>(
+      tools.draw,
+      { n: 2 }
+    );
     expect(drawResult.cards).toHaveLength(2);
     expect(drawResult.libraryCount).toBe(97);
 
-    const handZone = await invokeTool(tools.zoneContents, { zone: 'hand' });
+    const handZone = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'hand' }
+    );
     expect(handZone.cards).toHaveLength(2);
 
     await invokeTool(tools.draw, { n: 1, toZone: 'battlefield' });
-    const battlefield = await invokeTool(tools.zoneContents, { zone: 'battlefield' });
+    const battlefield = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'battlefield' }
+    );
     expect(battlefield.cards).toHaveLength(1);
   });
 
@@ -110,8 +136,8 @@ describe('goldfish tools', () => {
     await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
     await invokeTool(tools.reset, { seed: 9 });
 
-    const peekResult = await invokeTool(tools.peek, { n: 3 });
-    const drawResult = await invokeTool(tools.draw, { n: 1 });
+    const peekResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 3 });
+    const drawResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.draw, { n: 1 });
 
     expect(peekResult.cards[0]?.id).toBe(drawResult.cards[0]?.id);
   });
@@ -123,25 +149,37 @@ describe('goldfish tools', () => {
     await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
     await invokeTool(tools.reset, { seed: 3 });
 
-    const drawResult = await invokeTool(tools.draw, { n: 1 });
+    const drawResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.draw, { n: 1 });
     const cardId = drawResult.cards[0].id;
 
-    const invalidMove = await invokeTool(tools.moveById, {
+    const invalidMove = await invokeTool<{ cardId: string; fromZone: string; toZone: string }, { ok: boolean }>(
+      tools.moveById,
+      {
       cardId,
       fromZone: 'hand',
       toZone: 'library'
-    });
+      }
+    );
     expect(invalidMove.ok).toBe(false);
 
-    const validMove = await invokeTool(tools.moveById, {
+    const validMove = await invokeTool<{ cardId: string; fromZone: string; toZone: string }, { ok: boolean }>(
+      tools.moveById,
+      {
       cardId,
       fromZone: 'hand',
       toZone: 'battlefield'
-    });
+      }
+    );
     expect(validMove.ok).toBe(true);
 
-    const handZone = await invokeTool(tools.zoneContents, { zone: 'hand' });
-    const battlefield = await invokeTool(tools.zoneContents, { zone: 'battlefield' });
+    const handZone = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'hand' }
+    );
+    const battlefield = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'battlefield' }
+    );
     expect(handZone.cards).toHaveLength(0);
     expect(battlefield.cards).toHaveLength(1);
   });
@@ -153,17 +191,23 @@ describe('goldfish tools', () => {
     await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
     await invokeTool(tools.reset, { seed: 15 });
 
-    const peekResult = await invokeTool(tools.peek, { n: 1 });
+    const peekResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 1 });
     const cardId = peekResult.cards[0].id;
 
-    const toRevealed = await invokeTool(tools.moveById, {
+    const toRevealed = await invokeTool<
+      { cardId: string; fromZone: string; toZone: string },
+      { ok: boolean }
+    >(tools.moveById, {
       cardId,
       fromZone: 'library',
       toZone: 'revealed'
     });
     expect(toRevealed.ok).toBe(true);
 
-    const backToTop = await invokeTool(tools.moveById, {
+    const backToTop = await invokeTool<
+      { cardId: string; fromZone: string; toZone: string; toLibraryPosition: string },
+      { ok: boolean }
+    >(tools.moveById, {
       cardId,
       fromZone: 'revealed',
       toZone: 'library',
@@ -171,7 +215,7 @@ describe('goldfish tools', () => {
     });
     expect(backToTop.ok).toBe(true);
 
-    const drawResult = await invokeTool(tools.draw, { n: 1 });
+    const drawResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.draw, { n: 1 });
     expect(drawResult.cards[0]?.id).toBe(cardId);
   });
 
@@ -183,11 +227,17 @@ describe('goldfish tools', () => {
     await invokeTool(tools.reset, { seed: 11 });
 
     const targetName = 'Card 10';
-    const moveResult = await invokeTool(tools.findAndMoveByName, { cardName: targetName });
+    const moveResult = await invokeTool<
+      { cardName: string },
+      { ok: boolean; movedCard: CardRef }
+    >(tools.findAndMoveByName, { cardName: targetName });
     expect(moveResult.ok).toBe(true);
     expect(moveResult.movedCard.name).toBe(targetName);
 
-    const handZone = await invokeTool(tools.zoneContents, { zone: 'hand' });
+    const handZone = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'hand' }
+    );
     expect(handZone.cards.some((card) => card.name === targetName)).toBe(true);
   });
 
@@ -198,16 +248,22 @@ describe('goldfish tools', () => {
     await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
     await invokeTool(tools.reset, { seed: 21 });
 
-    const drawResult = await invokeTool(tools.draw, { n: 99 });
+    const drawResult = await invokeTool<{ n: number }, { libraryCount: number }>(tools.draw, { n: 99 });
     expect(drawResult.libraryCount).toBe(0);
 
-    const failDraw = await invokeTool(tools.draw, { n: 1 });
+    const failDraw = await invokeTool<{ n: number }, { ok: boolean }>(tools.draw, { n: 1 });
     expect(failDraw.ok).toBe(false);
 
-    const failMove = await invokeTool(tools.findAndMoveByName, { cardName: 'Does Not Exist' });
+    const failMove = await invokeTool<{ cardName: string }, { ok: boolean }>(
+      tools.findAndMoveByName,
+      { cardName: 'Does Not Exist' }
+    );
     expect(failMove.ok).toBe(false);
 
-    const handZone = await invokeTool(tools.zoneContents, { zone: 'hand' });
+    const handZone = await invokeTool<{ zone: string }, { cards: CardRef[] }>(
+      tools.zoneContents,
+      { zone: 'hand' }
+    );
     expect(handZone.cards).toHaveLength(99);
   });
 });

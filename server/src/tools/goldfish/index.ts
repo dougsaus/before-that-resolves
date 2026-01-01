@@ -105,13 +105,12 @@ function canMoveToLibrary(zone: Zone, toLibraryPosition?: 'top' | 'bottom') {
   return zone !== 'library' || !!toLibraryPosition;
 }
 
-async function loadDeckFromArchidekt(deckUrl: string) {
+async function loadDeckFromArchidekt(deckUrl: string): Promise<DeckCard[]> {
   const deck = await fetchArchidektDeck(deckUrl);
-  const cards: DeckCard[] = deck.cards.map((card) => ({
+  return deck.cards.map((card) => ({
     name: card.name,
     quantity: card.quantity
   }));
-  deckList = cards;
 }
 
 export const loadDeck = tool({
@@ -125,9 +124,10 @@ export const loadDeck = tool({
       resetZones();
       deckList = null;
       cardIdCounter = 1;
-      await loadDeckFromArchidekt(deckUrl);
+      const cards = await loadDeckFromArchidekt(deckUrl);
+      deckList = cards;
 
-      const total = deckList?.reduce((sum, card) => sum + card.quantity, 0) || 0;
+      const total = cards.reduce((sum, card) => sum + card.quantity, 0);
       if (total !== 100) {
         deckList = null;
         return { ok: false, error: 'Deck list must contain exactly 100 cards.' };
@@ -245,6 +245,7 @@ export const moveById = tool({
     toLibraryPosition: z.enum(['top', 'bottom']).optional().nullable()
   }),
   execute: async ({ cardId, fromZone, toZone, toLibraryPosition }) => {
+    const destination = toZone as Zone;
     if (!canMoveToLibrary(toZone, toLibraryPosition)) {
       return { ok: false };
     }
@@ -257,14 +258,14 @@ export const moveById = tool({
 
     const [card] = source.splice(index, 1);
 
-    if (toZone === 'library') {
+    if (destination === 'library') {
       if (toLibraryPosition === 'top') {
         zones.library.unshift(card);
       } else {
         zones.library.push(card);
       }
     } else {
-      zones[toZone].push(card);
+      zones[destination].push(card);
     }
 
     return { ok: true };
@@ -282,8 +283,8 @@ export const findAndMoveByName = tool({
     shuffleLibraryAfter: z.boolean().optional().nullable()
   }),
   execute: async ({ cardName, fromZone, toZone, toLibraryPosition, shuffleLibraryAfter }) => {
-    const sourceZone: Zone = fromZone || 'library';
-    const destination: Zone = toZone || 'hand';
+    const sourceZone = (fromZone ?? 'library') as Zone;
+    const destination = (toZone ?? 'hand') as Zone;
     const shouldShuffle = shuffleLibraryAfter ?? true;
 
     if (!canMoveToLibrary(destination, toLibraryPosition)) {
