@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { tool } from '@openai/agents';
-import { fetchArchidektDeck } from '../../services/deck';
+import { getLastCachedArchidektDeck } from '../../services/deck';
 
 type CardRef = {
   id: string;
@@ -12,9 +12,8 @@ type Zone = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'comman
 type DeckCard = {
   name: string;
   quantity: number;
+  section?: string;
 };
-
-const COMMANDER_NAME = 'Atraxa, Praetors\' Voice';
 
 const zones = {
   library: [] as CardRef[],
@@ -27,6 +26,7 @@ const zones = {
 };
 
 let deckList: DeckCard[] | null = null;
+let commanderName: string | null = null;
 let cardIdCounter = 1;
 let gameIdCounter = 1;
 let rng = Math.random;
@@ -105,37 +105,50 @@ function canMoveToLibrary(zone: Zone, toLibraryPosition?: 'top' | 'bottom') {
   return zone !== 'library' || !!toLibraryPosition;
 }
 
-async function loadDeckFromArchidekt(deckUrl: string): Promise<DeckCard[]> {
-  const deck = await fetchArchidektDeck(deckUrl);
-  return deck.cards.map((card) => ({
-    name: card.name,
-    quantity: card.quantity
-  }));
-}
-
 export const loadDeck = tool({
   name: 'loadDeck',
-  description: 'Load an Archidekt deck list into the goldfish tool state',
-  parameters: z.object({
-    deckUrl: z.string().describe('Archidekt deck URL to load')
-  }),
-  execute: async ({ deckUrl }) => {
+  description: 'Load the currently loaded Archidekt deck into the goldfish tool state',
+  parameters: z.object({}).strict(),
+  execute: async () => {
+    console.log('🧪 Loading goldfish deck from current Archidekt cache.');
     try {
       resetZones();
       deckList = null;
+      commanderName = null;
       cardIdCounter = 1;
-      const cards = await loadDeckFromArchidekt(deckUrl);
+      const cachedDeck = getLastCachedArchidektDeck();
+      if (!cachedDeck) {
+        console.warn('⚠️ No loaded Archidekt deck available for goldfish.');
+        return { ok: false, error: 'No Archidekt deck is loaded.' };
+      }
+      const commanderEntry = cachedDeck.cards.find((card) =>
+        (card.section || '').toLowerCase().includes('commander')
+      );
+      if (!commanderEntry) {
+        console.warn('⚠️ No commander card found in loaded deck.');
+        return { ok: false, error: 'No commander found in loaded deck.' };
+      }
+      commanderName = commanderEntry.name;
+      const cards = cachedDeck.cards.map((card) => ({
+        name: card.name,
+        quantity: card.quantity,
+        section: card.section
+      }));
       deckList = cards;
 
       const total = cards.reduce((sum, card) => sum + card.quantity, 0);
       if (total !== 100) {
         deckList = null;
+        console.warn(`⚠️ Goldfish deck invalid card count: ${total}`);
         return { ok: false, error: 'Deck list must contain exactly 100 cards.' };
       }
 
+      console.log(`👑 Goldfish commander: ${commanderName}`);
+      console.log(`✅ Goldfish deck loaded (${total} cards).`);
       return { ok: true, cardCount: total };
     } catch (error: any) {
       deckList = null;
+      console.error('❌ Goldfish deck load failed:', error?.message || error);
       return { ok: false, error: error?.message || 'Failed to load deck.' };
     }
   }
@@ -150,7 +163,12 @@ export const reset = tool({
   }),
   execute: async ({ seed }) => {
     if (!deckList) {
+      console.warn('⚠️ Goldfish reset requested with no deck loaded.');
       return { ok: false, error: 'No deck loaded. Use loadDeck first.' };
+    }
+    if (!commanderName) {
+      console.warn('⚠️ Goldfish reset requested with no commander set.');
+      return { ok: false, error: 'No commander found in loaded deck.' };
     }
 
     resetZones();
@@ -158,17 +176,18 @@ export const reset = tool({
     setSeed(seed);
 
     const library = expandDeckList(deckList);
-    const removedCommander = removeFirstByName(library, COMMANDER_NAME);
-    const commanderCard = removedCommander || createCardRef(COMMANDER_NAME);
-
-    if (!removedCommander && library.length > 99) {
-      library.pop();
+    const removedCommander = removeFirstByName(library, commanderName);
+    if (!removedCommander) {
+      console.warn('⚠️ Commander card missing from library.');
+      return { ok: false, error: 'Commander card not found in deck list.' };
     }
+    const commanderCard = removedCommander;
     zones.command.push(commanderCard);
     zones.library = library;
 
     shuffleArray(zones.library);
 
+    console.log(`🔄 Goldfish reset complete (seed: ${seed ?? 'none'}).`);
     return {
       gameId: `game_${gameIdCounter++}`,
       zones: computeZoneCounts()
@@ -181,6 +200,7 @@ export const shuffle = tool({
   description: 'Shuffle the library',
   parameters: z.object({}),
   execute: async () => {
+    console.log('🔀 Goldfish shuffle library.');
     shuffleArray(zones.library);
     return { ok: true };
   }
@@ -196,12 +216,16 @@ export const draw = tool({
   execute: async ({ n, toZone }) => {
     const destination: Zone = toZone || 'hand';
     if (zones.library.length < n) {
+      console.warn(`⚠️ Goldfish draw failed: requested ${n}, available ${zones.library.length}.`);
       return { ok: false, error: 'Not enough cards in library.' };
     }
 
     const drawn = zones.library.splice(0, n);
     zones[destination].push(...drawn);
 
+    console.log(
+      `🎴 Goldfish drew ${n} card(s) to ${destination}: ${drawn.map((card) => card.name).join(', ')}`
+    );
     return {
       cards: drawn,
       libraryCount: zones.library.length
@@ -216,6 +240,12 @@ export const peek = tool({
     n: z.number().min(1)
   }),
   execute: async ({ n }) => {
+    console.log(
+      `👀 Goldfish peek top ${n} card(s): ${zones.library
+        .slice(0, n)
+        .map((card) => card.name)
+        .join(', ')}`
+    );
     return {
       cards: zones.library.slice(0, n)
     };
@@ -229,6 +259,11 @@ export const zoneContents = tool({
     zone: z.enum(['hand', 'battlefield', 'graveyard', 'exile', 'command', 'revealed'])
   }),
   execute: async ({ zone }) => {
+    console.log(
+      `📦 Goldfish zoneContents: ${zone}: ${findZone(zone)
+        .map((card) => card.name)
+        .join(', ')}`
+    );
     return {
       cards: [...findZone(zone)]
     };
@@ -247,12 +282,14 @@ export const moveById = tool({
   execute: async ({ cardId, fromZone, toZone, toLibraryPosition }) => {
     const destination = toZone as Zone;
     if (!canMoveToLibrary(toZone, toLibraryPosition)) {
+      console.warn(`⚠️ Goldfish moveById invalid library position for ${cardId}.`);
       return { ok: false };
     }
 
     const source = findZone(fromZone);
     const index = source.findIndex((card) => card.id === cardId);
     if (index === -1) {
+      console.warn(`⚠️ Goldfish moveById could not find ${cardId} in ${fromZone}.`);
       return { ok: false };
     }
 
@@ -268,6 +305,7 @@ export const moveById = tool({
       zones[destination].push(card);
     }
 
+    console.log(`➡️ Goldfish moveById ${card.name} from ${fromZone} to ${destination}.`);
     return { ok: true };
   }
 });
@@ -288,12 +326,14 @@ export const findAndMoveByName = tool({
     const shouldShuffle = shuffleLibraryAfter ?? true;
 
     if (!canMoveToLibrary(destination, toLibraryPosition)) {
+      console.warn(`⚠️ Goldfish findAndMoveByName invalid library position for ${cardName}.`);
       return { ok: false, movedCard: null };
     }
 
     const source = findZone(sourceZone);
     const index = source.findIndex((card) => card.name === cardName);
     if (index === -1) {
+      console.warn(`⚠️ Goldfish findAndMoveByName could not find ${cardName} in ${sourceZone}.`);
       return { ok: false, movedCard: null };
     }
 
@@ -313,6 +353,7 @@ export const findAndMoveByName = tool({
       shuffleArray(zones.library);
     }
 
+    console.log(`➡️ Goldfish findAndMoveByName ${cardName} from ${sourceZone} to ${destination}.`);
     return { ok: true, movedCard: card };
   }
 });

@@ -14,6 +14,8 @@ import {
   moveById,
   findAndMoveByName
 } from '../../tools/goldfish';
+import { getArchidektDeckRawTool } from '../../tools/deck-tools';
+import { cardCollectionTool, searchCardTool } from '../../tools/card-tools';
 
 function loadPrompt(filename: string): string {
   const promptPath = path.resolve(__dirname, filename);
@@ -38,6 +40,18 @@ export function createGoldfishAgent(
     model: model || openaiConfig.model || 'gpt-4o',
     modelSettings,
     instructions: loadPrompt('goldfish.md'),
-    tools: [loadDeck, reset, shuffle, draw, peek, zoneContents, moveById, findAndMoveByName]
+    tools: [
+      loadDeck,
+      reset,
+      shuffle,
+      draw,
+      peek,
+      zoneContents,
+      moveById,
+      findAndMoveByName,
+      getArchidektDeckRawTool,
+      searchCardTool,
+      cardCollectionTool
+    ]
   });
 }

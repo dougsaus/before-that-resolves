@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { run } from '@openai/agents';
 import { executeCardOracle } from '../agents/card-oracle';
 import { createGoldfishAgent } from '../agents/goldfish';
-import { fetchArchidektDeck } from '../services/deck';
+import { buildArchidektDeckData, cacheArchidektDeckFromUrl } from '../services/deck';
 import { countToolCalls, extractResponseText } from '../utils/agent-helpers';
 import { getOrCreateConversationId } from '../utils/conversation-store';
 
@@ -15,7 +15,11 @@ describeLive('live integrations', () => {
   it(
     'loads an Archidekt deck from the live API',
     async () => {
-      const deck = await fetchArchidektDeck(
+      const raw = await cacheArchidektDeckFromUrl(
+        'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
+      );
+      const deck = buildArchidektDeckData(
+        raw,
         'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
       );
       expect(deck.source).toBe('archidekt');

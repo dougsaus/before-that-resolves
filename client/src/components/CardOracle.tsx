@@ -18,14 +18,16 @@ type CardOracleProps = {
 };
 
 export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProps) {
-  const [query, setQuery] = useState('');
-  const [deckUrl, setDeckUrl] = useState('');
-  const [deckAnalysisOptions, setDeckAnalysisOptions] = useState({
+  const defaultDeckAnalysisOptions = {
     summary: true,
     winCons: true,
     bracket: true,
     weaknesses: true
-  });
+  };
+  const [query, setQuery] = useState('');
+  const [deckUrl, setDeckUrl] = useState('');
+  const [deckAnalysisOptions, setDeckAnalysisOptions] = useState(defaultDeckAnalysisOptions);
+  const [deckLoaded, setDeckLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
@@ -108,8 +110,71 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
     await submitQuery(text);
   };
 
+  const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
+    try {
+      await axios.post('http://localhost:3001/api/agent/reset', {
+        conversationId
+      });
+    } catch (resetError) {
+      console.warn('Failed to reset conversation on server:', resetError);
+    }
+
+    setConversationId(createConversationId());
+    setMessages([]);
+    setAgentMetadata(null);
+    setDeckAnalysisOptions(defaultDeckAnalysisOptions);
+    setDeckLoaded(false);
+    if (!options?.preserveDeckUrl) {
+      setDeckUrl('');
+    }
+  };
+
   const handleLoadDeck = async () => {
     if (!deckUrl.trim()) return;
+    setLoading(true);
+
+    await resetConversationState({ preserveDeckUrl: true });
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        role: 'agent',
+        content: 'Loading deck...'
+      }
+    ]);
+
+    try {
+      await axios.post('http://localhost:3001/api/deck/cache', { deckUrl });
+      setDeckLoaded(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          role: 'agent',
+          content: 'Deck loaded and ready to analyze.'
+        }
+      ]);
+    } catch (cacheError) {
+      const errorMessage =
+        (cacheError as any)?.response?.data?.error ||
+        (cacheError as any)?.message ||
+        'Failed to cache deck';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          role: 'error',
+          content: errorMessage
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalyzeDeck = async () => {
+    if (!deckUrl.trim() || !deckLoaded) return;
     const analysisSections = [
       deckAnalysisOptions.summary
         ? 'Summarize the deck providing insights like color identity, overall theme and archetypes of the deck, and how the deck should be played without getting too deep on the specifics of individual cards.'
@@ -134,18 +199,7 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
   };
 
   const handleRestartConversation = async () => {
-    try {
-      await axios.post('http://localhost:3001/api/agent/reset', {
-        conversationId
-      });
-    } catch (resetError) {
-      console.warn('Failed to reset conversation on server:', resetError);
-    }
-
-    setConversationId(createConversationId());
-    setMessages([]);
-    setAgentMetadata(null);
-    setDeckUrl('');
+    await resetConversationState();
   };
 
   return (
@@ -173,7 +227,12 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
               <input
                 type="url"
                 value={deckUrl}
-                onChange={(e) => setDeckUrl(e.target.value)}
+                onChange={(e) => {
+                  setDeckUrl(e.target.value);
+                  if (deckLoaded) {
+                    setDeckLoaded(false);
+                  }
+                }}
                 placeholder="https://archidekt.com/decks/..."
                 className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 disabled={loading}
@@ -181,83 +240,94 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
               <button
                 type="button"
                 onClick={handleLoadDeck}
-                disabled={
-                  loading ||
-                  !deckUrl.trim() ||
-                  (!deckAnalysisOptions.summary &&
-                    !deckAnalysisOptions.winCons &&
-                    !deckAnalysisOptions.bracket &&
-                    !deckAnalysisOptions.weaknesses)
-                }
+                disabled={loading || !deckUrl.trim()}
                 className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
-                Analyze Deck
+                Load Deck
               </button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-300">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.summary}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      summary: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Summarize
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.winCons}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      winCons: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Find win cons
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.bracket}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      bracket: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Assess bracket
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.weaknesses}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      weaknesses: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Find weaknesses
-              </label>
             </div>
             <div className="mt-2 text-xs text-gray-500">
               Supports public decks from Archidekt.
+            </div>
+            <div className="mt-3 rounded-lg border border-gray-700/70 bg-gray-900/60 p-3">
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-300">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={deckAnalysisOptions.summary}
+                    onChange={(e) =>
+                      setDeckAnalysisOptions((prev) => ({
+                        ...prev,
+                        summary: e.target.checked
+                      }))
+                    }
+                    disabled={loading || !deckLoaded}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Summarize
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={deckAnalysisOptions.winCons}
+                    onChange={(e) =>
+                      setDeckAnalysisOptions((prev) => ({
+                        ...prev,
+                        winCons: e.target.checked
+                      }))
+                    }
+                    disabled={loading || !deckLoaded}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Find win cons
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={deckAnalysisOptions.bracket}
+                    onChange={(e) =>
+                      setDeckAnalysisOptions((prev) => ({
+                        ...prev,
+                        bracket: e.target.checked
+                      }))
+                    }
+                    disabled={loading || !deckLoaded}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Assess bracket
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={deckAnalysisOptions.weaknesses}
+                    onChange={(e) =>
+                      setDeckAnalysisOptions((prev) => ({
+                        ...prev,
+                        weaknesses: e.target.checked
+                      }))
+                    }
+                    disabled={loading || !deckLoaded}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Find weaknesses
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAnalyzeDeck}
+                  disabled={
+                    loading ||
+                    !deckLoaded ||
+                    !deckUrl.trim() ||
+                    (!deckAnalysisOptions.summary &&
+                      !deckAnalysisOptions.winCons &&
+                      !deckAnalysisOptions.bracket &&
+                      !deckAnalysisOptions.weaknesses)
+                  }
+                  className="ml-auto px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                >
+                  Analyze Deck
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">

@@ -8,6 +8,7 @@ export function createGoldfishAgentTool(
   const agent = createGoldfishAgent(model, reasoningEffort, verbosity);
   return agent.asTool({
     toolName: 'commander_goldfish_expert',
-    toolDescription: 'Goldfish a Commander deck using the goldfish simulator tools'
+    toolDescription: 'Goldfish a Commander deck using the goldfish simulator tools',
+    runOptions: { maxTurns: 500 }
   });
 }

@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockFetchArchidektDeck = vi.fn();
+const mockGetLastCachedArchidektDeck = vi.fn();
 
 vi.mock('../../services/deck', () => ({
-  fetchArchidektDeck: mockFetchArchidektDeck
+  getLastCachedArchidektDeck: mockGetLastCachedArchidektDeck
 }));
 
 type ToolSet = typeof import('./index');
 type CardRef = { id: string; name: string };
 
 function buildDeck(cardCount: number, commanderName: string) {
-  const cards = [{ name: commanderName, quantity: 1 }];
+  const cards = [{ name: commanderName, quantity: 1, section: 'Commander' }];
   for (let i = 1; i <= cardCount - 1; i += 1) {
     cards.push({ name: `Card ${i}`, quantity: 1 });
   }
@@ -41,19 +41,17 @@ async function loadTools(): Promise<ToolSet> {
 
 describe('goldfish tools', () => {
   beforeEach(() => {
-    mockFetchArchidektDeck.mockReset();
+    mockGetLastCachedArchidektDeck.mockReset();
+    mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
   });
 
   it('loads a deck and resets zones with commander in command zone', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
     const loadResult = await invokeTool<
-      { deckUrl: string },
+      Record<string, never>,
       { ok: boolean; error?: string; cardCount?: number }
-    >(tools.loadDeck, {
-      deckUrl: 'https://archidekt.com/decks/123456/example'
-    });
+    >(tools.loadDeck, {});
     expect(loadResult.ok).toBe(true);
 
     const resetResult = await invokeTool<
@@ -72,24 +70,21 @@ describe('goldfish tools', () => {
   });
 
   it('rejects decks that are not exactly 100 cards', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(99, "Atraxa, Praetors' Voice"));
+    mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(99, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
     const loadResult = await invokeTool<
-      { deckUrl: string },
+      Record<string, never>,
       { ok: boolean; error?: string; cardCount?: number }
-    >(tools.loadDeck, {
-      deckUrl: 'https://archidekt.com/decks/123456/example'
-    });
+    >(tools.loadDeck, {});
 
     expect(loadResult.ok).toBe(false);
   });
 
   it('produces deterministic shuffles with a seed', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 42 });
     const peekOne = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 5 });
 
@@ -102,10 +97,9 @@ describe('goldfish tools', () => {
   });
 
   it('draws cards into the requested zone', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 5 });
 
     const drawResult = await invokeTool<{ n: number }, { cards: CardRef[]; libraryCount: number }>(
@@ -130,10 +124,9 @@ describe('goldfish tools', () => {
   });
 
   it('peeks without moving cards', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 9 });
 
     const peekResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 3 });
@@ -143,10 +136,9 @@ describe('goldfish tools', () => {
   });
 
   it('moves cards by id between zones and validates library placement', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 3 });
 
     const drawResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.draw, { n: 1 });
@@ -185,10 +177,9 @@ describe('goldfish tools', () => {
   });
 
   it('moves cards between library and revealed to simulate scry', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 15 });
 
     const peekResult = await invokeTool<{ n: number }, { cards: CardRef[] }>(tools.peek, { n: 1 });
@@ -220,10 +211,9 @@ describe('goldfish tools', () => {
   });
 
   it('finds and moves a card by name with shuffling', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 11 });
 
     const targetName = 'Card 10';
@@ -242,10 +232,9 @@ describe('goldfish tools', () => {
   });
 
   it('returns ok:false when moves are impossible and preserves state', async () => {
-    mockFetchArchidektDeck.mockResolvedValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await loadTools();
 
-    await invokeTool(tools.loadDeck, { deckUrl: 'https://archidekt.com/decks/123456/example' });
+    await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 21 });
 
     const drawResult = await invokeTool<{ n: number }, { libraryCount: number }>(tools.draw, { n: 99 });
@@ -265,5 +254,17 @@ describe('goldfish tools', () => {
       { zone: 'hand' }
     );
     expect(handZone.cards).toHaveLength(99);
+  });
+
+  it('loads from the currently loaded deck', async () => {
+    mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
+    const tools = await loadTools();
+
+    const loadResult = await invokeTool<
+      Record<string, never>,
+      { ok: boolean; error?: string; cardCount?: number }
+    >(tools.loadDeck, {});
+
+    expect(loadResult.ok).toBe(true);
   });
 });

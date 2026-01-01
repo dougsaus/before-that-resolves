@@ -86,4 +86,19 @@ describe('app routes', () => {
     expect(response.body.cleared).toBe(true);
     expect(resetConversation).toHaveBeenCalledWith('conv-123');
   });
+
+  it('caches Archidekt decks', async () => {
+    const cacheArchidektDeckFromUrl = vi.fn().mockResolvedValue({ name: 'Raw Deck' });
+    const app = createApp({ cacheArchidektDeckFromUrl });
+
+    const response = await request(app)
+      .post('/api/deck/cache')
+      .send({ deckUrl: 'https://archidekt.com/decks/12345/test' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(cacheArchidektDeckFromUrl).toHaveBeenCalledWith(
+      'https://archidekt.com/decks/12345/test'
+    );
+  });
 });

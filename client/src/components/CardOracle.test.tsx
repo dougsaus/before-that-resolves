@@ -110,21 +110,29 @@ describe('CardOracle chat UI', () => {
 
   it('does not add a user message when loading a deck', async () => {
     const user = userEvent.setup();
-    mockedAxios.post.mockResolvedValue({
-      data: {
-        success: true,
-        response: 'Deck summary response'
-      }
-    });
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { success: true } });
 
     renderCardOracle();
 
     const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
-    await user.click(screen.getByRole('button', { name: 'Analyze Deck' }));
+    await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+
+    expect(screen.getByText('Loading deck...')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText('Deck summary response')).toBeInTheDocument();
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://localhost:3001/api/deck/cache',
+        {
+          deckUrl: 'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
+        }
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Deck loaded and ready to analyze.')).toBeInTheDocument();
     });
 
     expect(screen.queryByText(/Analyze this Commander deck/i)).not.toBeInTheDocument();
@@ -132,24 +140,32 @@ describe('CardOracle chat UI', () => {
 
   it('includes selected deck analysis sections in order', async () => {
     const user = userEvent.setup();
-    mockedAxios.post.mockResolvedValue({
-      data: {
-        success: true,
-        response: 'Deck analysis response'
-      }
-    });
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          response: 'Deck analysis response'
+        }
+      });
 
     renderCardOracle();
 
     const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
+    await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+    const analyzeButton = screen.getByRole('button', { name: 'Analyze Deck' });
+    await waitFor(() => {
+      expect(analyzeButton).toBeEnabled();
+    });
     await user.click(screen.getByRole('button', { name: 'Analyze Deck' }));
 
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalled();
     });
 
-    const [, payload] = mockedAxios.post.mock.calls[0];
+    const [, payload] = mockedAxios.post.mock.calls[2];
     const query = payload.query as string;
     const summaryIndex = query.indexOf('Summarize the deck');
     const winConsIndex = query.indexOf('Win Conditions');

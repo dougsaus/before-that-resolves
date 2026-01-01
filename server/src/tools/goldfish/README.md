@@ -7,7 +7,7 @@ Example calls:
 ```json
 {
   "tool": "loadDeck",
-  "input": { "deckUrl": "https://archidekt.com/decks/123456/example" }
+  "input": {}
 }
 ```
 
