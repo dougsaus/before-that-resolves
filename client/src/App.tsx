@@ -96,6 +96,7 @@ function App() {
             <h1 className="text-5xl font-bold mb-4 flex items-center justify-center gap-3">
               <span className="ms ms-planeswalker text-3xl"></span>
               Before That Resolves
+              <span className="ms ms-planeswalker text-3xl"></span>
             </h1>
             <p className="text-xl text-gray-300">
               Commander Deck Analyzer & Strategy Assistant
