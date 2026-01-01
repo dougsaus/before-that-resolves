@@ -2,6 +2,7 @@ import { Agent, run } from '@openai/agents';
 import { openaiConfig } from '../config/openai';
 import {
   searchCardTool,
+  cardCollectionTool,
   advancedSearchTool,
   getCardRulingsTool,
   randomCommanderTool,
@@ -44,6 +45,7 @@ function createCardOracleAgent(
     instructions: loadPrompt('card-oracle.md'),
     tools: [
       searchCardTool,
+      cardCollectionTool,
       advancedSearchTool,
       getCardRulingsTool,
       randomCommanderTool,
@@ -72,9 +74,10 @@ export async function executeCardOracle(
     const runOptions = conversationId
       ? {
         previousResponseId: getConversationState(conversationId).lastResponseId,
-        context: { model, reasoningEffort, verbosity }
+        context: { model, reasoningEffort, verbosity },
+        maxTurns: 100
       }
-      : { context: { model, reasoningEffort, verbosity } };
+      : { context: { model, reasoningEffort, verbosity }, maxTurns: 100 };
     const cardOracleAgent = createCardOracleAgent(model, reasoningEffort, verbosity);
     const result = await run(
       cardOracleAgent,

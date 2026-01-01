@@ -23,7 +23,8 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
   const [deckAnalysisOptions, setDeckAnalysisOptions] = useState({
     summary: true,
     winCons: true,
-    bracket: true
+    bracket: true,
+    weaknesses: true
   });
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(createConversationId);
@@ -110,9 +111,18 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
   const handleLoadDeck = async () => {
     if (!deckUrl.trim()) return;
     const analysisSections = [
-      deckAnalysisOptions.summary ? 'Summarize the deck providing insights like color identity, overall theme and archetypes of the deck, and how the deck should be played without getting too deep on the specifics of individual cards. ' : null,
-      deckAnalysisOptions.winCons ? 'Summarize the Win Conditions present in the deck and a detailed summary of the cards that enable them. ' : null,
-      deckAnalysisOptions.bracket ? 'Provide an assessment of what bracket the deck is likely to be along with detailed justification, going into details about specific cards and interactions when necessary. ' : null
+      deckAnalysisOptions.summary
+        ? 'Summarize the deck providing insights like color identity, overall theme and archetypes of the deck, and how the deck should be played without getting too deep on the specifics of individual cards.'
+        : null,
+      deckAnalysisOptions.winCons
+        ? 'Summarize the Win Conditions present in the deck and a detailed summary of the cards that enable them.'
+        : null,
+      deckAnalysisOptions.bracket
+        ? 'Provide an assessment of what bracket the deck is likely to be along with detailed justification, going into details about specific cards and interactions when necessary.'
+        : null,
+      deckAnalysisOptions.weaknesses
+        ? 'Find potential weaknesses of the deck and suggest ways to fix it citing specific cards to add or to cut when appropriate.'
+        : null
     ].filter(Boolean) as string[];
 
     if (analysisSections.length === 0) return;
@@ -176,7 +186,8 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
                   !deckUrl.trim() ||
                   (!deckAnalysisOptions.summary &&
                     !deckAnalysisOptions.winCons &&
-                    !deckAnalysisOptions.bracket)
+                    !deckAnalysisOptions.bracket &&
+                    !deckAnalysisOptions.weaknesses)
                 }
                 className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
@@ -228,6 +239,21 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
                   className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
                 />
                 Assess bracket
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={deckAnalysisOptions.weaknesses}
+                  onChange={(e) =>
+                    setDeckAnalysisOptions((prev) => ({
+                      ...prev,
+                      weaknesses: e.target.checked
+                    }))
+                  }
+                  disabled={loading}
+                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                />
+                Find weaknesses
               </label>
             </div>
             <div className="mt-2 text-xs text-gray-500">

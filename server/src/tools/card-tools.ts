@@ -44,6 +44,40 @@ export const searchCardTool = tool({
 });
 
 /**
+ * Card Collection Tool
+ *
+ * LEARNING POINT: Batch multiple card lookups in one call.
+ */
+export const cardCollectionTool = tool({
+  name: 'card_collection',
+  description: 'Fetch a batch of cards by name using Scryfall collection lookup',
+  parameters: z.object({
+    cardNames: z.array(z.string()).min(1).max(75)
+      .describe('Array of card names to fetch in a single batch')
+  }),
+  execute: async ({ cardNames }) => {
+    console.log(`🧺 Fetching card collection: ${cardNames.join(', ')}`);
+
+    const { cards, notFound } = await scryfallService.getCardCollection(cardNames);
+
+    return {
+      success: true,
+      count: cards.length,
+      notFound,
+      cards: cards.map(card => ({
+        name: card.name,
+        manaCost: card.mana_cost,
+        type: card.type_line,
+        oracleText: card.oracle_text,
+        colors: card.color_identity.join(', ') || 'Colorless',
+        power: card.power,
+        toughness: card.toughness
+      }))
+    };
+  }
+});
+
+/**
  * Advanced Card Search Tool
  *
  * LEARNING POINT: More complex Zod schemas with optional fields

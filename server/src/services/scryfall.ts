@@ -91,6 +91,35 @@ export class ScryfallService {
   }
 
   /**
+   * Fetch a collection of specific cards by name
+   */
+  async getCardCollection(names: string[]): Promise<{ cards: Card[]; notFound: string[] }> {
+    try {
+      await this.respectRateLimit();
+
+      const response = await this.client.post('/cards/collection', {
+        identifiers: names.map((name) => ({ name }))
+      });
+
+      const cards: Card[] = [];
+      const notFound: string[] = [];
+
+      for (const item of response.data.data || []) {
+        if (item.object === 'card') {
+          cards.push(this.transformScryfallCard(item));
+        } else if (item.object === 'not_found' && item.name) {
+          notFound.push(item.name);
+        }
+      }
+
+      return { cards, notFound };
+    } catch (error: any) {
+      console.error('Scryfall API error:', error.message);
+      throw new Error(`Failed to fetch card collection: ${error.message}`);
+    }
+  }
+
+  /**
    * Get a random commander (legendary creature)
    */
   async getRandomCommander(): Promise<Card | null> {

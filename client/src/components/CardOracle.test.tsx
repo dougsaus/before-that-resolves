@@ -151,13 +151,15 @@ describe('CardOracle chat UI', () => {
 
     const [, payload] = mockedAxios.post.mock.calls[0];
     const query = payload.query as string;
-    const summaryIndex = query.indexOf('Summary');
-    const winConsIndex = query.indexOf('Win Cons');
-    const bracketIndex = query.indexOf('Bracket Assessment');
+    const summaryIndex = query.indexOf('Summarize the deck');
+    const winConsIndex = query.indexOf('Win Conditions');
+    const bracketIndex = query.indexOf('Provide an assessment of what bracket');
+    const weaknessesIndex = query.indexOf('Find potential weaknesses of the deck');
 
     expect(summaryIndex).toBeGreaterThan(-1);
     expect(winConsIndex).toBeGreaterThan(summaryIndex);
     expect(bracketIndex).toBeGreaterThan(winConsIndex);
+    expect(weaknessesIndex).toBeGreaterThan(bracketIndex);
   });
 
   it('renders markdown emphasis in agent messages', async () => {
