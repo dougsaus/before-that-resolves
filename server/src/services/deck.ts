@@ -110,9 +110,13 @@ function buildDeckData(deck: any, deckUrl: string): DeckData {
     ? deck.cards
       .map((entry: any) => {
         const categories = Array.isArray(entry?.categories) ? entry.categories : [];
-        const hasCommanderCategory = categories.some(
-          (category: string) => category.toLowerCase() === 'commander'
-        );
+        const normalizedCategories = categories.map((category: string) => category.toLowerCase());
+        const primaryCategory = normalizedCategories[0];
+        const isExcludedCategory = primaryCategory === 'maybeboard' || primaryCategory === 'sideboard';
+        if (isExcludedCategory) {
+          return null;
+        }
+        const hasCommanderCategory = normalizedCategories.includes('commander');
         return {
           name: entry?.card?.oracleCard?.name || entry?.card?.name || entry?.cardName,
           quantity: entry?.quantity ?? entry?.qty ?? 0,
@@ -123,7 +127,7 @@ function buildDeckData(deck: any, deckUrl: string): DeckData {
             (hasCommanderCategory ? 'Commander' : undefined)
         };
       })
-      .filter((entry: any) => entry.name)
+      .filter((entry: any) => entry?.name)
     : [];
 
   return {

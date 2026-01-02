@@ -21,6 +21,21 @@ describe('deck service', () => {
           card: { oracleCard: { name: 'Edgar Markov' } }
         },
         {
+          quantity: 1,
+          categories: ['Sideboard', 'Artifact'],
+          card: { oracleCard: { name: 'Wishboard Card' } }
+        },
+        {
+          quantity: 1,
+          categories: ['Maybeboard', 'Instant'],
+          card: { oracleCard: { name: 'Maybe Card' } }
+        },
+        {
+          quantity: 1,
+          categories: ['Land', 'Sideboard'],
+          card: { oracleCard: { name: 'Main Deck Land' } }
+        },
+        {
           quantity: 2,
           categories: ['Mainboard'],
           card: { name: 'Swamp' }
@@ -32,10 +47,13 @@ describe('deck service', () => {
 
     expect(deck.source).toBe('archidekt');
     expect(deck.name).toBe('Archi Deck');
-    expect(deck.cards.length).toBe(2);
+    expect(deck.cards.length).toBe(3);
     expect(deck.cards[0].name).toBe('Edgar Markov');
     expect(deck.cards[0].section).toBe('Commander');
     expect(deck.format).toBe('commander');
+    expect(deck.cards.some((card) => card.name === 'Wishboard Card')).toBe(false);
+    expect(deck.cards.some((card) => card.name === 'Maybe Card')).toBe(false);
+    expect(deck.cards.some((card) => card.name === 'Main Deck Land')).toBe(true);
   });
 
   it('loads raw Archidekt deck data from a valid URL', async () => {

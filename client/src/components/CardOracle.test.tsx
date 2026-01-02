@@ -192,6 +192,85 @@ describe('CardOracle chat UI', () => {
     expect(weaknessesIndex).toBeGreaterThan(bracketIndex);
   });
 
+  it('builds a goldfish prompt with selected metrics', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          response: 'Goldfish response'
+        }
+      });
+
+    renderCardOracle();
+
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
+    await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Goldfish Deck' })).toBeEnabled();
+    });
+
+    const gamesInput = screen.getByLabelText('Games') as HTMLInputElement;
+    await user.clear(gamesInput);
+    await user.type(gamesInput, '3');
+
+    const turnsInput = screen.getByLabelText('Turns') as HTMLInputElement;
+    await user.clear(turnsInput);
+    await user.type(turnsInput, '7');
+
+    await user.click(screen.getByLabelText('Damage generated'));
+    await user.click(screen.getByRole('button', { name: 'Goldfish Deck' }));
+
+    const [, payload] = mockedAxios.post.mock.calls[2];
+    const query = payload.query as string;
+
+    expect(query).toContain('Goldfish this deck.');
+    expect(query).toContain('Simulate 3 games going 7 turns.');
+    expect(query).toContain('Track the following metrics: mana generation, commander cast turn, extra cards drawn (do not count upkeep and opening hand).');
+    expect(query).toContain('Summarize the results of the simulations.');
+  });
+
+  it('omits metrics section when none selected', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          response: 'Goldfish response'
+        }
+      });
+
+    renderCardOracle();
+
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
+    await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Goldfish Deck' })).toBeEnabled();
+    });
+
+    await user.click(screen.getByLabelText('Mana generation'));
+    await user.click(screen.getByLabelText('Commander cast turn'));
+    await user.click(screen.getByLabelText('Damage generated'));
+    await user.click(screen.getByLabelText('Extra cards drawn'));
+
+    await user.click(screen.getByRole('button', { name: 'Goldfish Deck' }));
+
+    const [, payload] = mockedAxios.post.mock.calls[2];
+    const query = payload.query as string;
+
+    expect(query).toContain('Goldfish this deck.');
+    expect(query).toContain('Simulate 1 games going 7 turns.');
+    expect(query).not.toContain('Track the following metrics:');
+  });
+
   it('renders markdown emphasis in agent messages', async () => {
     const user = userEvent.setup();
     mockedAxios.post.mockResolvedValue({

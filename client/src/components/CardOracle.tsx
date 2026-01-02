@@ -30,7 +30,16 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   const [deckAnalysisOptions, setDeckAnalysisOptions] = useState(defaultDeckAnalysisOptions);
   const [deckLoaded, setDeckLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<'query' | 'analyze' | 'goldfish' | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [goldfishGames, setGoldfishGames] = useState(1);
+  const [goldfishTurns, setGoldfishTurns] = useState(7);
+  const [goldfishMetrics, setGoldfishMetrics] = useState({
+    mana: true,
+    commanderCast: true,
+    damage: true,
+    cardsDrawn: true
+  });
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
   const [messages, setMessages] = useState<
@@ -42,10 +51,14 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, loading]);
 
-  const submitQuery = async (text: string, options?: { hideUserMessage?: boolean }) => {
+  const submitQuery = async (
+    text: string,
+    options?: { hideUserMessage?: boolean; mode?: 'query' | 'analyze' | 'goldfish' }
+  ) => {
     if (!text.trim()) return;
 
     setLoading(true);
+    setLoadingMode(options?.mode ?? 'query');
     if (!options?.hideUserMessage) {
       setMessages((prev) => [
         ...prev,
@@ -102,6 +115,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       ]);
     } finally {
       setLoading(false);
+      setLoadingMode(null);
     }
   };
 
@@ -109,7 +123,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     e.preventDefault();
     const text = query;
     setQuery('');
-    await submitQuery(text);
+    await submitQuery(text, { mode: 'query' });
   };
 
   const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
@@ -125,6 +139,14 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     setMessages([]);
     setAgentMetadata(null);
     setDeckAnalysisOptions(defaultDeckAnalysisOptions);
+    setGoldfishGames(1);
+    setGoldfishTurns(7);
+    setGoldfishMetrics({
+      mana: true,
+      commanderCast: true,
+      damage: true,
+      cardsDrawn: true
+    });
     setDeckLoaded(false);
     if (!options?.preserveDeckUrl) {
       setDeckUrl('');
@@ -180,7 +202,24 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     const prompt = `Analyze this Commander deck: ${deckUrl}\n\nPlease provide the following in order:\n${analysisSections
       .map((section, index) => `${index + 1}) ${section}`)
       .join('\n')}`;
-    await submitQuery(prompt, { hideUserMessage: true });
+    await submitQuery(prompt, { hideUserMessage: true, mode: 'analyze' });
+  };
+
+  const handleGoldfishDeck = async () => {
+    if (!deckLoaded) return;
+    const games = Math.min(10, Math.max(1, goldfishGames));
+    const turns = Math.min(10, Math.max(1, goldfishTurns));
+    const metrics = [
+      goldfishMetrics.mana ? 'mana generation' : null,
+      goldfishMetrics.commanderCast ? 'commander cast turn' : null,
+      goldfishMetrics.damage ? 'damage generated' : null,
+      goldfishMetrics.cardsDrawn ? 'extra cards drawn (do not count upkeep and opening hand)' : null
+    ].filter(Boolean) as string[];
+
+    const metricsText =
+      metrics.length > 0 ? ` Track the following metrics: ${metrics.join(', ')}.` : '';
+    const prompt = `Goldfish this deck. Simulate ${games} games going ${turns} turns.${metricsText} Summarize the results of the simulations.`;
+    await submitQuery(prompt, { hideUserMessage: true, mode: 'goldfish' });
   };
 
   const handleRestartConversation = async () => {
@@ -258,7 +297,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                     type="button"
                     onClick={handleLoadDeck}
                     disabled={loading || !deckUrl.trim()}
-                    className="w-full px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
                   >
                     Load Deck
                   </button>
@@ -267,7 +306,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   Supports public decks from Archidekt.
                 </div>
               </div>
-              <div className="p-4">
+              <div className="p-4 border-b border-gray-700">
                 <div className="flex flex-col gap-3 text-sm text-gray-300">
                   <label className="flex items-center gap-2">
                     <input
@@ -341,9 +380,103 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                         !deckAnalysisOptions.bracket &&
                         !deckAnalysisOptions.weaknesses)
                     }
-                    className="w-full px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
                   >
                     Analyze Deck
+                  </button>
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="flex flex-col gap-4 text-sm text-gray-300">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-2">
+                      <span>Games</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={goldfishGames}
+                        onChange={(e) => setGoldfishGames(Number(e.target.value))}
+                        disabled={!deckLoaded || loading}
+                        className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2">
+                      <span>Turns</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={goldfishTurns}
+                        onChange={(e) => setGoldfishTurns(Number(e.target.value))}
+                        disabled={!deckLoaded || loading}
+                        className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs uppercase tracking-wide text-gray-400">
+                      Metrics
+                    </span>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={goldfishMetrics.mana}
+                        onChange={(e) =>
+                          setGoldfishMetrics((prev) => ({ ...prev, mana: e.target.checked }))
+                        }
+                        disabled={!deckLoaded || loading}
+                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      Mana generation
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={goldfishMetrics.commanderCast}
+                        onChange={(e) =>
+                          setGoldfishMetrics((prev) => ({
+                            ...prev,
+                            commanderCast: e.target.checked
+                          }))
+                        }
+                        disabled={!deckLoaded || loading}
+                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      Commander cast turn
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={goldfishMetrics.damage}
+                        onChange={(e) =>
+                          setGoldfishMetrics((prev) => ({ ...prev, damage: e.target.checked }))
+                        }
+                        disabled={!deckLoaded || loading}
+                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      Damage generated
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={goldfishMetrics.cardsDrawn}
+                        onChange={(e) =>
+                          setGoldfishMetrics((prev) => ({ ...prev, cardsDrawn: e.target.checked }))
+                        }
+                        disabled={!deckLoaded || loading}
+                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      Extra cards drawn
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGoldfishDeck}
+                    disabled={!deckLoaded || loading}
+                    className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                  >
+                    Goldfish Deck
                   </button>
                 </div>
               </div>
@@ -402,26 +535,55 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
               </div>
             ))}
 
-            {loading && (
+            {loadingMode && (
               <div className="flex justify-start">
                 <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm bg-gray-700/70 text-gray-200">
-                  <div className="flex items-center gap-2">
-                    <span>Thinking</span>
-                    <span className="flex gap-1">
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                        style={{ animationDelay: '0s', animationDuration: '0.6s' }}
-                      />
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                        style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
-                      />
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                        style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
-                      />
-                    </span>
-                  </div>
+                  {loadingMode === 'query' ? (
+                    <div className="flex items-center gap-2">
+                      <span>Thinking</span>
+                      <span className="flex gap-1">
+                        <span
+                          className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                          style={{ animationDelay: '0s', animationDuration: '0.6s' }}
+                        />
+                        <span
+                          className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                          style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
+                        />
+                        <span
+                          className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                          style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
+                        />
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span>
+                          {loadingMode === 'analyze' ? 'Analyzing Deck...' : 'Goldfishing Deck...'}
+                        </span>
+                        <span className="flex gap-1">
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                            style={{ animationDelay: '0s', animationDuration: '0.6s' }}
+                          />
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                            style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
+                          />
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                            style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
+                          />
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {loadingMode === 'analyze'
+                          ? 'This could take several minutes'
+                          : 'This process can take 5 to 60 minutes depending on the options chosen'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
