@@ -229,11 +229,21 @@ describe('CardOracle chat UI', () => {
     const winConsIndex = query.indexOf('Win Conditions');
     const bracketIndex = query.indexOf('Provide an assessment of what bracket');
     const weaknessesIndex = query.indexOf('Find potential weaknesses of the deck');
+    const cardTypeIndex = query.indexOf('Provide counts for each card type contained in the deck');
+    const tribalIndex = query.indexOf('Provide counts of cards matching prevalent tribal types');
+    const categoryIndex = query.indexOf('Provide counts of cards in the following categories');
+    const subtypeIndex = query.indexOf('Provide counts of cards for each subtype');
+    const landTypeIndex = query.indexOf('Provide counts of Land subtypes');
 
     expect(summaryIndex).toBeGreaterThan(-1);
     expect(winConsIndex).toBeGreaterThan(summaryIndex);
     expect(bracketIndex).toBeGreaterThan(winConsIndex);
     expect(weaknessesIndex).toBeGreaterThan(bracketIndex);
+    expect(cardTypeIndex).toBeGreaterThan(weaknessesIndex);
+    expect(tribalIndex).toBeGreaterThan(cardTypeIndex);
+    expect(categoryIndex).toBeGreaterThan(tribalIndex);
+    expect(subtypeIndex).toBeGreaterThan(categoryIndex);
+    expect(landTypeIndex).toBeGreaterThan(subtypeIndex);
   });
 
   it('builds a goldfish prompt with selected metrics', async () => {
@@ -331,6 +341,8 @@ describe('CardOracle chat UI', () => {
       'First key engine/piece',
       'Win-con assembled by turn',
       'Interaction seen by turn',
+      'Potential damage dealt by turn',
+      'Lethal damage achieved by turn',
       'Mulligan rate & keep size',
       'Keepable hand rate (2–4 lands, 1–2 plays)',
       'Mana usage by turn (curve spend)'
