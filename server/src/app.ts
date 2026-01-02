@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
 import { cacheArchidektDeckFromUrl } from './services/deck';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
+import { generateChatPdf } from './services/pdf';
 
 dotenv.config();
 
@@ -13,6 +14,7 @@ type AppDeps = {
   getOrCreateConversationId?: () => string;
   resetConversation?: (conversationId: string) => boolean;
   cacheArchidektDeckFromUrl?: (deckUrl: string) => Promise<any>;
+  generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -22,6 +24,7 @@ export function createApp(deps: AppDeps = {}) {
   const getConversationId = deps.getOrCreateConversationId ?? getOrCreateConversationId;
   const reset = deps.resetConversation ?? resetConversation;
   const cacheDeck = deps.cacheArchidektDeckFromUrl ?? cacheArchidektDeckFromUrl;
+  const exportChatPdf = deps.generateChatPdf ?? generateChatPdf;
 
   app.use(cors());
   app.use(express.json());
@@ -97,6 +100,56 @@ export function createApp(deps: AppDeps = {}) {
       res.status(500).json({
         success: false,
         error: error.message
+      });
+    }
+  });
+
+  app.post('/api/chat/export-pdf', async (req, res) => {
+    const { messages, title, subtitle, deckUrl } = req.body;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'messages are required'
+      });
+      return;
+    }
+
+    const normalizedMessages = messages
+      .filter((message) => message && typeof message.content === 'string')
+      .map((message) => {
+        const role = message.role;
+        const normalizedRole =
+          role === 'user' || role === 'agent' || role === 'error' ? role : 'agent';
+        return {
+          role: normalizedRole,
+          content: message.content
+        };
+      });
+
+    if (normalizedMessages.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'messages are required'
+      });
+      return;
+    }
+
+    try {
+      const pdfBuffer = await exportChatPdf({
+        title,
+        subtitle,
+        deckUrl,
+        messages: normalizedMessages
+      });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="before-that-resolves-chat.pdf"');
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      console.error('PDF export error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to generate PDF'
       });
     }
   });

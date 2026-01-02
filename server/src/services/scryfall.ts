@@ -161,6 +161,9 @@ export class ScryfallService {
    * Transform Scryfall API response to our Card type
    */
   private transformScryfallCard(scryfallCard: any): Card {
+    const imageUris =
+      scryfallCard.image_uris ||
+      (Array.isArray(scryfallCard.card_faces) ? scryfallCard.card_faces[0]?.image_uris : undefined);
     return {
       id: scryfallCard.id,
       name: scryfallCard.name,
@@ -172,7 +175,7 @@ export class ScryfallService {
       power: scryfallCard.power,
       toughness: scryfallCard.toughness,
       loyalty: scryfallCard.loyalty,
-      image_uris: scryfallCard.image_uris
+      image_uris: imageUris
     };
   }
 }

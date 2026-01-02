@@ -12,7 +12,7 @@ type CardRef = { id: string; name: string };
 function buildDeck(cardCount: number, commanderName: string) {
   const cards = [{ name: commanderName, quantity: 1, section: 'Commander' }];
   for (let i = 1; i <= cardCount - 1; i += 1) {
-    cards.push({ name: `Card ${i}`, quantity: 1 });
+    cards.push({ name: `Card ${i}`, quantity: 1, section: 'Mainboard' });
   }
   return {
     source: 'archidekt' as const,
