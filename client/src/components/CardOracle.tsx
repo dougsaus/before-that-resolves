@@ -30,6 +30,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   const [deckAnalysisOptions, setDeckAnalysisOptions] = useState(defaultDeckAnalysisOptions);
   const [deckLoaded, setDeckLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
   const [messages, setMessages] = useState<
@@ -136,26 +137,9 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
     await resetConversationState({ preserveDeckUrl: true });
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        role: 'agent',
-        content: 'Loading deck...'
-      }
-    ]);
-
     try {
       await axios.post('http://localhost:3001/api/deck/cache', { deckUrl });
       setDeckLoaded(true);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          role: 'agent',
-          content: 'Deck loaded and ready to analyze.'
-        }
-      ]);
     } catch (cacheError) {
       const errorMessage =
         (cacheError as any)?.response?.data?.error ||
@@ -201,6 +185,49 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
   const handleRestartConversation = async () => {
     await resetConversationState();
+  };
+
+  const handleExportPdf = async () => {
+    if (messages.length === 0 || exporting) return;
+    setExporting(true);
+
+    try {
+      const deckSlug = deckUrl.trim().split('/').filter(Boolean).pop();
+      const filename = deckLoaded && deckSlug
+        ? `${deckSlug}.pdf`
+        : 'before-that-resolves-conversation.pdf';
+      const response = await axios.post(
+        'http://localhost:3001/api/chat/export-pdf',
+        {
+          title: 'Before That Resolves',
+          subtitle: 'Commander Deck Analyzer & Strategy Assistant',
+          deckUrl: deckLoaded ? deckUrl : undefined,
+          messages
+        },
+        { responseType: 'blob' }
+      );
+
+      const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      const errorMessage =
+        error?.response?.data?.error || error?.message || 'Failed to export PDF';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          role: 'error',
+          content: errorMessage
+        }
+      ]);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -328,13 +355,23 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
               <h2 className="text-xl font-bold">
                 The Oracle - Your Magic:The Gathering AI Agent
               </h2>
-              <button
-                type="button"
-                onClick={handleRestartConversation}
-                className="text-sm text-gray-300 hover:text-gray-100 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors"
-              >
-                New Conversation
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportPdf}
+                  disabled={exporting || messages.length === 0}
+                  className="text-sm text-gray-300 hover:text-gray-100 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Export conversation to pdf
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRestartConversation}
+                  className="text-sm text-gray-300 hover:text-gray-100 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors"
+                >
+                  New Conversation
+                </button>
+              </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (

@@ -101,4 +101,32 @@ describe('app routes', () => {
       'https://archidekt.com/decks/12345/test'
     );
   });
+
+  it('exports chat as pdf', async () => {
+    const generateChatPdf = vi.fn().mockResolvedValue(Buffer.from('pdf'));
+    const app = createApp({ generateChatPdf });
+
+    const response = await request(app)
+      .post('/api/chat/export-pdf')
+      .send({
+        title: 'Before That Resolves',
+        subtitle: 'Commander Deck Analyzer & Strategy Assistant',
+        messages: [{ role: 'user', content: 'Hello' }]
+      })
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(generateChatPdf).toHaveBeenCalled();
+  });
+
+  it('validates chat export payload', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .post('/api/chat/export-pdf')
+      .send({ messages: [] })
+      .expect(400);
+
+    expect(response.body.error).toBe('messages are required');
+  });
 });

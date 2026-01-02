@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
@@ -12,6 +12,7 @@ vi.mock('axios', () => ({
 }));
 
 const mockedAxios = axios as unknown as { post: ReturnType<typeof vi.fn> };
+let createdAnchor: HTMLAnchorElement | null = null;
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -32,6 +33,21 @@ function renderCardOracle() {
 describe('CardOracle chat UI', () => {
   beforeEach(() => {
     mockedAxios.post.mockReset();
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:chat');
+    globalThis.URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    createdAnchor = null;
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const element = document.createElementNS('http://www.w3.org/1999/xhtml', tagName);
+      if (tagName === 'a') {
+        createdAnchor = element as HTMLAnchorElement;
+      }
+      return element as HTMLElement;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders deck loader and chat input', () => {
@@ -120,8 +136,6 @@ describe('CardOracle chat UI', () => {
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
-    expect(screen.getByText('Loading deck...')).toBeInTheDocument();
-
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://localhost:3001/api/deck/cache',
@@ -132,7 +146,7 @@ describe('CardOracle chat UI', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Deck loaded and ready to analyze.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Analyze Deck' })).toBeEnabled();
     });
 
     expect(screen.queryByText(/Analyze this Commander deck/i)).not.toBeInTheDocument();
@@ -237,5 +251,77 @@ describe('CardOracle chat UI', () => {
       'href',
       'https://scryfall.com/search?q=!%22Rhox%20Faithmender%22'
     );
+  });
+
+  it('exports the chat window as a PDF with a default filename', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          response: 'Export me'
+        }
+      })
+      .mockResolvedValueOnce({
+        data: new Blob(['pdf'], { type: 'application/pdf' })
+      });
+
+    renderCardOracle();
+
+    const input = screen.getByPlaceholderText('Type a question to the Oracle...');
+    await user.type(input, 'Export test');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await screen.findByText('Export me');
+
+    await user.click(screen.getByRole('button', { name: 'Export conversation to pdf' }));
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://localhost:3001/api/chat/export-pdf',
+        expect.objectContaining({
+          title: 'Before That Resolves',
+          subtitle: 'Commander Deck Analyzer & Strategy Assistant',
+          deckUrl: undefined,
+          messages: expect.any(Array)
+        }),
+        { responseType: 'blob' }
+      );
+    });
+
+    expect(createdAnchor?.download).toBe('before-that-resolves-conversation.pdf');
+  });
+
+  it('uses the deck slug for the exported filename', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          response: 'Deck ready'
+        }
+      })
+      .mockResolvedValueOnce({ data: new Blob(['pdf'], { type: 'application/pdf' }) });
+
+    renderCardOracle();
+
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    await user.type(deckInput, 'https://archidekt.com/decks/17524661/ms_badonkadonk');
+    await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Analyze Deck' })).toBeEnabled();
+    });
+
+    const input = screen.getByPlaceholderText('Type a question to the Oracle...');
+    await user.type(input, 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByText('Deck ready');
+
+    await user.click(screen.getByRole('button', { name: 'Export conversation to pdf' }));
+
+    expect(createdAnchor?.download).toBe('ms_badonkadonk.pdf');
   });
 });
