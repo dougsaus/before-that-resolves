@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
 import { DevModeProvider } from '../contexts/DevModeContext';
@@ -146,6 +146,14 @@ describe('CardOracle chat UI', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByText('Analyze options')).toBeInTheDocument();
+    });
+
+    const analyzeHeader = screen.getByText('Analyze options').parentElement;
+    expect(analyzeHeader).not.toBeNull();
+    await user.click(within(analyzeHeader as HTMLElement).getByRole('button', { name: 'Show' }));
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Analyze Deck' })).toBeEnabled();
     });
 
@@ -169,6 +177,13 @@ describe('CardOracle chat UI', () => {
     const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
+
+    const analyzeHeader = await screen.findByText('Analyze options');
+    const analyzeToggle = within(analyzeHeader.parentElement as HTMLElement).getByRole('button', {
+      name: 'Show'
+    });
+    await user.click(analyzeToggle);
+
     const analyzeButton = screen.getByRole('button', { name: 'Analyze Deck' });
     await waitFor(() => {
       expect(analyzeButton).toBeEnabled();
@@ -211,6 +226,14 @@ describe('CardOracle chat UI', () => {
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
     await waitFor(() => {
+      expect(screen.getByText('Goldfish options')).toBeInTheDocument();
+    });
+
+    const goldfishHeader = screen.getByText('Goldfish options').parentElement;
+    expect(goldfishHeader).not.toBeNull();
+    await user.click(within(goldfishHeader as HTMLElement).getByRole('button', { name: 'Show' }));
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Goldfish Deck' })).toBeEnabled();
     });
 
@@ -222,7 +245,7 @@ describe('CardOracle chat UI', () => {
     await user.clear(turnsInput);
     await user.type(turnsInput, '7');
 
-    await user.click(screen.getByLabelText('Damage generated'));
+    await user.click(screen.getByLabelText('Interaction seen by turn'));
     await user.click(screen.getByRole('button', { name: 'Goldfish Deck' }));
 
     const [, payload] = mockedAxios.post.mock.calls[2];
@@ -230,7 +253,12 @@ describe('CardOracle chat UI', () => {
 
     expect(query).toContain('Goldfish this deck.');
     expect(query).toContain('Simulate 3 games going 7 turns.');
-    expect(query).toContain('Track the following metrics: mana generation, commander cast turn, extra cards drawn (do not count upkeep and opening hand).');
+    expect(query).toContain('Track the following metrics:');
+    expect(query).toContain('lands in play by turn');
+    expect(query).toContain('mana available by turn');
+    expect(query).toContain('commander cast turn');
+    expect(query).toContain('curve usage');
+    expect(query).not.toContain('interaction seen by turn');
     expect(query).toContain('Summarize the results of the simulations.');
   });
 
@@ -253,13 +281,35 @@ describe('CardOracle chat UI', () => {
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
     await waitFor(() => {
+      expect(screen.getByText('Goldfish options')).toBeInTheDocument();
+    });
+
+    const goldfishHeader = screen.getByText('Goldfish options').parentElement;
+    expect(goldfishHeader).not.toBeNull();
+    await user.click(within(goldfishHeader as HTMLElement).getByRole('button', { name: 'Show' }));
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Goldfish Deck' })).toBeEnabled();
     });
 
-    await user.click(screen.getByLabelText('Mana generation'));
-    await user.click(screen.getByLabelText('Commander cast turn'));
-    await user.click(screen.getByLabelText('Damage generated'));
-    await user.click(screen.getByLabelText('Extra cards drawn'));
+    const labels = [
+      'Lands in play by turn (missed land drops)',
+      'Mana available by turn (colors)',
+      'Ramp count by turn',
+      'Cards seen by turn',
+      'Commander cast turn',
+      'Commander recasts (tax impact)',
+      'First key engine/piece',
+      'Win-con assembled by turn',
+      'Interaction seen by turn',
+      'Mulligan rate & keep size',
+      'Keepable hand rate (2–4 lands, 1–2 plays)',
+      'Mana usage by turn (curve spend)'
+    ];
+
+    for (const label of labels) {
+      await user.click(screen.getByLabelText(label));
+    }
 
     await user.click(screen.getByRole('button', { name: 'Goldfish Deck' }));
 
@@ -391,7 +441,7 @@ describe('CardOracle chat UI', () => {
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Analyze Deck' })).toBeEnabled();
+      expect(screen.getByText('Analyze options')).toBeInTheDocument();
     });
 
     const input = screen.getByPlaceholderText('Type a question to the Oracle...');

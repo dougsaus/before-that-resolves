@@ -32,13 +32,29 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState<'query' | 'analyze' | 'goldfish' | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showAnalyzeOptions, setShowAnalyzeOptions] = useState(false);
+  const [showGoldfishOptions, setShowGoldfishOptions] = useState(false);
   const [goldfishGames, setGoldfishGames] = useState(1);
   const [goldfishTurns, setGoldfishTurns] = useState(7);
   const [goldfishMetrics, setGoldfishMetrics] = useState({
-    mana: true,
+    lands: true,
+    manaAvailable: true,
+    ramp: true,
+    cardsSeen: true,
     commanderCast: true,
-    damage: true,
-    cardsDrawn: true
+    commanderRecasts: true,
+    keyEngine: true,
+    winCon: true,
+    interaction: true,
+    mulligans: true,
+    keepableHands: true,
+    curveUsage: true
+  });
+  const [interactionOptions, setInteractionOptions] = useState({
+    incomingDamage: 0,
+    blockRateGround: 0,
+    blockRateFlying: 0,
+    removalChance: 0
   });
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
@@ -142,11 +158,27 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     setGoldfishGames(1);
     setGoldfishTurns(7);
     setGoldfishMetrics({
-      mana: true,
+      lands: true,
+      manaAvailable: true,
+      ramp: true,
+      cardsSeen: true,
       commanderCast: true,
-      damage: true,
-      cardsDrawn: true
+      commanderRecasts: true,
+      keyEngine: true,
+      winCon: true,
+      interaction: true,
+      mulligans: true,
+      keepableHands: true,
+      curveUsage: true
     });
+    setInteractionOptions({
+      incomingDamage: 0,
+      blockRateGround: 0,
+      blockRateFlying: 0,
+      removalChance: 0
+    });
+    setShowAnalyzeOptions(false);
+    setShowGoldfishOptions(false);
     setDeckLoaded(false);
     if (!options?.preserveDeckUrl) {
       setDeckUrl('');
@@ -210,15 +242,52 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     const games = Math.min(10, Math.max(1, goldfishGames));
     const turns = Math.min(10, Math.max(1, goldfishTurns));
     const metrics = [
-      goldfishMetrics.mana ? 'mana generation' : null,
+      goldfishMetrics.lands ? 'lands in play by turn and missed land drops' : null,
+      goldfishMetrics.manaAvailable
+        ? 'mana available by turn (including colored sources)'
+        : null,
+      goldfishMetrics.ramp ? 'ramp count by turn' : null,
+      goldfishMetrics.cardsSeen ? 'cards seen by turn' : null,
       goldfishMetrics.commanderCast ? 'commander cast turn' : null,
-      goldfishMetrics.damage ? 'damage generated' : null,
-      goldfishMetrics.cardsDrawn ? 'extra cards drawn (do not count upkeep and opening hand)' : null
+      goldfishMetrics.commanderRecasts ? 'commander recasts and tax impact' : null,
+      goldfishMetrics.keyEngine ? 'time to first key engine/piece (use best judgment)' : null,
+      goldfishMetrics.winCon ? 'win-con assembled by turn' : null,
+      goldfishMetrics.interaction ? 'interaction seen by turn' : null,
+      goldfishMetrics.mulligans ? 'mulligan rate and average keep size' : null,
+      goldfishMetrics.keepableHands
+        ? 'keepable hand rate (2–4 lands, 1–2 plays heuristic)'
+        : null,
+      goldfishMetrics.curveUsage ? 'curve usage (percent of mana spent by turn)' : null
     ].filter(Boolean) as string[];
 
     const metricsText =
       metrics.length > 0 ? ` Track the following metrics: ${metrics.join(', ')}.` : '';
-    const prompt = `Goldfish this deck. Simulate ${games} games going ${turns} turns.${metricsText} Summarize the results of the simulations.`;
+    const interactionDetails: string[] = [];
+    if (interactionOptions.incomingDamage > 0) {
+      interactionDetails.push(
+        `incoming damage per turn: ${interactionOptions.incomingDamage}`
+      );
+    }
+    if (interactionOptions.blockRateGround > 0) {
+      interactionDetails.push(
+        `block rate vs ground attackers: ${interactionOptions.blockRateGround}%`
+      );
+    }
+    if (interactionOptions.blockRateFlying > 0) {
+      interactionDetails.push(
+        `block rate vs flying/evasion: ${interactionOptions.blockRateFlying}%`
+      );
+    }
+    if (interactionOptions.removalChance > 0) {
+      interactionDetails.push(
+        `removal interaction chance per turn: ${interactionOptions.removalChance}%`
+      );
+    }
+    const interactionText =
+      interactionDetails.length > 0
+        ? ` Model opponent interaction with ${interactionDetails.join(', ')}.`
+        : '';
+    const prompt = `Goldfish this deck. Simulate ${games} games going ${turns} turns.${metricsText} Summarize the results of the simulations.${interactionText}`;
     await submitQuery(prompt, { hideUserMessage: true, mode: 'goldfish' });
   };
 
@@ -273,8 +342,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     <div className="w-full max-w-none p-4 flex-none flex flex-col min-h-0 h-full">
       <div className="bg-gray-800/50 backdrop-blur rounded-lg p-4 shadow-xl flex flex-col flex-1 min-h-0 h-full overflow-hidden">
         <div className="flex flex-1 min-h-0 gap-4 overflow-hidden">
-          <aside className="w-1/4 flex flex-col gap-4 min-h-0 overflow-y-auto pr-1">
-            <div className="rounded-lg border border-gray-700 bg-gray-900/70 overflow-hidden">
+          <aside className="w-1/4 flex flex-col gap-4 min-h-0 pr-1">
+            <div className="rounded-lg border border-gray-700 bg-gray-900/70 overflow-hidden flex-1 min-h-0 flex flex-col">
               <div className="p-4 border-b border-gray-700">
                 <label className="block text-gray-300 text-sm mb-2">
                   Deck list URL to discuss with The Oracle
@@ -306,180 +375,419 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   Supports public decks from Archidekt.
                 </div>
               </div>
-              <div className="p-4 border-b border-gray-700">
-                <div className="flex flex-col gap-3 text-sm text-gray-300">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.summary}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          summary: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Summarize
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.winCons}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          winCons: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Find win cons
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.bracket}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          bracket: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Assess bracket
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.weaknesses}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          weaknesses: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Find weaknesses
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAnalyzeDeck}
-                    disabled={
-                      loading ||
-                      !deckLoaded ||
-                      !deckUrl.trim() ||
-                      (!deckAnalysisOptions.summary &&
-                        !deckAnalysisOptions.winCons &&
-                        !deckAnalysisOptions.bracket &&
-                        !deckAnalysisOptions.weaknesses)
-                    }
-                    className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
-                  >
-                    Analyze Deck
-                  </button>
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="flex flex-col gap-4 text-sm text-gray-300">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex flex-col gap-2">
-                      <span>Games</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={goldfishGames}
-                        onChange={(e) => setGoldfishGames(Number(e.target.value))}
-                        disabled={!deckLoaded || loading}
-                        className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-2">
-                      <span>Turns</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={goldfishTurns}
-                        onChange={(e) => setGoldfishTurns(Number(e.target.value))}
-                        disabled={!deckLoaded || loading}
-                        className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
-                      />
-                    </label>
+              {deckLoaded && (
+                <div className="p-4 border-b border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-200">Analyze options</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAnalyzeOptions((prev) => !prev)}
+                      className="text-xs text-gray-400 hover:text-gray-200"
+                    >
+                      {showAnalyzeOptions ? 'Hide' : 'Show'}
+                    </button>
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <span className="text-xs uppercase tracking-wide text-gray-400">
-                      Metrics
-                    </span>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={goldfishMetrics.mana}
-                        onChange={(e) =>
-                          setGoldfishMetrics((prev) => ({ ...prev, mana: e.target.checked }))
+                  {showAnalyzeOptions && (
+                    <div className="flex flex-col gap-3 text-sm text-gray-300 max-h-[18rem] overflow-y-auto pr-1">
+                      <button
+                        type="button"
+                        onClick={handleAnalyzeDeck}
+                        disabled={
+                          loading ||
+                          !deckLoaded ||
+                          !deckUrl.trim() ||
+                          (!deckAnalysisOptions.summary &&
+                            !deckAnalysisOptions.winCons &&
+                            !deckAnalysisOptions.bracket &&
+                            !deckAnalysisOptions.weaknesses)
                         }
-                        disabled={!deckLoaded || loading}
-                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                      />
-                      Mana generation
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={goldfishMetrics.commanderCast}
-                        onChange={(e) =>
-                          setGoldfishMetrics((prev) => ({
-                            ...prev,
-                            commanderCast: e.target.checked
-                          }))
-                        }
-                        disabled={!deckLoaded || loading}
-                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                      />
-                      Commander cast turn
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={goldfishMetrics.damage}
-                        onChange={(e) =>
-                          setGoldfishMetrics((prev) => ({ ...prev, damage: e.target.checked }))
-                        }
-                        disabled={!deckLoaded || loading}
-                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                      />
-                      Damage generated
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={goldfishMetrics.cardsDrawn}
-                        onChange={(e) =>
-                          setGoldfishMetrics((prev) => ({ ...prev, cardsDrawn: e.target.checked }))
-                        }
-                        disabled={!deckLoaded || loading}
-                        className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                      />
-                      Extra cards drawn
-                    </label>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleGoldfishDeck}
-                    disabled={!deckLoaded || loading}
-                    className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
-                  >
-                    Goldfish Deck
-                  </button>
+                        className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                      >
+                        Analyze Deck
+                      </button>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={deckAnalysisOptions.summary}
+                          onChange={(e) =>
+                            setDeckAnalysisOptions((prev) => ({
+                              ...prev,
+                              summary: e.target.checked
+                            }))
+                          }
+                          disabled={loading || !deckLoaded}
+                          className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        Summarize
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={deckAnalysisOptions.winCons}
+                          onChange={(e) =>
+                            setDeckAnalysisOptions((prev) => ({
+                              ...prev,
+                              winCons: e.target.checked
+                            }))
+                          }
+                          disabled={loading || !deckLoaded}
+                          className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        Find win cons
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={deckAnalysisOptions.bracket}
+                          onChange={(e) =>
+                            setDeckAnalysisOptions((prev) => ({
+                              ...prev,
+                              bracket: e.target.checked
+                            }))
+                          }
+                          disabled={loading || !deckLoaded}
+                          className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        Assess bracket
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={deckAnalysisOptions.weaknesses}
+                          onChange={(e) =>
+                            setDeckAnalysisOptions((prev) => ({
+                              ...prev,
+                              weaknesses: e.target.checked
+                            }))
+                          }
+                          disabled={loading || !deckLoaded}
+                          className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        Find weaknesses
+                      </label>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+              {deckLoaded && (
+                <div className="p-4 flex-1 min-h-0 flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-200">Goldfish options</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowGoldfishOptions((prev) => !prev)}
+                      className="text-xs text-gray-400 hover:text-gray-200"
+                    >
+                      {showGoldfishOptions ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {showGoldfishOptions && (
+                    <div className="flex flex-col gap-4 text-sm text-gray-300 flex-1 min-h-0 overflow-y-auto pr-1">
+                      <button
+                        type="button"
+                        onClick={handleGoldfishDeck}
+                        disabled={!deckLoaded || loading}
+                        className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                      >
+                        Goldfish Deck
+                      </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="flex flex-col gap-2">
+                          <span>Games</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={goldfishGames}
+                            onChange={(e) => setGoldfishGames(Number(e.target.value))}
+                            disabled={!deckLoaded || loading}
+                            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-2">
+                          <span>Turns</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={goldfishTurns}
+                            onChange={(e) => setGoldfishTurns(Number(e.target.value))}
+                            disabled={!deckLoaded || loading}
+                            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                          />
+                        </label>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span className="text-xs uppercase tracking-wide text-gray-400">
+                          Metrics
+                        </span>
+                        <span className="text-[11px] uppercase tracking-wide text-gray-500">
+                          Core play pattern
+                        </span>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.lands}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({ ...prev, lands: e.target.checked }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Lands in play by turn (missed land drops)
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.manaAvailable}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                manaAvailable: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Mana available by turn (colors)
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.ramp}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                ramp: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Ramp count by turn
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.cardsSeen}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                cardsSeen: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Cards seen by turn
+                        </label>
+                        <span className="text-[11px] uppercase tracking-wide text-gray-500 mt-2">
+                          Commander focus
+                        </span>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.commanderCast}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                commanderCast: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Commander cast turn
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.commanderRecasts}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                commanderRecasts: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Commander recasts (tax impact)
+                        </label>
+                        <span className="text-[11px] uppercase tracking-wide text-gray-500 mt-2">
+                          Execution & consistency
+                        </span>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.keyEngine}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                keyEngine: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          First key engine/piece
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.winCon}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                winCon: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Win-con assembled by turn
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.interaction}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                interaction: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Interaction seen by turn
+                        </label>
+                        <span className="text-[11px] uppercase tracking-wide text-gray-500 mt-2">
+                          Mulligans & curve
+                        </span>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.mulligans}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                mulligans: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Mulligan rate & keep size
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.keepableHands}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                keepableHands: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Keepable hand rate (2–4 lands, 1–2 plays)
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={goldfishMetrics.curveUsage}
+                            onChange={(e) =>
+                              setGoldfishMetrics((prev) => ({
+                                ...prev,
+                                curveUsage: e.target.checked
+                              }))
+                            }
+                            disabled={!deckLoaded || loading}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Mana usage by turn (curve spend)
+                        </label>
+                        <span className="text-[11px] uppercase tracking-wide text-gray-500 mt-2">
+                          Opponent interaction
+                        </span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="flex flex-col gap-2">
+                            <span>Incoming damage/turn</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={40}
+                              value={interactionOptions.incomingDamage}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  incomingDamage: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2">
+                            <span>Removal chance %</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={interactionOptions.removalChance}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  removalChance: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2">
+                            <span>Block rate (ground) %</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={interactionOptions.blockRateGround}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  blockRateGround: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2">
+                            <span>Block rate (flying) %</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={interactionOptions.blockRateFlying}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  blockRateFlying: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </aside>
 
@@ -560,7 +868,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <span>
-                          {loadingMode === 'analyze' ? 'Analyzing Deck...' : 'Goldfishing Deck...'}
+                          {loadingMode === 'analyze' ? 'Analyzing Deck' : 'Goldfishing Deck'}
                         </span>
                         <span className="flex gap-1">
                           <span
