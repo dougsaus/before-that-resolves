@@ -62,6 +62,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     Array<{ id: string; role: 'user' | 'agent' | 'error'; content: string }>
   >([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,6 +74,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   ) => {
     if (!text.trim()) return;
 
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setLoadingMode(options?.mode ?? 'query');
     if (!options?.hideUserMessage) {
@@ -83,14 +86,18 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     }
 
     try {
-      const result = await axios.post('http://localhost:3001/api/agent/query', {
-        query: text,
-        devMode: isDevMode,
-        conversationId,
-        model,
-        reasoningEffort: reasoningEffort || undefined,
-        verbosity
-      });
+      const result = await axios.post(
+        'http://localhost:3001/api/agent/query',
+        {
+          query: text,
+          devMode: isDevMode,
+          conversationId,
+          model,
+          reasoningEffort: reasoningEffort || undefined,
+          verbosity
+        },
+        { signal: controller.signal }
+      );
 
       if (result.data.success) {
         setMessages((prev) => [
@@ -120,6 +127,17 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         ]);
       }
     } catch (err: any) {
+      if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            role: 'error',
+            content: 'Request cancelled.'
+          }
+        ]);
+        return;
+      }
       const errorMessage = err.response?.data?.error || err.message || 'Failed to connect to server';
       setMessages((prev) => [
         ...prev,
@@ -130,6 +148,9 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         }
       ]);
     } finally {
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+      }
       setLoading(false);
       setLoadingMode(null);
     }
@@ -293,6 +314,10 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
   const handleRestartConversation = async () => {
     await resetConversationState();
+  };
+
+  const handleCancelRequest = () => {
+    requestControllerRef.current?.abort();
   };
 
   const handleExportPdf = async () => {
@@ -847,29 +872,9 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
               <div className="flex justify-start">
                 <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm bg-gray-700/70 text-gray-200">
                   {loadingMode === 'query' ? (
-                    <div className="flex items-center gap-2">
-                      <span>Thinking</span>
-                      <span className="flex gap-1">
-                        <span
-                          className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                          style={{ animationDelay: '0s', animationDuration: '0.6s' }}
-                        />
-                        <span
-                          className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                          style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
-                        />
-                        <span
-                          className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                          style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
-                        />
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2">
-                        <span>
-                          {loadingMode === 'analyze' ? 'Analyzing Deck' : 'Goldfishing Deck'}
-                        </span>
+                        <span>Thinking</span>
                         <span className="flex gap-1">
                           <span
                             className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
@@ -884,6 +889,44 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                             style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
                           />
                         </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCancelRequest}
+                        className="text-xs text-gray-300 border border-gray-500/70 rounded px-2 py-0.5 hover:text-white hover:border-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <span>
+                            {loadingMode === 'analyze' ? 'Analyzing Deck' : 'Goldfishing Deck'}
+                          </span>
+                          <span className="flex gap-1">
+                            <span
+                              className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                              style={{ animationDelay: '0s', animationDuration: '0.6s' }}
+                            />
+                            <span
+                              className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                              style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
+                            />
+                            <span
+                              className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                              style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
+                            />
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCancelRequest}
+                          className="text-xs text-gray-300 border border-gray-500/70 rounded px-2 py-0.5 hover:text-white hover:border-gray-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
                       </div>
                       <span className="text-xs text-gray-400">
                         {loadingMode === 'analyze'

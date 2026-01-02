@@ -22,6 +22,15 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+function createAbortablePromise(signal?: AbortSignal) {
+  return new Promise((_resolve, reject) => {
+    if (!signal) return;
+    signal.addEventListener('abort', () => {
+      reject({ name: 'CanceledError', code: 'ERR_CANCELED' });
+    });
+  });
+}
+
 function renderCardOracle() {
   return render(
     <DevModeProvider>
@@ -85,6 +94,26 @@ describe('CardOracle chat UI', () => {
     });
 
     expect(screen.getByText('Sol Ring is a powerful mana rock.')).toBeInTheDocument();
+  });
+
+  it('allows canceling an in-flight request from the thinking bubble', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post.mockImplementation((_url, _payload, config) =>
+      createAbortablePromise(config?.signal)
+    );
+
+    renderCardOracle();
+
+    const input = screen.getByPlaceholderText('Type a question to the Oracle...');
+    await user.type(input, 'Cancel this');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Request cancelled.')).toBeInTheDocument();
+    });
   });
 
   it('renders errors inside the chat window', async () => {
