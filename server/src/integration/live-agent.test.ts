@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { executeCardOracle } from '../agents/card-oracle-agent';
-import { fetchArchidektDeck } from '../services/deck';
+import { run } from '@openai/agents';
+import { executeCardOracle } from '../agents/card-oracle';
+import { createGoldfishAgent } from '../agents/goldfish';
+import { buildArchidektDeckData, cacheArchidektDeckFromUrl } from '../services/deck';
+import { countToolCalls, extractResponseText } from '../utils/agent-helpers';
 import { getOrCreateConversationId } from '../utils/conversation-store';
 
 const liveEnabled = process.env.RUN_LIVE_TESTS === '1';
@@ -12,7 +15,11 @@ describeLive('live integrations', () => {
   it(
     'loads an Archidekt deck from the live API',
     async () => {
-      const deck = await fetchArchidektDeck(
+      const raw = await cacheArchidektDeckFromUrl(
+        'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
+      );
+      const deck = buildArchidektDeckData(
+        raw,
         'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
       );
       expect(deck.source).toBe('archidekt');
@@ -36,6 +43,26 @@ describeLive('live integrations', () => {
       expect(followUp.success).toBe(true);
       expect(followUp.response).toBeTypeOf('string');
       expect(followUp.response?.length).toBeGreaterThan(0);
+    },
+    60000
+  );
+
+  it(
+    'runs the goldfish agent tool chain against a live model',
+    async () => {
+      const agent = createGoldfishAgent();
+      const prompt = [
+        'Goldfish this Commander deck using the goldfish tools only:',
+        'https://archidekt.com/decks/17352990/the_world_is_a_vampire',
+        'Steps: load the deck, reset with seed 1, draw 7.',
+        'Reply with a short summary of the zones.'
+      ].join(' ');
+
+      const result = await run(agent, [{ role: 'user', content: prompt }]);
+      expect(countToolCalls(result)).toBeGreaterThan(0);
+
+      const response = extractResponseText(result) || '';
+      expect(response.length).toBeGreaterThan(0);
     },
     60000
   );

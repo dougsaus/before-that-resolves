@@ -7,7 +7,7 @@
  */
 
 import dotenv from 'dotenv';
-import { executeCardOracle } from './agents/card-oracle-agent';
+import { executeCardOracle } from './agents/card-oracle';
 
 // Load environment variables
 dotenv.config();

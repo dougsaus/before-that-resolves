@@ -1,26 +1,29 @@
 import { z } from 'zod';
 import { tool } from '@openai/agents';
-import { fetchArchidektDeck } from '../services/deck';
+import { getLastCachedArchidektDeck, getLastCachedArchidektDeckRaw } from '../services/deck';
 
-export const loadArchidektDeckTool = tool({
-  name: 'load_archidekt_deck',
-  description: 'Load a Commander deck list from an Archidekt deck URL',
-  parameters: z.object({
-    deckUrl: z.string().min(1).describe('The Archidekt deck URL')
-  }),
-  execute: async ({ deckUrl }) => {
-    console.log(`🗂️ Loading Archidekt deck: ${deckUrl}`);
-    try {
-      const deck = await fetchArchidektDeck(deckUrl);
-      return {
-        success: true,
-        deck
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error?.message || 'Failed to load Archidekt deck'
-      };
+export const getArchidektDeckTool = tool({
+  name: 'get_archidekt_deck',
+  description: 'Return the currently loaded Archidekt deck list',
+  parameters: z.object({}),
+  execute: async () => {
+    const deck = getLastCachedArchidektDeck();
+    if (!deck) {
+      return { success: false, message: 'No Archidekt deck is loaded' };
     }
+    return { success: true, deck };
+  }
+});
+
+export const getArchidektDeckRawTool = tool({
+  name: 'get_archidekt_deck_raw',
+  description: 'Return the currently loaded raw Archidekt deck payload',
+  parameters: z.object({}),
+  execute: async () => {
+    const deck = getLastCachedArchidektDeckRaw();
+    if (!deck) {
+      return { success: false, message: 'No Archidekt deck is loaded' };
+    }
+    return { success: true, deck };
   }
 });

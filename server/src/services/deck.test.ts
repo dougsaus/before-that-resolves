@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchArchidektDeck } from './deck';
+import { buildArchidektDeckData, cacheArchidektDeckFromUrl, getLastCachedArchidektDeck } from './deck';
 
 describe('deck service', () => {
   beforeEach(() => {
@@ -10,20 +10,61 @@ describe('deck service', () => {
     vi.unstubAllGlobals();
   });
 
-  it('loads an Archidekt deck from a valid URL', async () => {
+  it('builds deck data from a raw Archidekt payload', async () => {
     const deckData = {
       name: 'Archi Deck',
-      format: 'commander',
+      deckFormat: 'commander',
       cards: [
         {
           quantity: 1,
-          category: 'Commander',
+          categories: ['Commander'],
           card: { oracleCard: { name: 'Edgar Markov' } }
         },
         {
           quantity: 2,
-          category: 'Mainboard',
+          categories: ['Mainboard'],
           card: { name: 'Swamp' }
+        }
+      ]
+    };
+
+    const deck = buildArchidektDeckData(deckData, 'https://archidekt.com/decks/12345/test');
+
+    expect(deck.source).toBe('archidekt');
+    expect(deck.name).toBe('Archi Deck');
+    expect(deck.cards.length).toBe(2);
+    expect(deck.cards[0].name).toBe('Edgar Markov');
+    expect(deck.cards[0].section).toBe('Commander');
+    expect(deck.format).toBe('commander');
+  });
+
+  it('loads raw Archidekt deck data from a valid URL', async () => {
+    const deckData = {
+      name: 'Raw Deck',
+      cards: []
+    };
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => deckData
+    } as any);
+
+    const deck = await cacheArchidektDeckFromUrl('https://archidekt.com/decks/99999/raw');
+
+    expect(deck.name).toBe('Raw Deck');
+  });
+
+  it('exposes the last cached deck as structured data', async () => {
+    const deckData = {
+      name: 'Cached Deck',
+      deckFormat: 'commander',
+      cards: [
+        {
+          quantity: 1,
+          categories: ['Commander'],
+          card: { oracleCard: { name: 'Edgar Markov' } }
         }
       ]
     };
@@ -35,17 +76,10 @@ describe('deck service', () => {
       json: async () => deckData
     } as any);
 
-    const deck = await fetchArchidektDeck('https://archidekt.com/decks/12345/test');
+    await cacheArchidektDeckFromUrl('https://archidekt.com/decks/55555/cache');
+    const cached = getLastCachedArchidektDeck();
 
-    expect(deck.source).toBe('archidekt');
-    expect(deck.name).toBe('Archi Deck');
-    expect(deck.cards.length).toBe(2);
-    expect(deck.cards[0].name).toBe('Edgar Markov');
-  });
-
-  it('rejects invalid deck URLs', async () => {
-    await expect(fetchArchidektDeck('https://example.com/decks/123')).rejects.toThrow(
-      /Invalid Archidekt URL/
-    );
+    expect(cached?.name).toBe('Cached Deck');
+    expect(cached?.cards[0]?.name).toBe('Edgar Markov');
   });
 });

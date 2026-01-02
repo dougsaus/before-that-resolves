@@ -19,6 +19,10 @@ type FetchResult = {
   error?: string;
 };
 
+const archidektRawCache = new Map<string, any>();
+let lastArchidektDeckId: string | null = null;
+let lastArchidektDeckUrl: string | null = null;
+
 async function fetchJson(url: string): Promise<FetchResult> {
   try {
     const response = await fetch(url, {
@@ -53,10 +57,17 @@ function parseDeckId(url: string, expectedHost: string): string | null {
   }
 }
 
-export async function fetchArchidektDeck(deckUrl: string): Promise<DeckData> {
+export async function cacheArchidektDeckFromUrl(deckUrl: string): Promise<any> {
   const deckId = parseDeckId(deckUrl, 'archidekt.com');
   if (!deckId) {
     throw new Error('Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}');
+  }
+
+  const cached = archidektRawCache.get(deckId);
+  if (cached) {
+    lastArchidektDeckId = deckId;
+    lastArchidektDeckUrl = deckUrl;
+    return cached;
   }
 
   const apiUrl = `https://archidekt.com/api/decks/${deckId}/`;
@@ -66,14 +77,52 @@ export async function fetchArchidektDeck(deckUrl: string): Promise<DeckData> {
     throw new Error(result.error || 'Failed to load Archidekt deck');
   }
 
-  const deck = result.json;
+  archidektRawCache.set(deckId, result.json);
+  lastArchidektDeckId = deckId;
+  lastArchidektDeckUrl = deckUrl;
+  return result.json;
+}
+
+export function buildArchidektDeckData(deck: any, deckUrl: string): DeckData {
+  return buildDeckData(deck, deckUrl);
+}
+
+export function getLastCachedArchidektDeck(): DeckData | null {
+  if (!lastArchidektDeckId || !lastArchidektDeckUrl) {
+    return null;
+  }
+  const cached = archidektRawCache.get(lastArchidektDeckId);
+  if (!cached) {
+    return null;
+  }
+  return buildDeckData(cached, lastArchidektDeckUrl);
+}
+
+export function getLastCachedArchidektDeckRaw(): any | null {
+  if (!lastArchidektDeckId) {
+    return null;
+  }
+  return archidektRawCache.get(lastArchidektDeckId) ?? null;
+}
+
+function buildDeckData(deck: any, deckUrl: string): DeckData {
   const cards = Array.isArray(deck.cards)
     ? deck.cards
-      .map((entry: any) => ({
-        name: entry?.card?.oracleCard?.name || entry?.card?.name || entry?.cardName,
-        quantity: entry?.quantity ?? entry?.qty ?? 0,
-        section: entry?.category || entry?.board || entry?.section
-      }))
+      .map((entry: any) => {
+        const categories = Array.isArray(entry?.categories) ? entry.categories : [];
+        const hasCommanderCategory = categories.some(
+          (category: string) => category.toLowerCase() === 'commander'
+        );
+        return {
+          name: entry?.card?.oracleCard?.name || entry?.card?.name || entry?.cardName,
+          quantity: entry?.quantity ?? entry?.qty ?? 0,
+          section:
+            entry?.category ||
+            entry?.board ||
+            entry?.section ||
+            (hasCommanderCategory ? 'Commander' : undefined)
+        };
+      })
       .filter((entry: any) => entry.name)
     : [];
 
@@ -81,7 +130,7 @@ export async function fetchArchidektDeck(deckUrl: string): Promise<DeckData> {
     source: 'archidekt',
     name: deck.name || 'Untitled Deck',
     url: deckUrl,
-    format: deck.format || null,
+    format: deck.format || deck.deckFormat || null,
     cards
   };
 }

@@ -1,5 +1,7 @@
+import fs from 'fs';
+import path from 'path';
 import { Agent, run } from '@openai/agents';
-import { openaiConfig } from '../config/openai';
+import { openaiConfig } from '../../config/openai';
 import {
   searchCardTool,
   cardCollectionTool,
@@ -7,16 +9,21 @@ import {
   getCardRulingsTool,
   randomCommanderTool,
   checkCommanderLegalityTool
-} from '../tools/card-tools';
-import { loadArchidektDeckTool } from '../tools/deck-tools';
-import { commanderBracketTool } from '../tools/bracket-tool';
-import { extractResponseText, countToolCalls, getToolCallDetails } from '../utils/agent-helpers';
-import { getConversationState, setLastResponseId } from '../utils/conversation-store';
-import { loadPrompt } from '../utils/prompt-loader';
+} from '../../tools/card-tools';
+import { getArchidektDeckTool, getArchidektDeckRawTool } from '../../tools/deck-tools';
+import { createCommanderBracketTool } from '../../tools/bracket-tool';
+import { createGoldfishAgentTool } from '../../tools/goldfish-agent-tool';
+import { extractResponseText, countToolCalls, getToolCallDetails } from '../../utils/agent-helpers';
+import { getConversationState, setLastResponseId } from '../../utils/conversation-store';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 type ModelSettingsReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | null;
 export type TextVerbosity = 'low' | 'medium' | 'high';
+
+function loadPrompt(filename: string): string {
+  const promptPath = path.resolve(__dirname, filename);
+  return fs.readFileSync(promptPath, 'utf-8').trim();
+}
 
 export function toModelReasoningEffort(
   effort?: ReasoningEffort
@@ -50,8 +57,10 @@ function createCardOracleAgent(
       getCardRulingsTool,
       randomCommanderTool,
       checkCommanderLegalityTool,
-      loadArchidektDeckTool,
-      commanderBracketTool
+      getArchidektDeckTool,
+      getArchidektDeckRawTool,
+      createCommanderBracketTool(model, reasoningEffort, verbosity),
+      createGoldfishAgentTool(model, reasoningEffort, verbosity)
     ]
   });
 }
@@ -128,35 +137,6 @@ export async function executeCardOracle(
     };
   }
 }
-
-/**
- * LEARNING CHECKPOINT for @openai/agents v0.1.3:
- *
- * You've now created your first agent! Here's what you learned:
- *
- * 1. Agents are created with new Agent() and configured with:
- *    - name for identity (optional)
- *    - instructions for behavior
- *    - tools array for capabilities
- *    - model for the LLM to use
- *    - Note: temperature is NOT a valid property in v0.1.3
- *
- * 2. Tools are created with the tool() function:
- *    - name and description for the agent to understand
- *    - parameters as Zod schemas for validation
- *    - execute function that returns data
- *    - The agent decides when/how to use them
- *
- * 3. Running an agent with run() function:
- *    - Accepts either a string or array of input items
- *    - NOT an object with { messages: [...] }
- *    - Returns a result with:
- *      - result.output: array of output items
- *      - result.state: contains the conversation state
- *    - Does NOT return result.messages
- *
- * Next, we'll connect this to your Express server so you can test it!
- */
 
 // Example queries you can test:
 export const exampleQueries = [

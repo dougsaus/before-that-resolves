@@ -15,17 +15,20 @@ type CardOracleProps = {
   model?: string;
   reasoningEffort?: 'low' | 'medium' | 'high';
   verbosity?: 'low' | 'medium' | 'high';
+  modelControls?: React.ReactNode;
 };
 
-export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProps) {
-  const [query, setQuery] = useState('');
-  const [deckUrl, setDeckUrl] = useState('');
-  const [deckAnalysisOptions, setDeckAnalysisOptions] = useState({
+export function CardOracle({ model, reasoningEffort, verbosity, modelControls }: CardOracleProps) {
+  const defaultDeckAnalysisOptions = {
     summary: true,
     winCons: true,
     bracket: true,
     weaknesses: true
-  });
+  };
+  const [query, setQuery] = useState('');
+  const [deckUrl, setDeckUrl] = useState('');
+  const [deckAnalysisOptions, setDeckAnalysisOptions] = useState(defaultDeckAnalysisOptions);
+  const [deckLoaded, setDeckLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
@@ -108,8 +111,71 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
     await submitQuery(text);
   };
 
+  const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
+    try {
+      await axios.post('http://localhost:3001/api/agent/reset', {
+        conversationId
+      });
+    } catch (resetError) {
+      console.warn('Failed to reset conversation on server:', resetError);
+    }
+
+    setConversationId(createConversationId());
+    setMessages([]);
+    setAgentMetadata(null);
+    setDeckAnalysisOptions(defaultDeckAnalysisOptions);
+    setDeckLoaded(false);
+    if (!options?.preserveDeckUrl) {
+      setDeckUrl('');
+    }
+  };
+
   const handleLoadDeck = async () => {
     if (!deckUrl.trim()) return;
+    setLoading(true);
+
+    await resetConversationState({ preserveDeckUrl: true });
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        role: 'agent',
+        content: 'Loading deck...'
+      }
+    ]);
+
+    try {
+      await axios.post('http://localhost:3001/api/deck/cache', { deckUrl });
+      setDeckLoaded(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          role: 'agent',
+          content: 'Deck loaded and ready to analyze.'
+        }
+      ]);
+    } catch (cacheError) {
+      const errorMessage =
+        (cacheError as any)?.response?.data?.error ||
+        (cacheError as any)?.message ||
+        'Failed to cache deck';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          role: 'error',
+          content: errorMessage
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalyzeDeck = async () => {
+    if (!deckUrl.trim() || !deckLoaded) return;
     const analysisSections = [
       deckAnalysisOptions.summary
         ? 'Summarize the deck providing insights like color identity, overall theme and archetypes of the deck, and how the deck should be played without getting too deep on the specifics of individual cards.'
@@ -134,133 +200,143 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
   };
 
   const handleRestartConversation = async () => {
-    try {
-      await axios.post('http://localhost:3001/api/agent/reset', {
-        conversationId
-      });
-    } catch (resetError) {
-      console.warn('Failed to reset conversation on server:', resetError);
-    }
-
-    setConversationId(createConversationId());
-    setMessages([]);
-    setAgentMetadata(null);
-    setDeckUrl('');
+    await resetConversationState();
   };
 
   return (
-    <div className="w-[50vw] max-w-none mx-auto p-4 flex-none flex flex-col min-h-0 h-full">
+    <div className="w-full max-w-none p-4 flex-none flex flex-col min-h-0 h-full">
       <div className="bg-gray-800/50 backdrop-blur rounded-lg p-4 shadow-xl flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">
-            The Oracle - Your Magic:The Gathering AI Agent
-          </h2>
-          <button
-            type="button"
-            onClick={handleRestartConversation}
-            className="text-sm text-gray-300 hover:text-gray-100 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors"
-          >
-            New Conversation
-          </button>
-        </div>
+        <div className="flex flex-1 min-h-0 gap-4 overflow-hidden">
+          <aside className="w-1/4 flex flex-col gap-4 min-h-0 overflow-y-auto pr-1">
+            <div className="rounded-lg border border-gray-700 bg-gray-900/70 overflow-hidden">
+              <div className="p-4 border-b border-gray-700">
+                <label className="block text-gray-300 text-sm mb-2">
+                  Deck list URL to discuss with The Oracle
+                </label>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="url"
+                    value={deckUrl}
+                    onChange={(e) => {
+                      setDeckUrl(e.target.value);
+                      if (deckLoaded) {
+                        setDeckLoaded(false);
+                      }
+                    }}
+                    placeholder="https://archidekt.com/decks/..."
+                    className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLoadDeck}
+                    disabled={loading || !deckUrl.trim()}
+                    className="w-full px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  >
+                    Load Deck
+                  </button>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  Supports public decks from Archidekt.
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="flex flex-col gap-3 text-sm text-gray-300">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={deckAnalysisOptions.summary}
+                      onChange={(e) =>
+                        setDeckAnalysisOptions((prev) => ({
+                          ...prev,
+                          summary: e.target.checked
+                        }))
+                      }
+                      disabled={loading || !deckLoaded}
+                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    Summarize
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={deckAnalysisOptions.winCons}
+                      onChange={(e) =>
+                        setDeckAnalysisOptions((prev) => ({
+                          ...prev,
+                          winCons: e.target.checked
+                        }))
+                      }
+                      disabled={loading || !deckLoaded}
+                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    Find win cons
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={deckAnalysisOptions.bracket}
+                      onChange={(e) =>
+                        setDeckAnalysisOptions((prev) => ({
+                          ...prev,
+                          bracket: e.target.checked
+                        }))
+                      }
+                      disabled={loading || !deckLoaded}
+                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    Assess bracket
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={deckAnalysisOptions.weaknesses}
+                      onChange={(e) =>
+                        setDeckAnalysisOptions((prev) => ({
+                          ...prev,
+                          weaknesses: e.target.checked
+                        }))
+                      }
+                      disabled={loading || !deckLoaded}
+                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    Find weaknesses
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAnalyzeDeck}
+                    disabled={
+                      loading ||
+                      !deckLoaded ||
+                      !deckUrl.trim() ||
+                      (!deckAnalysisOptions.summary &&
+                        !deckAnalysisOptions.winCons &&
+                        !deckAnalysisOptions.bracket &&
+                        !deckAnalysisOptions.weaknesses)
+                    }
+                    className="w-full px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  >
+                    Analyze Deck
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
 
-        <div className="flex flex-col flex-1 min-h-0 bg-gray-900/40 rounded-lg border border-gray-700 overflow-hidden">
-          <div className="border-b border-gray-700 p-4 bg-gray-900/70">
-            <label className="block text-gray-300 text-sm mb-2">
-              Deck list URL to discuss with The Oracle
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="url"
-                value={deckUrl}
-                onChange={(e) => setDeckUrl(e.target.value)}
-                placeholder="https://archidekt.com/decks/..."
-                className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                disabled={loading}
-              />
+          <div className="flex flex-col w-1/2 min-h-0 bg-gray-900/40 rounded-lg border border-gray-700 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-700 p-4 bg-gray-900/70">
+              <h2 className="text-xl font-bold">
+                The Oracle - Your Magic:The Gathering AI Agent
+              </h2>
               <button
                 type="button"
-                onClick={handleLoadDeck}
-                disabled={
-                  loading ||
-                  !deckUrl.trim() ||
-                  (!deckAnalysisOptions.summary &&
-                    !deckAnalysisOptions.winCons &&
-                    !deckAnalysisOptions.bracket &&
-                    !deckAnalysisOptions.weaknesses)
-                }
-                className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                onClick={handleRestartConversation}
+                className="text-sm text-gray-300 hover:text-gray-100 border border-gray-600 hover:border-gray-500 rounded px-3 py-1 transition-colors"
               >
-                Analyze Deck
+                New Conversation
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-300">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.summary}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      summary: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Summarize
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.winCons}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      winCons: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Find win cons
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.bracket}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      bracket: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Assess bracket
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deckAnalysisOptions.weaknesses}
-                  onChange={(e) =>
-                    setDeckAnalysisOptions((prev) => ({
-                      ...prev,
-                      weaknesses: e.target.checked
-                    }))
-                  }
-                  disabled={loading}
-                  className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                />
-                Find weaknesses
-              </label>
-            </div>
-            <div className="mt-2 text-xs text-gray-500">
-              Supports public decks from Archidekt.
-            </div>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-gray-500 text-sm">
                 Start the conversation by asking about a card or loading a deck.
@@ -315,25 +391,32 @@ export function CardOracle({ model, reasoningEffort, verbosity }: CardOracleProp
             <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={handleSubmit} className="border-t border-gray-700 p-4 bg-gray-900/70">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Type a question to the Oracle..."
-                className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                disabled={loading || !query.trim()}
-                className="px-6 py-2 w-[10.5rem] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
-              >
-                Send
-              </button>
+            <form onSubmit={handleSubmit} className="border-t border-gray-700 p-4 bg-gray-900/70">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Type a question to the Oracle..."
+                  className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !query.trim()}
+                  className="px-6 py-2 w-[10.5rem] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                >
+                  Send
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <aside className="w-1/4 flex flex-col gap-4 min-h-0 overflow-y-auto pl-1">
+            <div className="rounded-lg border border-gray-700 bg-gray-900/70 p-4">
+              {modelControls}
             </div>
-          </form>
+          </aside>
         </div>
 
         {messages.length > 0 && <div className="mt-4"><DeveloperInfo /></div>}
