@@ -23,29 +23,69 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     summary: true,
     winCons: true,
     bracket: true,
-    weaknesses: true
+    weaknesses: true,
+    cardTypeCounts: true,
+    tribalCounts: true,
+    categoryCounts: true,
+    subtypeCounts: true,
+    landTypeCounts: true
   };
   const [query, setQuery] = useState('');
   const [deckUrl, setDeckUrl] = useState('');
   const [deckAnalysisOptions, setDeckAnalysisOptions] = useState(defaultDeckAnalysisOptions);
   const [deckLoaded, setDeckLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<'query' | 'analyze' | 'goldfish' | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showAnalyzeOptions, setShowAnalyzeOptions] = useState(false);
+  const [showGoldfishOptions, setShowGoldfishOptions] = useState(false);
+  const [showModelOptions, setShowModelOptions] = useState(false);
+  const [goldfishGames, setGoldfishGames] = useState(1);
+  const [goldfishTurns, setGoldfishTurns] = useState(7);
+  const [goldfishMetrics, setGoldfishMetrics] = useState({
+    lands: true,
+    manaAvailable: true,
+    ramp: true,
+    cardsSeen: true,
+    commanderCast: true,
+    commanderRecasts: true,
+    keyEngine: true,
+    winCon: true,
+    interaction: true,
+    mulligans: true,
+    keepableHands: true,
+    curveUsage: true,
+    damageByTurn: true,
+    lethalByTurn: true
+  });
+  const [interactionOptions, setInteractionOptions] = useState({
+    incomingDamage: 0,
+    blockRateGround: 0,
+    blockRateFlying: 0,
+    removalChance: 0
+  });
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
   const [messages, setMessages] = useState<
     Array<{ id: string; role: 'user' | 'agent' | 'error'; content: string }>
   >([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, loading]);
 
-  const submitQuery = async (text: string, options?: { hideUserMessage?: boolean }) => {
+  const submitQuery = async (
+    text: string,
+    options?: { hideUserMessage?: boolean; mode?: 'query' | 'analyze' | 'goldfish' }
+  ) => {
     if (!text.trim()) return;
 
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
+    setLoadingMode(options?.mode ?? 'query');
     if (!options?.hideUserMessage) {
       setMessages((prev) => [
         ...prev,
@@ -54,14 +94,18 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     }
 
     try {
-      const result = await axios.post('http://localhost:3001/api/agent/query', {
-        query: text,
-        devMode: isDevMode,
-        conversationId,
-        model,
-        reasoningEffort: reasoningEffort || undefined,
-        verbosity
-      });
+      const result = await axios.post(
+        'http://localhost:3001/api/agent/query',
+        {
+          query: text,
+          devMode: isDevMode,
+          conversationId,
+          model,
+          reasoningEffort: reasoningEffort || undefined,
+          verbosity
+        },
+        { signal: controller.signal }
+      );
 
       if (result.data.success) {
         setMessages((prev) => [
@@ -91,6 +135,17 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         ]);
       }
     } catch (err: any) {
+      if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            role: 'error',
+            content: 'Request cancelled.'
+          }
+        ]);
+        return;
+      }
       const errorMessage = err.response?.data?.error || err.message || 'Failed to connect to server';
       setMessages((prev) => [
         ...prev,
@@ -101,7 +156,11 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         }
       ]);
     } finally {
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+      }
       setLoading(false);
+      setLoadingMode(null);
     }
   };
 
@@ -109,7 +168,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     e.preventDefault();
     const text = query;
     setQuery('');
-    await submitQuery(text);
+    await submitQuery(text, { mode: 'query' });
   };
 
   const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
@@ -125,6 +184,33 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     setMessages([]);
     setAgentMetadata(null);
     setDeckAnalysisOptions(defaultDeckAnalysisOptions);
+    setGoldfishGames(1);
+    setGoldfishTurns(7);
+    setGoldfishMetrics({
+      lands: true,
+      manaAvailable: true,
+      ramp: true,
+      cardsSeen: true,
+      commanderCast: true,
+      commanderRecasts: true,
+      keyEngine: true,
+      winCon: true,
+      interaction: true,
+      mulligans: true,
+      keepableHands: true,
+      curveUsage: true,
+      damageByTurn: true,
+      lethalByTurn: true
+    });
+    setInteractionOptions({
+      incomingDamage: 0,
+      blockRateGround: 0,
+      blockRateFlying: 0,
+      removalChance: 0
+    });
+    setShowAnalyzeOptions(false);
+    setShowGoldfishOptions(false);
+    setShowModelOptions(false);
     setDeckLoaded(false);
     if (!options?.preserveDeckUrl) {
       setDeckUrl('');
@@ -172,19 +258,95 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         : null,
       deckAnalysisOptions.weaknesses
         ? 'Find potential weaknesses of the deck and suggest ways to fix it citing specific cards to add or to cut when appropriate.'
+        : null,
+      deckAnalysisOptions.cardTypeCounts
+        ? 'Provide counts for each card type contained in the deck: Land, Creature, Artifact, Enchantment, Instant, Sorcery, Planeswalker, Battle.'
+        : null,
+      deckAnalysisOptions.tribalCounts
+        ? 'Provide counts of cards matching prevalent tribal types present in this deck.'
+        : null,
+      deckAnalysisOptions.categoryCounts
+        ? 'Provide counts of cards in the following categories (analyze the card itself, not just the category provided by archidekt): Ramp, Card Draw, Tutors, Removal, Board Wipes, Counterspells, Mill, Disruption, Aggro, Finishers, Utility, Token Generator, Counters, Anthem, Stax, Mana Rocks, Mana Dorks.'
+        : null,
+      deckAnalysisOptions.subtypeCounts
+        ? 'Provide counts of cards for each subtype: Creature subtypes, Enchantment subtypes (Aura, Saga, Curse, Shrine), Artifact subtypes (Equipment, Vehicle).'
+        : null,
+      deckAnalysisOptions.landTypeCounts
+        ? 'Provide counts of Land subtypes (Plains, Island, Mountain, Forest, Swamp, Wastes, Non-Basic, any other subtype of land that seems reasonable).'
         : null
     ].filter(Boolean) as string[];
 
-    if (analysisSections.length === 0) return;
+    const prompt =
+      analysisSections.length === 0
+        ? `Analyze this deck: ${deckUrl}`
+        : `Analyze this Commander deck: ${deckUrl}\n\nPlease provide the following in order:\n${analysisSections
+            .map((section, index) => `${index + 1}) ${section}`)
+            .join('\n')}`;
+    await submitQuery(prompt, { hideUserMessage: true, mode: 'analyze' });
+  };
 
-    const prompt = `Analyze this Commander deck: ${deckUrl}\n\nPlease provide the following in order:\n${analysisSections
-      .map((section, index) => `${index + 1}) ${section}`)
-      .join('\n')}`;
-    await submitQuery(prompt, { hideUserMessage: true });
+  const handleGoldfishDeck = async () => {
+    if (!deckLoaded) return;
+    const games = Math.min(10, Math.max(1, goldfishGames));
+    const turns = Math.min(10, Math.max(1, goldfishTurns));
+    const metrics = [
+      goldfishMetrics.lands ? 'lands in play by turn and missed land drops' : null,
+      goldfishMetrics.manaAvailable
+        ? 'mana available by turn (including colored sources)'
+        : null,
+      goldfishMetrics.ramp ? 'ramp count by turn' : null,
+      goldfishMetrics.cardsSeen ? 'cards seen by turn' : null,
+      goldfishMetrics.commanderCast ? 'commander cast turn' : null,
+      goldfishMetrics.commanderRecasts ? 'commander recasts and tax impact' : null,
+      goldfishMetrics.keyEngine ? 'time to first key engine/piece (use best judgment)' : null,
+      goldfishMetrics.winCon ? 'win-con assembled by turn' : null,
+      goldfishMetrics.interaction ? 'interaction seen by turn' : null,
+      goldfishMetrics.damageByTurn ? 'potential damage dealt by turn' : null,
+      goldfishMetrics.lethalByTurn ? 'lethal damage achieved by turn' : null,
+      goldfishMetrics.mulligans ? 'mulligan rate and average keep size' : null,
+      goldfishMetrics.keepableHands
+        ? 'keepable hand rate (2–4 lands, 1–2 plays heuristic)'
+        : null,
+      goldfishMetrics.curveUsage ? 'curve usage (percent of mana spent by turn)' : null
+    ].filter(Boolean) as string[];
+
+    const metricsText =
+      metrics.length > 0 ? ` Track the following metrics: ${metrics.join(', ')}.` : '';
+    const interactionDetails: string[] = [];
+    if (interactionOptions.incomingDamage > 0) {
+      interactionDetails.push(
+        `incoming damage per turn: ${interactionOptions.incomingDamage}`
+      );
+    }
+    if (interactionOptions.blockRateGround > 0) {
+      interactionDetails.push(
+        `block rate vs ground attackers: ${interactionOptions.blockRateGround}%`
+      );
+    }
+    if (interactionOptions.blockRateFlying > 0) {
+      interactionDetails.push(
+        `block rate vs flying/evasion: ${interactionOptions.blockRateFlying}%`
+      );
+    }
+    if (interactionOptions.removalChance > 0) {
+      interactionDetails.push(
+        `removal interaction chance per turn: ${interactionOptions.removalChance}%`
+      );
+    }
+    const interactionText =
+      interactionDetails.length > 0
+        ? ` Model opponent interaction with ${interactionDetails.join(', ')}.`
+        : '';
+    const prompt = `Goldfish this deck. Simulate ${games} games going ${turns} turns.${metricsText} Summarize the results of the simulations.${interactionText}`;
+    await submitQuery(prompt, { hideUserMessage: true, mode: 'goldfish' });
   };
 
   const handleRestartConversation = async () => {
     await resetConversationState();
+  };
+
+  const handleCancelRequest = () => {
+    requestControllerRef.current?.abort();
   };
 
   const handleExportPdf = async () => {
@@ -234,8 +396,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     <div className="w-full max-w-none p-4 flex-none flex flex-col min-h-0 h-full">
       <div className="bg-gray-800/50 backdrop-blur rounded-lg p-4 shadow-xl flex flex-col flex-1 min-h-0 h-full overflow-hidden">
         <div className="flex flex-1 min-h-0 gap-4 overflow-hidden">
-          <aside className="w-1/4 flex flex-col gap-4 min-h-0 overflow-y-auto pr-1">
-            <div className="rounded-lg border border-gray-700 bg-gray-900/70 overflow-hidden">
+          <aside className="w-[28%] min-w-[18rem] flex flex-col gap-4 min-h-0 pr-1">
+            <div className="rounded-lg border border-gray-700 bg-gray-900/70 overflow-hidden flex-1 min-h-0 flex flex-col">
               <div className="p-4 border-b border-gray-700">
                 <label className="block text-gray-300 text-sm mb-2">
                   Deck list URL to discuss with The Oracle
@@ -258,7 +420,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                     type="button"
                     onClick={handleLoadDeck}
                     disabled={loading || !deckUrl.trim()}
-                    className="w-full px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
                   >
                     Load Deck
                   </button>
@@ -267,90 +429,619 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   Supports public decks from Archidekt.
                 </div>
               </div>
-              <div className="p-4">
-                <div className="flex flex-col gap-3 text-sm text-gray-300">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.summary}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          summary: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Summarize
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.winCons}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          winCons: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Find win cons
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.bracket}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          bracket: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Assess bracket
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={deckAnalysisOptions.weaknesses}
-                      onChange={(e) =>
-                        setDeckAnalysisOptions((prev) => ({
-                          ...prev,
-                          weaknesses: e.target.checked
-                        }))
-                      }
-                      disabled={loading || !deckLoaded}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Find weaknesses
-                  </label>
+              {deckLoaded && (
+                <div className="p-4 border-b border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-200">Analyze options</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAnalyzeOptions((prev) => {
+                          const next = !prev;
+                          if (next) {
+                            setShowGoldfishOptions(false);
+                            setShowModelOptions(false);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="text-xs text-gray-400 hover:text-gray-200"
+                    >
+                      {showAnalyzeOptions ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {showAnalyzeOptions && (
+                    <div className="flex flex-col gap-3 text-sm text-gray-300 max-h-[18rem] overflow-y-auto pr-1">
+                      <button
+                        type="button"
+                        onClick={handleAnalyzeDeck}
+                        disabled={
+                          loading ||
+                          !deckLoaded ||
+                          !deckUrl.trim()
+                        }
+                        className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                      >
+                        Analyze Deck
+                      </button>
+                      <div className="flex items-center justify-start gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeckAnalysisOptions((prev) =>
+                              Object.fromEntries(
+                                Object.keys(prev).map((key) => [key, true])
+                              ) as typeof prev
+                            )
+                          }
+                          disabled={loading || !deckLoaded}
+                          className="text-gray-300 hover:text-white border border-gray-600 rounded px-2 py-0.5 transition-colors"
+                        >
+                          Check all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeckAnalysisOptions((prev) =>
+                              Object.fromEntries(
+                                Object.keys(prev).map((key) => [key, false])
+                              ) as typeof prev
+                            )
+                          }
+                          disabled={loading || !deckLoaded}
+                          className="text-gray-300 hover:text-white border border-gray-600 rounded px-2 py-0.5 transition-colors"
+                        >
+                          Uncheck all
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.summary}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                summary: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Summarize
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.winCons}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                winCons: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Find win cons
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.bracket}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                bracket: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Assess bracket
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.weaknesses}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                weaknesses: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Find weaknesses
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.cardTypeCounts}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                cardTypeCounts: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Card type counts
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.tribalCounts}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                tribalCounts: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Tribal counts
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.categoryCounts}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                categoryCounts: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Category counts
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.subtypeCounts}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                subtypeCounts: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Subtypes
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={deckAnalysisOptions.landTypeCounts}
+                            onChange={(e) =>
+                              setDeckAnalysisOptions((prev) => ({
+                                ...prev,
+                                landTypeCounts: e.target.checked
+                              }))
+                            }
+                            disabled={loading || !deckLoaded}
+                            className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          Land types
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {deckLoaded && (
+                <div className="p-4 flex-1 min-h-0 flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-200">Goldfish options</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowGoldfishOptions((prev) => {
+                          const next = !prev;
+                          if (next) {
+                            setShowAnalyzeOptions(false);
+                            setShowModelOptions(false);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="text-xs text-gray-400 hover:text-gray-200"
+                    >
+                      {showGoldfishOptions ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {showGoldfishOptions && (
+                    <div className="flex flex-col gap-4 text-sm text-gray-300 flex-1 min-h-0 overflow-y-auto pr-1">
+                      <button
+                        type="button"
+                        onClick={handleGoldfishDeck}
+                        disabled={!deckLoaded || loading}
+                        className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                      >
+                        Goldfish Deck
+                      </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="flex flex-col gap-2">
+                          <span>Games</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={goldfishGames}
+                            onChange={(e) => setGoldfishGames(Number(e.target.value))}
+                            disabled={!deckLoaded || loading}
+                            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-2">
+                          <span>Turns</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={goldfishTurns}
+                            onChange={(e) => setGoldfishTurns(Number(e.target.value))}
+                            disabled={!deckLoaded || loading}
+                            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                          />
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-start gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setGoldfishMetrics((prev) =>
+                              Object.fromEntries(
+                                Object.keys(prev).map((key) => [key, true])
+                              ) as typeof prev
+                            )
+                          }
+                          disabled={!deckLoaded || loading}
+                          className="text-gray-300 hover:text-white border border-gray-600 rounded px-2 py-0.5 transition-colors"
+                        >
+                          Check all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setGoldfishMetrics((prev) =>
+                              Object.fromEntries(
+                                Object.keys(prev).map((key) => [key, false])
+                              ) as typeof prev
+                            )
+                          }
+                          disabled={!deckLoaded || loading}
+                          className="text-gray-300 hover:text-white border border-gray-600 rounded px-2 py-0.5 transition-colors"
+                        >
+                          Uncheck all
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                          <span className="text-[11px] uppercase tracking-wide text-gray-500 col-span-2">
+                            Core play pattern
+                          </span>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.lands}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({ ...prev, lands: e.target.checked }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Lands in play by turn (missed land drops)
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.manaAvailable}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  manaAvailable: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Mana available by turn (colors)
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.ramp}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({ ...prev, ramp: e.target.checked }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Ramp count by turn
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.cardsSeen}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  cardsSeen: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Cards seen by turn
+                          </label>
+                          <span className="text-[11px] uppercase tracking-wide text-gray-500 col-span-2 mt-2">
+                            Commander focus
+                          </span>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.commanderCast}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  commanderCast: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Commander cast turn
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.commanderRecasts}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  commanderRecasts: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Commander recasts (tax impact)
+                          </label>
+                          <span className="text-[11px] uppercase tracking-wide text-gray-500 col-span-2 mt-2">
+                            Execution & consistency
+                          </span>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.keyEngine}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  keyEngine: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            First key engine/piece
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.winCon}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({ ...prev, winCon: e.target.checked }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Win-con assembled by turn
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.interaction}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  interaction: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Interaction seen by turn
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.damageByTurn}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  damageByTurn: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Potential damage dealt by turn
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.lethalByTurn}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  lethalByTurn: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Lethal damage achieved by turn
+                          </label>
+                          <span className="text-[11px] uppercase tracking-wide text-gray-500 col-span-2 mt-2">
+                            Mulligans & curve
+                          </span>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.mulligans}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  mulligans: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Mulligan rate & keep size
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.keepableHands}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  keepableHands: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Keepable hand rate (2–4 lands, 1–2 plays)
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={goldfishMetrics.curveUsage}
+                              onChange={(e) =>
+                                setGoldfishMetrics((prev) => ({
+                                  ...prev,
+                                  curveUsage: e.target.checked
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                            Mana usage by turn (curve spend)
+                          </label>
+                        </div>
+                        <span className="text-[11px] uppercase tracking-wide text-gray-500 mt-2">
+                          Opponent interaction
+                        </span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="flex flex-col gap-2">
+                            <span>Incoming damage/turn</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={40}
+                              value={interactionOptions.incomingDamage}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  incomingDamage: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2">
+                            <span>Removal chance %</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={interactionOptions.removalChance}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  removalChance: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2">
+                            <span>Block rate (ground) %</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={interactionOptions.blockRateGround}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  blockRateGround: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2">
+                            <span>Block rate (flying) %</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={interactionOptions.blockRateFlying}
+                              onChange={(e) =>
+                                setInteractionOptions((prev) => ({
+                                  ...prev,
+                                  blockRateFlying: Number(e.target.value)
+                                }))
+                              }
+                              disabled={!deckLoaded || loading}
+                              className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="p-4 border-t border-gray-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-200">Model options</span>
                   <button
                     type="button"
-                    onClick={handleAnalyzeDeck}
-                    disabled={
-                      loading ||
-                      !deckLoaded ||
-                      !deckUrl.trim() ||
-                      (!deckAnalysisOptions.summary &&
-                        !deckAnalysisOptions.winCons &&
-                        !deckAnalysisOptions.bracket &&
-                        !deckAnalysisOptions.weaknesses)
-                    }
-                    className="w-full px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    onClick={() => {
+                      setShowModelOptions((prev) => {
+                        const next = !prev;
+                        if (next) {
+                          setShowAnalyzeOptions(false);
+                          setShowGoldfishOptions(false);
+                        }
+                        return next;
+                      });
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-200"
                   >
-                    Analyze Deck
+                    {showModelOptions ? 'Hide' : 'Show'}
                   </button>
                 </div>
+                {showModelOptions && <div className="mt-3">{modelControls}</div>}
               </div>
             </div>
           </aside>
 
-          <div className="flex flex-col w-1/2 min-h-0 bg-gray-900/40 rounded-lg border border-gray-700 overflow-hidden">
+          <div className="flex flex-col flex-1 min-h-0 bg-gray-900/40 rounded-lg border border-gray-700 overflow-hidden">
             <div className="flex items-center justify-between border-b border-gray-700 p-4 bg-gray-900/70">
               <h2 className="text-xl font-bold">
                 The Oracle - Your Magic:The Gathering AI Agent
@@ -402,26 +1093,73 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
               </div>
             ))}
 
-            {loading && (
+            {loadingMode && (
               <div className="flex justify-start">
                 <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm bg-gray-700/70 text-gray-200">
-                  <div className="flex items-center gap-2">
-                    <span>Thinking</span>
-                    <span className="flex gap-1">
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                        style={{ animationDelay: '0s', animationDuration: '0.6s' }}
-                      />
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                        style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
-                      />
-                      <span
-                        className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
-                        style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
-                      />
-                    </span>
-                  </div>
+                  {loadingMode === 'query' ? (
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <span>Thinking</span>
+                        <span className="flex gap-1">
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                            style={{ animationDelay: '0s', animationDuration: '0.6s' }}
+                          />
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                            style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
+                          />
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                            style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
+                          />
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCancelRequest}
+                        className="text-xs text-gray-300 border border-gray-500/70 rounded px-2 py-0.5 hover:text-white hover:border-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <span>
+                            {loadingMode === 'analyze' ? 'Analyzing Deck' : 'Goldfishing Deck'}
+                          </span>
+                          <span className="flex gap-1">
+                            <span
+                              className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                              style={{ animationDelay: '0s', animationDuration: '0.6s' }}
+                            />
+                            <span
+                              className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                              style={{ animationDelay: '0.1s', animationDuration: '0.6s' }}
+                            />
+                            <span
+                              className="inline-block w-2 h-2 rounded-full bg-cyan-300 animate-bounce"
+                              style={{ animationDelay: '0.2s', animationDuration: '0.6s' }}
+                            />
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCancelRequest}
+                          className="text-xs text-gray-300 border border-gray-500/70 rounded px-2 py-0.5 hover:text-white hover:border-gray-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {loadingMode === 'analyze'
+                          ? 'This could take several minutes'
+                          : 'This process can take 5 to 60 minutes depending on the options chosen'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -449,11 +1187,6 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
             </form>
           </div>
 
-          <aside className="w-1/4 flex flex-col gap-4 min-h-0 overflow-y-auto pl-1">
-            <div className="rounded-lg border border-gray-700 bg-gray-900/70 p-4">
-              {modelControls}
-            </div>
-          </aside>
         </div>
 
         {messages.length > 0 && <div className="mt-4"><DeveloperInfo /></div>}
