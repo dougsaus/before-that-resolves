@@ -66,6 +66,14 @@ Then open `.env` and add:
 OPENAI_API_KEY=your_api_key_here
 ```
 
+Option C: In-app BYOK (stored locally)
+
+1. Start the app and open the sidebar section titled "OpenAI API key".
+2. Check "Use my key for requests (BYOK)" and paste your key.
+3. Optionally check "Store this key in this browser" to keep it in local storage.
+
+The key is sent with each request to the local server and is never stored server-side.
+
 ## Run Locally
 
 ```bash

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { Agent, run } from '@openai/agents';
-import { openaiConfig } from '../../config/openai';
+import { Agent, OpenAIProvider, Runner, type RunConfig } from '@openai/agents';
+import { getEnvOpenAIKey, openaiConfig } from '../../config/openai';
 import {
   searchCardTool,
   cardCollectionTool,
@@ -35,7 +35,8 @@ export function toModelReasoningEffort(
 function createCardOracleAgent(
   model?: string,
   reasoningEffort?: ReasoningEffort,
-  verbosity?: TextVerbosity
+  verbosity?: TextVerbosity,
+  runConfig?: Partial<RunConfig>
 ) {
   const normalizedEffort = toModelReasoningEffort(reasoningEffort);
   const modelSettings = normalizedEffort || verbosity
@@ -59,8 +60,8 @@ function createCardOracleAgent(
       checkCommanderLegalityTool,
       getArchidektDeckTool,
       getArchidektDeckRawTool,
-      createCommanderBracketTool(model, reasoningEffort, verbosity),
-      createGoldfishAgentTool(model, reasoningEffort, verbosity)
+      createCommanderBracketTool(model, reasoningEffort, verbosity, runConfig),
+      createGoldfishAgentTool(model, reasoningEffort, verbosity, runConfig)
     ]
   });
 }
@@ -74,12 +75,24 @@ export async function executeCardOracle(
   conversationId?: string,
   model?: string,
   reasoningEffort?: ReasoningEffort,
-  verbosity?: TextVerbosity
+  verbosity?: TextVerbosity,
+  apiKey?: string
 ) {
   console.log('🎴 Card Oracle Agent executing query:', query);
   const startTime = Date.now();
+  const resolvedKey = apiKey ?? getEnvOpenAIKey();
 
   try {
+    if (!resolvedKey) {
+      return {
+        success: false,
+        error: 'OpenAI API key is required. Provide one in the UI or set OPENAI_API_KEY.'
+      };
+    }
+
+    const runConfig: Partial<RunConfig> = {
+      modelProvider: new OpenAIProvider({ apiKey: resolvedKey })
+    };
     const runOptions = conversationId
       ? {
         previousResponseId: getConversationState(conversationId).lastResponseId,
@@ -87,8 +100,9 @@ export async function executeCardOracle(
         maxTurns: 100
       }
       : { context: { model, reasoningEffort, verbosity }, maxTurns: 100 };
-    const cardOracleAgent = createCardOracleAgent(model, reasoningEffort, verbosity);
-    const result = await run(
+    const cardOracleAgent = createCardOracleAgent(model, reasoningEffort, verbosity, runConfig);
+    const runner = new Runner(runConfig);
+    const result = await runner.run(
       cardOracleAgent,
       [
         {
@@ -129,10 +143,15 @@ export async function executeCardOracle(
 
     return response;
   } catch (error: any) {
-    console.error('❌ Card Oracle Agent error:', error);
+    const status = error?.status || error?.response?.status;
+    const safeMessage =
+      status === 401 || status === 403
+        ? 'OpenAI API key is invalid or unauthorized.'
+        : error?.message || 'OpenAI request failed.';
+    console.error('❌ Card Oracle Agent error:', safeMessage);
     return {
       success: false,
-      error: error.message,
+      error: safeMessage,
       response: null
     };
   }

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
+import { getEnvOpenAIKey } from './config/openai';
 import { cacheArchidektDeckFromUrl } from './services/deck';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
@@ -35,11 +36,25 @@ export function createApp(deps: AppDeps = {}) {
 
   app.post('/api/agent/query', async (req, res) => {
     const { query, devMode, conversationId, model, reasoningEffort, verbosity } = req.body;
+    const headerKey = req.header('x-openai-key');
+    const authorization = req.header('authorization');
+    const bearerKey = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length).trim()
+      : undefined;
+    const requestApiKey = headerKey || bearerKey;
+    const envApiKey = getEnvOpenAIKey();
 
     if (!query) {
       res.status(400).json({
         success: false,
         error: 'Query is required'
+      });
+      return;
+    }
+    if (!requestApiKey && !envApiKey) {
+      res.status(401).json({
+        success: false,
+        error: 'OpenAI API key is required. Provide one in the UI or set OPENAI_API_KEY.'
       });
       return;
     }
@@ -54,15 +69,16 @@ export function createApp(deps: AppDeps = {}) {
         activeConversationId,
         model,
         reasoningEffort,
-        verbosity
+        verbosity,
+        requestApiKey
       );
 
       res.json({ ...result, conversationId: activeConversationId });
     } catch (error: any) {
-      console.error('Server error:', error);
+      console.error('Server error:', error?.message || 'Unknown error');
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error?.message || 'Server error'
       });
     }
   });

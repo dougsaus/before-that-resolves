@@ -45,6 +45,7 @@ describe('CardOracle chat UI', () => {
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:chat');
     globalThis.URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    window.localStorage.clear();
     createdAnchor = null;
     vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       const element = document.createElementNS('http://www.w3.org/1999/xhtml', tagName);
@@ -493,5 +494,35 @@ describe('CardOracle chat UI', () => {
     await user.click(screen.getByRole('button', { name: 'Export conversation to pdf' }));
 
     expect(createdAnchor?.download).toBe('ms_badonkadonk.pdf');
+  });
+
+  it('sends the OpenAI key header when BYOK is enabled', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        response: 'ok'
+      }
+    });
+
+    renderCardOracle();
+
+    await user.click(screen.getByLabelText('Use my key for requests (BYOK)'));
+    const keyInput = screen.getByPlaceholderText('sk-...');
+    await user.type(keyInput, 'sk-test');
+
+    const input = screen.getByPlaceholderText('Type a question to the Oracle...');
+    await user.type(input, 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://localhost:3001/api/agent/query',
+        expect.objectContaining({ query: 'Hello' }),
+        expect.objectContaining({
+          headers: { 'x-openai-key': 'sk-test' }
+        })
+      );
+    });
   });
 });

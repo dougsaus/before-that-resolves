@@ -4,6 +4,8 @@ import { useDevMode } from '../contexts/DevModeContext';
 import { RichMTGText } from './RichMTGText';
 import { DeveloperInfo } from './DeveloperInfo';
 
+const OPENAI_KEY_STORAGE_KEY = 'before-that-resolves.openai-key';
+
 function createConversationId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return `conv_${crypto.randomUUID()}`;
@@ -66,11 +68,70 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   });
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
+  const [useOwnKey, setUseOwnKey] = useState(false);
+  const [openAiKey, setOpenAiKey] = useState('');
+  const [saveKeyLocally, setSaveKeyLocally] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const [messages, setMessages] = useState<
     Array<{ id: string; role: 'user' | 'agent' | 'error'; content: string }>
   >([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const storedKey = window.localStorage.getItem(OPENAI_KEY_STORAGE_KEY);
+    if (storedKey) {
+      setOpenAiKey(storedKey);
+      setUseOwnKey(true);
+      setSaveKeyLocally(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!saveKeyLocally) {
+      window.localStorage.removeItem(OPENAI_KEY_STORAGE_KEY);
+      return;
+    }
+    const trimmedKey = openAiKey.trim();
+    if (!trimmedKey) {
+      window.localStorage.removeItem(OPENAI_KEY_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(OPENAI_KEY_STORAGE_KEY, trimmedKey);
+  }, [openAiKey, saveKeyLocally]);
+
+  const appendErrorMessage = (content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        role: 'error',
+        content
+      }
+    ]);
+  };
+
+  const getApiKeyHeaders = () => {
+    if (!useOwnKey) return null;
+    const trimmedKey = openAiKey.trim();
+    if (!trimmedKey) return null;
+    return { 'x-openai-key': trimmedKey };
+  };
+
+  const postWithOptionalConfig = (
+    url: string,
+    data: any,
+    config?: { headers?: Record<string, string>; [key: string]: any }
+  ) => {
+    const apiKeyHeaders = getApiKeyHeaders();
+    const finalConfig = apiKeyHeaders
+      ? { ...config, headers: { ...(config?.headers ?? {}), ...apiKeyHeaders } }
+      : config;
+    if (!finalConfig || Object.keys(finalConfig).length === 0) {
+      return axios.post(url, data);
+    }
+    return axios.post(url, data, finalConfig);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -81,6 +142,10 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     options?: { hideUserMessage?: boolean; mode?: 'query' | 'analyze' | 'goldfish' }
   ) => {
     if (!text.trim()) return;
+    if (useOwnKey && !openAiKey.trim()) {
+      appendErrorMessage('OpenAI API key is required when BYOK is enabled.');
+      return;
+    }
 
     const controller = new AbortController();
     requestControllerRef.current = controller;
@@ -94,7 +159,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     }
 
     try {
-      const result = await axios.post(
+      const result = await postWithOptionalConfig(
         'http://localhost:3001/api/agent/query',
         {
           query: text,
@@ -125,36 +190,15 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         }
       } else {
         const errorMessage = result.data.error || 'Unknown error occurred';
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-            role: 'error',
-            content: errorMessage
-          }
-        ]);
+        appendErrorMessage(errorMessage);
       }
     } catch (err: any) {
       if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-            role: 'error',
-            content: 'Request cancelled.'
-          }
-        ]);
+        appendErrorMessage('Request cancelled.');
         return;
       }
       const errorMessage = err.response?.data?.error || err.message || 'Failed to connect to server';
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          role: 'error',
-          content: errorMessage
-        }
-      ]);
+      appendErrorMessage(errorMessage);
     } finally {
       if (requestControllerRef.current === controller) {
         requestControllerRef.current = null;
@@ -173,7 +217,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
   const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
     try {
-      await axios.post('http://localhost:3001/api/agent/reset', {
+      await postWithOptionalConfig('http://localhost:3001/api/agent/reset', {
         conversationId
       });
     } catch (resetError) {
@@ -224,21 +268,14 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     await resetConversationState({ preserveDeckUrl: true });
 
     try {
-      await axios.post('http://localhost:3001/api/deck/cache', { deckUrl });
+      await postWithOptionalConfig('http://localhost:3001/api/deck/cache', { deckUrl });
       setDeckLoaded(true);
     } catch (cacheError) {
       const errorMessage =
         (cacheError as any)?.response?.data?.error ||
         (cacheError as any)?.message ||
         'Failed to cache deck';
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          role: 'error',
-          content: errorMessage
-        }
-      ]);
+      appendErrorMessage(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -358,7 +395,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       const filename = deckLoaded && deckSlug
         ? `${deckSlug}.pdf`
         : 'before-that-resolves-conversation.pdf';
-      const response = await axios.post(
+      const response = await postWithOptionalConfig(
         'http://localhost:3001/api/chat/export-pdf',
         {
           title: 'Before That Resolves',
@@ -379,14 +416,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     } catch (error: any) {
       const errorMessage =
         error?.response?.data?.error || error?.message || 'Failed to export PDF';
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          role: 'error',
-          content: errorMessage
-        }
-      ]);
+      appendErrorMessage(errorMessage);
     } finally {
       setExporting(false);
     }
@@ -1037,6 +1067,53 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   </button>
                 </div>
                 {showModelOptions && <div className="mt-3">{modelControls}</div>}
+              </div>
+              <div className="p-4 border-t border-gray-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-200">OpenAI API key</span>
+                </div>
+                <div className="mt-3 flex flex-col gap-3 text-sm text-gray-300">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={useOwnKey}
+                      onChange={(e) => setUseOwnKey(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    Use my key for requests (BYOK)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showKey ? 'text' : 'password'}
+                      value={openAiKey}
+                      onChange={(e) => setOpenAiKey(e.target.value)}
+                      placeholder="sk-..."
+                      disabled={!useOwnKey}
+                      className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey((prev) => !prev)}
+                      disabled={!useOwnKey}
+                      className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors disabled:opacity-50"
+                    >
+                      {showKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-gray-400">
+                    <input
+                      type="checkbox"
+                      checked={saveKeyLocally}
+                      onChange={(e) => setSaveKeyLocally(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    Store this key in this browser (local storage)
+                  </label>
+                  <span className="text-[11px] text-gray-500">
+                    Keys are never sent or stored by the server. Remove the stored key by unchecking
+                    the option above and clearing the field.
+                  </span>
+                </div>
               </div>
             </div>
           </aside>
