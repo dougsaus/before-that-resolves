@@ -15,11 +15,32 @@ export type DeckData = {
 type FetchResult = {
   ok: boolean;
   status: number;
-  json?: any;
+  json?: unknown;
   error?: string;
 };
 
-const archidektRawCache = new Map<string, any>();
+type ArchidektCardEntry = {
+  categories?: string[];
+  category?: string;
+  board?: string;
+  section?: string;
+  card?: {
+    oracleCard?: { name?: string };
+    name?: string;
+  };
+  cardName?: string;
+  quantity?: number;
+  qty?: number;
+};
+
+type ArchidektDeck = {
+  cards?: ArchidektCardEntry[];
+  name?: string;
+  format?: string;
+  deckFormat?: string;
+};
+
+const archidektRawCache = new Map<string, ArchidektDeck>();
 let lastArchidektDeckId: string | null = null;
 let lastArchidektDeckUrl: string | null = null;
 
@@ -38,8 +59,9 @@ async function fetchJson(url: string): Promise<FetchResult> {
 
     const json = await response.json();
     return { ok: true, status: response.status, json };
-  } catch (error: any) {
-    return { ok: false, status: 0, error: error?.message || 'Network error' };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Network error';
+    return { ok: false, status: 0, error: message };
   }
 }
 
@@ -57,7 +79,7 @@ function parseDeckId(url: string, expectedHost: string): string | null {
   }
 }
 
-export async function cacheArchidektDeckFromUrl(deckUrl: string): Promise<any> {
+export async function cacheArchidektDeckFromUrl(deckUrl: string): Promise<ArchidektDeck> {
   const deckId = parseDeckId(deckUrl, 'archidekt.com');
   if (!deckId) {
     throw new Error('Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}');
@@ -77,13 +99,14 @@ export async function cacheArchidektDeckFromUrl(deckUrl: string): Promise<any> {
     throw new Error(result.error || 'Failed to load Archidekt deck');
   }
 
-  archidektRawCache.set(deckId, result.json);
+  const deck = result.json as ArchidektDeck;
+  archidektRawCache.set(deckId, deck);
   lastArchidektDeckId = deckId;
   lastArchidektDeckUrl = deckUrl;
-  return result.json;
+  return deck;
 }
 
-export function buildArchidektDeckData(deck: any, deckUrl: string): DeckData {
+export function buildArchidektDeckData(deck: ArchidektDeck, deckUrl: string): DeckData {
   return buildDeckData(deck, deckUrl);
 }
 
@@ -98,17 +121,17 @@ export function getLastCachedArchidektDeck(): DeckData | null {
   return buildDeckData(cached, lastArchidektDeckUrl);
 }
 
-export function getLastCachedArchidektDeckRaw(): any | null {
+export function getLastCachedArchidektDeckRaw(): ArchidektDeck | null {
   if (!lastArchidektDeckId) {
     return null;
   }
   return archidektRawCache.get(lastArchidektDeckId) ?? null;
 }
 
-function buildDeckData(deck: any, deckUrl: string): DeckData {
+function buildDeckData(deck: ArchidektDeck, deckUrl: string): DeckData {
   const cards = Array.isArray(deck.cards)
     ? deck.cards
-      .map((entry: any) => {
+      .map((entry: ArchidektCardEntry) => {
         const categories = Array.isArray(entry?.categories) ? entry.categories : [];
         const normalizedCategories = categories.map((category: string) => category.toLowerCase());
         const primaryCategory = normalizedCategories[0];
@@ -127,7 +150,7 @@ function buildDeckData(deck: any, deckUrl: string): DeckData {
             (hasCommanderCategory ? 'Commander' : undefined)
         };
       })
-      .filter((entry: any) => entry?.name)
+      .filter((entry: DeckCard | null): entry is DeckCard => Boolean(entry?.name))
     : [];
 
   return {

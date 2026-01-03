@@ -9,7 +9,7 @@ vi.mock('../services/deck', () => ({
 }));
 
 type ToolInvoker = {
-  invoke: (runContext: any, input: string, details?: any) => Promise<any>;
+  invoke: (runContext: unknown, input: string, details?: unknown) => Promise<unknown>;
 };
 
 async function invokeTool<TInput, TResult>(
@@ -40,7 +40,7 @@ describe('deck tools', () => {
     });
     const tools = await loadTools();
 
-    const result = await invokeTool<{}, { success: boolean; deck?: any }>(
+    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: unknown }>(
       tools.getArchidektDeckTool,
       {}
     );
@@ -53,7 +53,7 @@ describe('deck tools', () => {
     mockGetLastCachedArchidektDeckRaw.mockReturnValue({ name: 'Raw Cached Deck' });
     const tools = await loadTools();
 
-    const result = await invokeTool<{}, { success: boolean; deck?: any }>(
+    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: unknown }>(
       tools.getArchidektDeckRawTool,
       {}
     );
@@ -66,7 +66,7 @@ describe('deck tools', () => {
     mockGetLastCachedArchidektDeck.mockReturnValue(null);
     const tools = await loadTools();
 
-    const result = await invokeTool<{}, { success: boolean; message?: string }>(
+    const result = await invokeTool<Record<string, never>, { success: boolean; message?: string }>(
       tools.getArchidektDeckTool,
       {}
     );

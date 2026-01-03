@@ -146,10 +146,11 @@ export const loadDeck = tool({
       console.log(`👑 Goldfish commander: ${commanderName}`);
       console.log(`✅ Goldfish deck loaded (${total} cards).`);
       return { ok: true, cardCount: total };
-    } catch (error: any) {
+    } catch (error: unknown) {
       deckList = null;
-      console.error('❌ Goldfish deck load failed:', error?.message || error);
-      return { ok: false, error: error?.message || 'Failed to load deck.' };
+      const message = error instanceof Error ? error.message : 'Failed to load deck.';
+      console.error('❌ Goldfish deck load failed:', message);
+      return { ok: false, error: message };
     }
   }
 });

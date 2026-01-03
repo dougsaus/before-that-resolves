@@ -4,6 +4,12 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
+
 async function inspectTypes() {
   const testAgent = new Agent({
     name: 'Inspector',
@@ -21,7 +27,7 @@ async function inspectTypes() {
 
   // Check each property type
   for (const key of Object.keys(result)) {
-    const value = (result as any)[key];
+    const value = (result as UnknownRecord)[key];
     const valueType = Array.isArray(value)
       ? `Array[${value.length}]`
       : value === null
@@ -33,7 +39,8 @@ async function inspectTypes() {
   // Inspect output array in detail
   if ('output' in result && Array.isArray(result.output)) {
     console.log('\nOutput array details:');
-    result.output.forEach((item: any, index: number) => {
+    result.output.forEach((item: unknown, index: number) => {
+      if (!isRecord(item)) return;
       console.log(`\n  Output[${index}]:`);
       console.log('    Type:', item.type);
       console.log('    Keys:', Object.keys(item));
@@ -45,7 +52,8 @@ async function inspectTypes() {
 
         if (Array.isArray(item.content)) {
           console.log('    Content items:', item.content.length);
-          item.content.forEach((contentItem: any, cIndex: number) => {
+          item.content.forEach((contentItem: unknown, cIndex: number) => {
+            if (!isRecord(contentItem)) return;
             console.log(`      Content[${cIndex}]:`, {
               type: contentItem.type,
               hasText: 'text' in contentItem,
@@ -63,7 +71,7 @@ async function inspectTypes() {
     console.log('  Keys:', Object.keys(result.state));
 
     // Check for model responses
-    const state = result.state as any;
+    const state = result.state as UnknownRecord;
     if ('_modelResponses' in state) {
       console.log('  Has _modelResponses:', Array.isArray(state._modelResponses));
       if (Array.isArray(state._modelResponses)) {
@@ -83,7 +91,7 @@ async function inspectTypes() {
   return result;
 }
 
-function extractMessageText(result: RunResult<any, any>): string {
+function extractMessageText(result: RunResult<unknown, unknown>): string {
   // Type-safe extraction
   if (!result.output || !Array.isArray(result.output)) {
     return 'No output';
@@ -94,9 +102,8 @@ function extractMessageText(result: RunResult<any, any>): string {
     const item = result.output[i];
 
     // Check if it's a message output item
-    if (item && 'type' in item && item.type === 'message') {
-      // Use any type to avoid type issues
-      const messageItem = item as any;
+    if (isRecord(item) && 'type' in item && item.type === 'message') {
+      const messageItem = item as UnknownRecord;
 
       // Access content through the message item
       if ('content' in messageItem) {
@@ -105,8 +112,8 @@ function extractMessageText(result: RunResult<any, any>): string {
         if (Array.isArray(content)) {
           // Extract text from content items
           const texts = content
-            .filter((c: any) => c.type === 'output_text' || c.type === 'text')
-            .map((c: any) => c.text || '');
+            .filter((c: unknown) => isRecord(c) && (c.type === 'output_text' || c.type === 'text'))
+            .map((c: unknown) => (isRecord(c) ? c.text : '') || '');
           return texts.join('\n');
         } else if (typeof content === 'string') {
           return content;

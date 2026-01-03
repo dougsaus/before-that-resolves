@@ -145,7 +145,7 @@ async function loadManaFontCss() {
     };
 
     const fontCache = new Map<string, string>();
-    const fontRegex = /url\((\"|')?\.\.\/fonts\/([^\"')]+)(\?[^\"')]+)?(\"|')?\)/g;
+    const fontRegex = /url\((["'])?\.\.\/fonts\/([^"')]+)(\?[^"')]+)?(["'])?\)/g;
     const matches = Array.from(rawCss.matchAll(fontRegex));
 
     for (const match of matches) {
@@ -161,7 +161,7 @@ async function loadManaFontCss() {
         const mimeType = fontMimeTypes[extension] || 'application/octet-stream';
         const base64 = fileBuffer.toString('base64');
         fontCache.set(cleanName, `data:${mimeType};base64,${base64}`);
-      } catch (error) {
+      } catch {
         const fallbackUrl = pathToFileURL(filePath).toString();
         fontCache.set(cleanName, fallbackUrl);
       }
@@ -172,7 +172,7 @@ async function loadManaFontCss() {
       const dataUrl = fontCache.get(cleanName);
       return dataUrl ? `url("${dataUrl}")` : _match;
     });
-  } catch (error) {
+  } catch {
     console.warn('⚠️ Mana font CSS not found, mana symbols may not render.');
     return '';
   }
@@ -241,7 +241,7 @@ async function resolveCardImages(cardNames: string[]): Promise<CardImage[]> {
       try {
         const dataUrl = await fetchImageData(imageUrl);
         images.push({ name: card.name, dataUrl });
-      } catch (error) {
+      } catch {
         console.warn(`⚠️ Failed to fetch image for ${card.name}`);
       }
     }

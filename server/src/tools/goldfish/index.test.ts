@@ -24,7 +24,7 @@ function buildDeck(cardCount: number, commanderName: string) {
 }
 
 type ToolInvoker = {
-  invoke: (runContext: any, input: string, details?: any) => Promise<any>;
+  invoke: (runContext: unknown, input: string, details?: unknown) => Promise<unknown>;
 };
 
 async function invokeTool<TInput, TResult>(

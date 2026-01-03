@@ -50,8 +50,9 @@ async function testCardOracle() {
       } else {
         console.log('❌ Failed:', result.error);
       }
-    } catch (error: any) {
-      console.log('❌ Error:', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.log('❌ Error:', message);
     }
 
     console.log('\n' + '='.repeat(50));

@@ -120,7 +120,18 @@ export async function executeCardOracle(
     const toolCallCount = countToolCalls(result);
     const totalDuration = Date.now() - startTime;
 
-    const response: any = {
+    const response: {
+      success: boolean;
+      response?: string;
+      toolCalls?: number;
+      metadata?: {
+        toolCalls: ReturnType<typeof getToolCallDetails>;
+        totalDuration: number;
+        modelResponses: number;
+        tokensUsed: number | null;
+      };
+      error?: string;
+    } = {
       success: true,
       response: responseText || 'No response generated.',
       toolCalls: toolCallCount
@@ -129,7 +140,10 @@ export async function executeCardOracle(
     // Include detailed metadata if in dev mode
     if (devMode) {
       const toolCallDetails = getToolCallDetails(result);
-      const state = result.state as any;
+      const state = result.state as {
+        _modelResponses?: unknown[];
+        _totalTokens?: number;
+      };
 
       response.metadata = {
         toolCalls: toolCallDetails,
@@ -142,12 +156,13 @@ export async function executeCardOracle(
     }
 
     return response;
-  } catch (error: any) {
-    const status = error?.status || error?.response?.status;
+  } catch (error: unknown) {
+    const maybeError = error as { status?: number; response?: { status?: number }; message?: string };
+    const status = maybeError?.status || maybeError?.response?.status;
     const safeMessage =
       status === 401 || status === 403
         ? 'OpenAI API key is invalid or unauthorized.'
-        : error?.message || 'OpenAI request failed.';
+        : maybeError?.message || 'OpenAI request failed.';
     console.error('❌ Card Oracle Agent error:', safeMessage);
     return {
       success: false,

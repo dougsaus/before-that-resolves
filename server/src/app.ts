@@ -13,7 +13,7 @@ type AppDeps = {
   exampleQueries?: string[];
   getOrCreateConversationId?: () => string;
   resetConversation?: (conversationId: string) => boolean;
-  cacheArchidektDeckFromUrl?: (deckUrl: string) => Promise<any>;
+  cacheArchidektDeckFromUrl?: (deckUrl: string) => Promise<unknown>;
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
 };
 
@@ -25,6 +25,12 @@ export function createApp(deps: AppDeps = {}) {
   const reset = deps.resetConversation ?? resetConversation;
   const cacheDeck = deps.cacheArchidektDeckFromUrl ?? cacheArchidektDeckFromUrl;
   const exportChatPdf = deps.generateChatPdf ?? generateChatPdf;
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return fallback;
+  };
 
   app.use(cors());
   app.use(express.json());
@@ -72,11 +78,11 @@ export function createApp(deps: AppDeps = {}) {
       );
 
       res.json({ ...result, conversationId: activeConversationId });
-    } catch (error: any) {
-      console.error('Server error:', error?.message || 'Unknown error');
+    } catch (error: unknown) {
+      console.error('Server error:', getErrorMessage(error, 'Unknown error'));
       res.status(500).json({
         success: false,
-        error: error?.message || 'Server error'
+        error: getErrorMessage(error, 'Server error')
       });
     }
   });
@@ -110,10 +116,10 @@ export function createApp(deps: AppDeps = {}) {
     try {
       await cacheDeck(deckUrl);
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: getErrorMessage(error, 'Failed to cache deck')
       });
     }
   });
@@ -159,11 +165,11 @@ export function createApp(deps: AppDeps = {}) {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="before-that-resolves-chat.pdf"');
       res.send(pdfBuffer);
-    } catch (error: any) {
-      console.error('PDF export error:', error);
+    } catch (error: unknown) {
+      console.error('PDF export error:', getErrorMessage(error, 'Unknown error'));
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to generate PDF'
+        error: getErrorMessage(error, 'Failed to generate PDF')
       });
     }
   });
