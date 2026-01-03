@@ -27,7 +27,7 @@ async function inspectTypes() {
 
   // Check each property type
   for (const key of Object.keys(result)) {
-    const value = (result as UnknownRecord)[key];
+    const value = (result as unknown as UnknownRecord)[key];
     const valueType = Array.isArray(value)
       ? `Array[${value.length}]`
       : value === null
@@ -57,7 +57,9 @@ async function inspectTypes() {
             console.log(`      Content[${cIndex}]:`, {
               type: contentItem.type,
               hasText: 'text' in contentItem,
-              text: contentItem.text ? contentItem.text.substring(0, 50) + '...' : undefined
+              text: typeof contentItem.text === 'string'
+                ? contentItem.text.substring(0, 50) + '...'
+                : undefined
             });
           });
         }
@@ -71,7 +73,7 @@ async function inspectTypes() {
     console.log('  Keys:', Object.keys(result.state));
 
     // Check for model responses
-    const state = result.state as UnknownRecord;
+    const state = result.state as unknown as UnknownRecord;
     if ('_modelResponses' in state) {
       console.log('  Has _modelResponses:', Array.isArray(state._modelResponses));
       if (Array.isArray(state._modelResponses)) {
@@ -91,7 +93,9 @@ async function inspectTypes() {
   return result;
 }
 
-function extractMessageText(result: RunResult<unknown, unknown>): string {
+function extractMessageText<TContext, TAgent extends Agent<any, any>>(
+  result: RunResult<TContext, TAgent>
+): string {
   // Type-safe extraction
   if (!result.output || !Array.isArray(result.output)) {
     return 'No output';

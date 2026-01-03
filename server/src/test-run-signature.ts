@@ -46,7 +46,7 @@ async function testRunSignatures() {
     // List all properties
     console.log('\nAll result properties:');
     for (const key in result2) {
-      const value = (result2 as UnknownRecord)[key];
+      const value = (result2 as unknown as UnknownRecord)[key];
       const valueType = Array.isArray(value) ? `array[${value.length}]` : typeof value;
       console.log(`  ${key}: ${valueType}`);
     }

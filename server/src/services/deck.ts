@@ -131,26 +131,30 @@ export function getLastCachedArchidektDeckRaw(): ArchidektDeck | null {
 function buildDeckData(deck: ArchidektDeck, deckUrl: string): DeckData {
   const cards = Array.isArray(deck.cards)
     ? deck.cards
-      .map((entry: ArchidektCardEntry) => {
-        const categories = Array.isArray(entry?.categories) ? entry.categories : [];
-        const normalizedCategories = categories.map((category: string) => category.toLowerCase());
-        const primaryCategory = normalizedCategories[0];
-        const isExcludedCategory = primaryCategory === 'maybeboard' || primaryCategory === 'sideboard';
-        if (isExcludedCategory) {
-          return null;
-        }
-        const hasCommanderCategory = normalizedCategories.includes('commander');
-        return {
-          name: entry?.card?.oracleCard?.name || entry?.card?.name || entry?.cardName,
-          quantity: entry?.quantity ?? entry?.qty ?? 0,
-          section:
-            entry?.category ||
-            entry?.board ||
-            entry?.section ||
-            (hasCommanderCategory ? 'Commander' : undefined)
-        };
-      })
-      .filter((entry: DeckCard | null): entry is DeckCard => Boolean(entry?.name))
+        .map((entry: ArchidektCardEntry): DeckCard | null => {
+          const categories = Array.isArray(entry?.categories) ? entry.categories : [];
+          const normalizedCategories = categories.map((category: string) => category.toLowerCase());
+          const primaryCategory = normalizedCategories[0];
+          const isExcludedCategory = primaryCategory === 'maybeboard' || primaryCategory === 'sideboard';
+          if (isExcludedCategory) {
+            return null;
+          }
+          const hasCommanderCategory = normalizedCategories.includes('commander');
+          const name = entry?.card?.oracleCard?.name || entry?.card?.name || entry?.cardName;
+          if (!name) {
+            return null;
+          }
+          return {
+            name,
+            quantity: entry?.quantity ?? entry?.qty ?? 0,
+            section:
+              entry?.category ||
+              entry?.board ||
+              entry?.section ||
+              (hasCommanderCategory ? 'Commander' : undefined)
+          };
+        })
+        .filter((entry): entry is DeckCard => entry !== null)
     : [];
 
   return {

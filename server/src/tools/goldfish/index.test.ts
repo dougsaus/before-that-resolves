@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RunContext } from '@openai/agents';
 
 const mockGetLastCachedArchidektDeck = vi.fn();
 
@@ -24,14 +25,14 @@ function buildDeck(cardCount: number, commanderName: string) {
 }
 
 type ToolInvoker = {
-  invoke: (runContext: unknown, input: string, details?: unknown) => Promise<unknown>;
+  invoke: (runContext: RunContext<unknown>, input: string, details?: { toolCall: unknown }) => Promise<unknown>;
 };
 
 async function invokeTool<TInput, TResult>(
   tool: ToolInvoker,
   input: TInput
 ): Promise<TResult> {
-  return tool.invoke(undefined, JSON.stringify(input), undefined);
+  return tool.invoke({} as RunContext<unknown>, JSON.stringify(input), undefined) as Promise<TResult>;
 }
 
 async function loadTools(): Promise<ToolSet> {

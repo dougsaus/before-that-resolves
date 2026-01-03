@@ -42,7 +42,7 @@ async function testCardOracle() {
     try {
       const result = await executeCardOracle(query, false, undefined, undefined, undefined, undefined, openAiKey);
 
-      if (result.success) {
+      if (result.success && 'toolCalls' in result) {
         console.log('✅ Success!');
         console.log(`Tool calls made: ${result.toolCalls || 0}`);
         console.log('\nResponse:');

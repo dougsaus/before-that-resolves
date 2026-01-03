@@ -4,9 +4,10 @@
  * These utilities help extract data from the RunResult structure
  */
 
-import { RunResult } from '@openai/agents';
+import { Agent, RunResult } from '@openai/agents';
 
 type UnknownRecord = Record<string, unknown>;
+type AnyAgent = Agent<any, any>;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
@@ -17,7 +18,9 @@ function isRecord(value: unknown): value is UnknownRecord {
  * @param result The result from run() function
  * @returns The extracted text response or empty string
  */
-export function extractResponseText(result: RunResult<unknown, unknown>): string {
+export function extractResponseText<TContext, TAgent extends AnyAgent>(
+  result: RunResult<TContext, TAgent>
+): string {
   // The output property is available via getter
   if (!result.output || !Array.isArray(result.output)) {
     return '';
@@ -51,7 +54,9 @@ export function extractResponseText(result: RunResult<unknown, unknown>): string
  * @param result The result from run() function
  * @returns Number of tool calls made
  */
-export function countToolCalls(result: RunResult<unknown, unknown>): number {
+export function countToolCalls<TContext, TAgent extends AnyAgent>(
+  result: RunResult<TContext, TAgent>
+): number {
   // Primary method: Count from newItems (most accurate)
   if (result.newItems && Array.isArray(result.newItems)) {
     const toolCallCount = result.newItems.filter(
@@ -84,7 +89,9 @@ export function countToolCalls(result: RunResult<unknown, unknown>): number {
  * FIXED: This now correctly extracts tool calls from newItems which contains
  * both the tool_call_item and tool_call_output_item objects with full details.
  */
-export function getToolCallDetails(result: RunResult<unknown, unknown>): Array<{
+export function getToolCallDetails<TContext, TAgent extends AnyAgent>(
+  result: RunResult<TContext, TAgent>
+): Array<{
   name: string;
   arguments: unknown;
   result?: unknown;
@@ -193,7 +200,9 @@ export function getToolCallDetails(result: RunResult<unknown, unknown>): Array<{
  * @param result The result from run() function
  * @returns True if successful, false otherwise
  */
-export function isSuccessful(result: RunResult<unknown, unknown>): boolean {
+export function isSuccessful<TContext, TAgent extends AnyAgent>(
+  result: RunResult<TContext, TAgent>
+): boolean {
   // Check if we have output and it's not empty
   return !!(result.output &&
            Array.isArray(result.output) &&

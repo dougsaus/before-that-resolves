@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RunContext } from '@openai/agents';
 
 const mockGetLastCachedArchidektDeck = vi.fn();
 const mockGetLastCachedArchidektDeckRaw = vi.fn();
@@ -9,14 +10,14 @@ vi.mock('../services/deck', () => ({
 }));
 
 type ToolInvoker = {
-  invoke: (runContext: unknown, input: string, details?: unknown) => Promise<unknown>;
+  invoke: (runContext: RunContext<unknown>, input: string, details?: { toolCall: unknown }) => Promise<unknown>;
 };
 
 async function invokeTool<TInput, TResult>(
   tool: ToolInvoker,
   input: TInput
 ): Promise<TResult> {
-  return tool.invoke(undefined, JSON.stringify(input), undefined);
+  return tool.invoke({} as RunContext<unknown>, JSON.stringify(input), undefined) as Promise<TResult>;
 }
 
 async function loadTools() {
@@ -40,7 +41,7 @@ describe('deck tools', () => {
     });
     const tools = await loadTools();
 
-    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: unknown }>(
+    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string } }>(
       tools.getArchidektDeckTool,
       {}
     );
@@ -53,7 +54,7 @@ describe('deck tools', () => {
     mockGetLastCachedArchidektDeckRaw.mockReturnValue({ name: 'Raw Cached Deck' });
     const tools = await loadTools();
 
-    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: unknown }>(
+    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string } }>(
       tools.getArchidektDeckRawTool,
       {}
     );
