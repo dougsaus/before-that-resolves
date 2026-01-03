@@ -1,10 +1,13 @@
 // Inspect the actual types and structure of @openai/agents v0.1.3
-import { Agent, run, RunResult } from '@openai/agents';
+import { Agent, run } from '@openai/agents';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
 type UnknownRecord = Record<string, unknown>;
+type RunResultLike = {
+  output?: unknown[];
+};
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
@@ -93,9 +96,7 @@ async function inspectTypes() {
   return result;
 }
 
-function extractMessageText<TContext, TAgent extends Agent<unknown, unknown>>(
-  result: RunResult<TContext, TAgent>
-): string {
+function extractMessageText(result: RunResultLike): string {
   // Type-safe extraction
   if (!result.output || !Array.isArray(result.output)) {
     return 'No output';
