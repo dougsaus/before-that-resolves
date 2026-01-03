@@ -1,7 +1,13 @@
 import { CardOracle } from './components/CardOracle';
 import { DevModeProvider } from './contexts/DevModeContext';
 import { DevPanel } from './components/DevPanel';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+
+const reasoningOptions = {
+  'gpt-5': ['low', 'medium', 'high'],
+  'gpt-5.1': ['low', 'medium', 'high'],
+  'gpt-5.2': ['low', 'medium', 'high']
+} as const;
 
 function App() {
   const models = useMemo(
@@ -15,19 +21,22 @@ function App() {
     ],
     []
   );
-  const reasoningOptions = {
-    'gpt-5': ['low', 'medium', 'high'],
-    'gpt-5.1': ['low', 'medium', 'high'],
-    'gpt-5.2': ['low', 'medium', 'high']
-  } as const;
   const [selectedModel, setSelectedModel] = useState('gpt-5.2');
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('medium');
   const [verbosity, setVerbosity] = useState<'low' | 'medium' | 'high'>('medium');
   const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
   const supportsVerbosity = models.find((model) => model.id === selectedModel)?.verbosity ?? false;
-  const effortOptions = supportsReasoning
-    ? Array.from(reasoningOptions[selectedModel as keyof typeof reasoningOptions] || [])
-    : [];
+  const effortOptions = useMemo(() => {
+    if (!supportsReasoning) {
+      return [];
+    }
+    return Array.from(reasoningOptions[selectedModel as keyof typeof reasoningOptions] || []);
+  }, [supportsReasoning, selectedModel]);
+  const normalizedReasoningEffort =
+    supportsReasoning && effortOptions.includes(reasoningEffort)
+      ? reasoningEffort
+      : 'medium';
+  const normalizedVerbosity = supportsVerbosity ? verbosity : 'medium';
   const modelControls = (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -47,7 +56,7 @@ function App() {
       <div className="flex flex-col gap-2">
         <label className="text-sm text-gray-300">Reasoning</label>
         <select
-          value={reasoningEffort}
+          value={normalizedReasoningEffort}
           onChange={(e) => setReasoningEffort(e.target.value as 'low' | 'medium' | 'high')}
           disabled={!supportsReasoning}
           className="bg-gray-800 text-white text-sm rounded px-3 py-2 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
@@ -62,7 +71,7 @@ function App() {
       <div className="flex flex-col gap-2">
         <label className="text-sm text-gray-300">Verbosity</label>
         <select
-          value={verbosity}
+          value={normalizedVerbosity}
           onChange={(e) => setVerbosity(e.target.value as 'low' | 'medium' | 'high')}
           disabled={!supportsVerbosity}
           className="bg-gray-800 text-white text-sm rounded px-3 py-2 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
@@ -74,21 +83,6 @@ function App() {
       </div>
     </div>
   );
-
-  useEffect(() => {
-    if (!supportsReasoning) {
-      return;
-    }
-    if (!effortOptions.includes(reasoningEffort)) {
-      setReasoningEffort('medium');
-    }
-  }, [supportsReasoning, reasoningEffort, effortOptions]);
-
-  useEffect(() => {
-    if (!supportsVerbosity && verbosity !== 'medium') {
-      setVerbosity('medium');
-    }
-  }, [supportsVerbosity, verbosity]);
 
   return (
     <DevModeProvider>

@@ -1,13 +1,16 @@
+import { type RunConfig } from '@openai/agents';
 import { createCommanderBracketAgent } from '../agents/commander-bracket';
 
 export function createCommanderBracketTool(
   model?: string,
   reasoningEffort?: 'low' | 'medium' | 'high',
-  verbosity?: 'low' | 'medium' | 'high'
+  verbosity?: 'low' | 'medium' | 'high',
+  runConfig?: Partial<RunConfig>
 ) {
   const agent = createCommanderBracketAgent(model, reasoningEffort, verbosity);
   return agent.asTool({
     toolName: 'commander_bracket_expert',
-    toolDescription: 'Answer questions about the Magic: The Gathering Commander bracket system'
+    toolDescription: 'Answer questions about the Magic: The Gathering Commander bracket system',
+    runConfig
   });
 }

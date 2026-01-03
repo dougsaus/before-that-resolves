@@ -12,6 +12,7 @@ vi.mock('axios', () => ({
 }));
 
 const mockedAxios = axios as unknown as { post: ReturnType<typeof vi.fn> };
+const TEST_OPENAI_KEY = 'sk-test';
 let createdAnchor: HTMLAnchorElement | null = null;
 
 function createDeferred<T>() {
@@ -45,6 +46,8 @@ describe('CardOracle chat UI', () => {
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:chat');
     globalThis.URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    window.localStorage.clear();
+    window.localStorage.setItem('before-that-resolves.openai-key', TEST_OPENAI_KEY);
     createdAnchor = null;
     vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       const element = document.createElementNS('http://www.w3.org/1999/xhtml', tagName);
@@ -69,7 +72,7 @@ describe('CardOracle chat UI', () => {
 
   it('shows a thinking bubble and disables input while loading', async () => {
     const user = userEvent.setup();
-    const deferred = createDeferred<any>();
+    const deferred = createDeferred<{ data: { success: boolean; response: string } }>();
 
     mockedAxios.post.mockReturnValue(deferred.promise);
 
@@ -170,7 +173,8 @@ describe('CardOracle chat UI', () => {
         'http://localhost:3001/api/deck/cache',
         {
           deckUrl: 'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
-        }
+        },
+        { headers: { 'x-openai-key': TEST_OPENAI_KEY } }
       );
     });
 
@@ -406,7 +410,9 @@ describe('CardOracle chat UI', () => {
     mockedAxios.post.mockResolvedValue({
       data: {
         success: true,
-        response: '[Rhox\\n Faithmender](https://scryfall.com/search?q=!\"Rhox\\n Faithmender\")'
+        response: `[Rhox
+ Faithmender](https://scryfall.com/search?q=!"Rhox
+ Faithmender")`
       }
     });
 
@@ -455,7 +461,7 @@ describe('CardOracle chat UI', () => {
           deckUrl: undefined,
           messages: expect.any(Array)
         }),
-        { responseType: 'blob' }
+        { headers: { 'x-openai-key': TEST_OPENAI_KEY }, responseType: 'blob' }
       );
     });
 
@@ -493,5 +499,36 @@ describe('CardOracle chat UI', () => {
     await user.click(screen.getByRole('button', { name: 'Export conversation to pdf' }));
 
     expect(createdAnchor?.download).toBe('ms_badonkadonk.pdf');
+  });
+
+  it('sends the OpenAI key header when BYOK is enabled', async () => {
+    const user = userEvent.setup();
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        response: 'ok'
+      }
+    });
+
+    renderCardOracle();
+
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    const keyInput = screen.getByPlaceholderText('sk-...');
+    await user.clear(keyInput);
+    await user.type(keyInput, TEST_OPENAI_KEY);
+
+    const input = screen.getByPlaceholderText('Type a question to the Oracle...');
+    await user.type(input, 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://localhost:3001/api/agent/query',
+        expect.objectContaining({ query: 'Hello' }),
+        expect.objectContaining({
+          headers: { 'x-openai-key': TEST_OPENAI_KEY }
+        })
+      );
+    });
   });
 });

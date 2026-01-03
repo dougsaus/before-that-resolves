@@ -4,6 +4,8 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+type UnknownRecord = Record<string, unknown>;
+
 // Create a simple test agent
 const testAgent = new Agent({
   name: 'Test Agent',
@@ -44,7 +46,7 @@ async function testRunSignatures() {
     // List all properties
     console.log('\nAll result properties:');
     for (const key in result2) {
-      const value = (result2 as any)[key];
+      const value = (result2 as unknown as UnknownRecord)[key];
       const valueType = Array.isArray(value) ? `array[${value.length}]` : typeof value;
       console.log(`  ${key}: ${valueType}`);
     }
@@ -52,13 +54,14 @@ async function testRunSignatures() {
     // Try to get the actual response text
     if ('output' in result2 && Array.isArray(result2.output)) {
       console.log('\nOutput array contents:');
-      result2.output.forEach((item: any, index: number) => {
+      result2.output.forEach((item: unknown, index: number) => {
         console.log(`  [${index}]:`, item);
       });
     }
 
-  } catch (error: any) {
-    console.error('Error:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error:', message);
     console.error('Full error:', error);
   }
 }
@@ -80,8 +83,9 @@ async function testAgentConstructor() {
     // The TypeScript error suggests temperature is not valid
     // Let's see what other properties might be available
 
-  } catch (error: any) {
-    console.error('Error:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error:', message);
   }
 }
 

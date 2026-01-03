@@ -78,7 +78,7 @@ export function RichMTGText({ text }: RichMTGTextProps) {
   const imageUrl = useMemo(() => {
     if (!hoverCard?.label) return null;
     return getScryfallImageUrl(hoverCard.label);
-  }, [hoverCard?.label]);
+  }, [hoverCard]);
 
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   useEffect(() => {

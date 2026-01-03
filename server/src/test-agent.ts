@@ -26,7 +26,8 @@ async function testCardOracle() {
   console.log('=' .repeat(50));
 
   // Check for API key
-  if (!process.env.OPENAI_API_KEY) {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  if (!openAiKey) {
     console.error('❌ ERROR: OPENAI_API_KEY not found!');
     console.error('   Please create a .env file with your OpenAI API key');
     console.error('   Copy .env.example to .env and add your key');
@@ -39,9 +40,9 @@ async function testCardOracle() {
     console.log('-'.repeat(40));
 
     try {
-      const result = await executeCardOracle(query);
+      const result = await executeCardOracle(query, false, undefined, undefined, undefined, undefined, openAiKey);
 
-      if (result.success) {
+      if (result.success && 'toolCalls' in result) {
         console.log('✅ Success!');
         console.log(`Tool calls made: ${result.toolCalls || 0}`);
         console.log('\nResponse:');
@@ -49,8 +50,9 @@ async function testCardOracle() {
       } else {
         console.log('❌ Failed:', result.error);
       }
-    } catch (error: any) {
-      console.log('❌ Error:', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.log('❌ Error:', message);
     }
 
     console.log('\n' + '='.repeat(50));

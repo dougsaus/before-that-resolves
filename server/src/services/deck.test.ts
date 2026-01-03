@@ -67,7 +67,7 @@ describe('deck service', () => {
       ok: true,
       status: 200,
       json: async () => deckData
-    } as any);
+    } as unknown as Response);
 
     const deck = await cacheArchidektDeckFromUrl('https://archidekt.com/decks/99999/raw');
 
@@ -92,7 +92,7 @@ describe('deck service', () => {
       ok: true,
       status: 200,
       json: async () => deckData
-    } as any);
+    } as unknown as Response);
 
     await cacheArchidektDeckFromUrl('https://archidekt.com/decks/55555/cache');
     const cached = getLastCachedArchidektDeck();

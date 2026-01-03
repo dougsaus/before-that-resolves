@@ -32,12 +32,12 @@ export interface DeckList {
 export interface AgentQuery {
   type: 'card_search' | 'deck_validation' | 'power_assessment' | 'combo_detection';
   query: string;
-  context?: any;
+  context?: unknown;
 }
 
 export interface AgentResponse {
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
   timestamp: Date;
 }

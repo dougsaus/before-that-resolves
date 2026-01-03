@@ -30,25 +30,9 @@ if (process.env.NODE_ENV !== 'production' && envPath) {
  * You need to configure it with your API key
  */
 
-// Validate API key exists
-if (!process.env.OPENAI_API_KEY) {
-  console.error('⚠️  OPENAI_API_KEY not found in environment variables!');
-  console.error('   Please create a .env file with your OpenAI API key');
-  console.error('   Copy .env.example to .env and add your key');
-} else if (process.env.NODE_ENV !== 'production') {
-  const keyTail = process.env.OPENAI_API_KEY.slice(-4);
-  console.log(`🔑 OPENAI_API_KEY loaded (…${keyTail})`);
-}
-
 // Export configuration values
 export const openaiConfig = {
   model: process.env.OPENAI_MODEL || 'gpt-4o',
   maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1000'),
   temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
 };
-
-// Set the OpenAI API key globally for @openai/agents SDK
-// This ensures the SDK can access the API key
-if (process.env.OPENAI_API_KEY) {
-  process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-}

@@ -24,7 +24,7 @@ sequenceDiagram
 
   User->>UI: Select analysis options
   User->>UI: Click Analyze Deck
-  UI->>API: POST /api/agent/query
+  UI->>API: POST /api/agent/query (x-openai-key required)
   API->>Agent: executeCardOracle(query)
   Agent->>OpenAI: run() with tools
   OpenAI-->>Agent: response
@@ -47,7 +47,7 @@ sequenceDiagram
 
   User->>UI: Choose goldfish options
   User->>UI: Click Goldfish Deck
-  UI->>API: POST /api/agent/query
+  UI->>API: POST /api/agent/query (x-openai-key required)
   API->>Agent: executeCardOracle(query)
   Agent->>OpenAI: run() with tools
   Agent->>SubAgent: commander_goldfish_expert

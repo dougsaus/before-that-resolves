@@ -3,6 +3,8 @@ import request from 'supertest';
 import { createApp } from './app';
 
 describe('app routes', () => {
+  const testApiKey = 'sk-test';
+
   it('returns a conversationId and calls the agent', async () => {
     const execute = vi.fn().mockResolvedValue({
       success: true,
@@ -18,6 +20,7 @@ describe('app routes', () => {
 
     const response = await request(app)
       .post('/api/agent/query')
+      .set('x-openai-key', testApiKey)
       .send({ query: 'Hello there' })
       .expect(200);
 
@@ -29,7 +32,8 @@ describe('app routes', () => {
       'conv-123',
       undefined,
       undefined,
-      undefined
+      undefined,
+      testApiKey
     );
   });
 
@@ -48,6 +52,7 @@ describe('app routes', () => {
 
     const response = await request(app)
       .post('/api/agent/query')
+      .set('x-openai-key', testApiKey)
       .send({ query: 'Ping', conversationId: 'conv-abc' })
       .expect(200);
 
@@ -59,7 +64,8 @@ describe('app routes', () => {
       'conv-abc',
       undefined,
       undefined,
-      undefined
+      undefined,
+      testApiKey
     );
   });
 
@@ -72,6 +78,45 @@ describe('app routes', () => {
       .expect(400);
 
     expect(response.body.error).toBe('Query is required');
+  });
+
+  it('rejects agent queries without an API key', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .post('/api/agent/query')
+      .send({ query: 'Hello there' })
+      .expect(401);
+
+    expect(response.body.error).toBe('OpenAI API key is required. Provide one in the UI.');
+  });
+
+  it('passes through a per-request API key', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      success: true,
+      response: 'ok',
+      toolCalls: 0
+    });
+
+    const app = createApp({
+      executeCardOracle: execute
+    });
+
+    await request(app)
+      .post('/api/agent/query')
+      .set('x-openai-key', 'sk-test')
+      .send({ query: 'Hello there' })
+      .expect(200);
+
+    expect(execute).toHaveBeenCalledWith(
+      'Hello there',
+      false,
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      'sk-test'
+    );
   });
 
   it('resets conversations', async () => {

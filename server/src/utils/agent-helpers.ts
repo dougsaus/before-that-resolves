@@ -4,14 +4,24 @@
  * These utilities help extract data from the RunResult structure
  */
 
-import { RunResult } from '@openai/agents';
+type RunResultLike = {
+  output?: unknown[];
+  newItems?: unknown[];
+  rawResponses?: unknown[];
+};
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
 
 /**
  * Extract the text response from a RunResult
  * @param result The result from run() function
  * @returns The extracted text response or empty string
  */
-export function extractResponseText(result: RunResult<any, any>): string {
+export function extractResponseText(result: RunResultLike): string {
   // The output property is available via getter
   if (!result.output || !Array.isArray(result.output)) {
     return '';
@@ -19,15 +29,15 @@ export function extractResponseText(result: RunResult<any, any>): string {
 
   // Find the last message in the output
   for (let i = result.output.length - 1; i >= 0; i--) {
-    const item = result.output[i] as any;
+    const item = result.output[i] as unknown;
 
     // Check if it's a message type output
-    if (item && item.type === 'message' && item.role === 'assistant') {
+    if (isRecord(item) && item.type === 'message' && item.role === 'assistant') {
       // Handle content array structure
       if (item.content && Array.isArray(item.content)) {
         const texts = item.content
-          .filter((c: any) => c.type === 'output_text' || c.type === 'text')
-          .map((c: any) => c.text || '');
+          .filter((c: unknown) => isRecord(c) && (c.type === 'output_text' || c.type === 'text'))
+          .map((c: unknown) => (isRecord(c) ? c.text : '') || '');
         return texts.join('\n');
       }
       // Handle string content
@@ -45,11 +55,11 @@ export function extractResponseText(result: RunResult<any, any>): string {
  * @param result The result from run() function
  * @returns Number of tool calls made
  */
-export function countToolCalls(result: RunResult<any, any>): number {
+export function countToolCalls(result: RunResultLike): number {
   // Primary method: Count from newItems (most accurate)
   if (result.newItems && Array.isArray(result.newItems)) {
     const toolCallCount = result.newItems.filter(
-      (item: any) => item.type === 'tool_call_item'
+      (item: unknown) => isRecord(item) && item.type === 'tool_call_item'
     ).length;
 
     if (toolCallCount > 0) {
@@ -59,8 +69,8 @@ export function countToolCalls(result: RunResult<any, any>): number {
 
   // Fallback: Count from rawResponses
   if (result.rawResponses && Array.isArray(result.rawResponses)) {
-    return result.rawResponses.reduce((count: number, response: any) => {
-      if (response.toolCalls && Array.isArray(response.toolCalls)) {
+    return result.rawResponses.reduce((count: number, response: unknown) => {
+      if (isRecord(response) && Array.isArray(response.toolCalls)) {
         return count + response.toolCalls.length;
       }
       return count;
@@ -78,58 +88,70 @@ export function countToolCalls(result: RunResult<any, any>): number {
  * FIXED: This now correctly extracts tool calls from newItems which contains
  * both the tool_call_item and tool_call_output_item objects with full details.
  */
-export function getToolCallDetails(result: RunResult<any, any>): Array<{
+export function getToolCallDetails(result: RunResultLike): Array<{
   name: string;
-  arguments: any;
-  result?: any;
+  arguments: unknown;
+  result?: unknown;
   callId?: string;
   status?: string;
 }> {
-  const toolCalls: any[] = [];
+  const toolCalls: Array<{
+    name: string;
+    arguments: unknown;
+    result?: unknown;
+    callId?: string;
+    status?: string;
+  }> = [];
 
   // Primary method: Extract from newItems (most reliable in v0.1.3)
   if (result.newItems && Array.isArray(result.newItems)) {
     // Get tool call items and their corresponding outputs
     const toolCallItems = result.newItems.filter(
-      (item: any) => item.type === 'tool_call_item'
+      (item: unknown) => isRecord(item) && item.type === 'tool_call_item'
     );
 
     const toolOutputItems = result.newItems.filter(
-      (item: any) => item.type === 'tool_call_output_item'
+      (item: unknown) => isRecord(item) && item.type === 'tool_call_output_item'
     );
 
     // Match calls with their outputs using callId
-    toolCallItems.forEach((callItem: any) => {
-      const callId = callItem.rawItem?.callId;
+    toolCallItems.forEach((callItem: unknown) => {
+      if (!isRecord(callItem)) return;
+      const rawItem = isRecord(callItem.rawItem) ? callItem.rawItem : undefined;
+      const callId = rawItem?.callId as string | undefined;
       const outputItem = toolOutputItems.find(
-        (out: any) => out.rawItem?.callId === callId
-      ) as any; // Type assertion to bypass strict typing
+        (out: unknown) =>
+          isRecord(out) &&
+          isRecord(out.rawItem) &&
+          out.rawItem.callId === callId
+      );
 
       // Parse arguments if they're a JSON string
-      let parsedArguments = callItem.rawItem?.arguments;
+      let parsedArguments = rawItem?.arguments;
       if (typeof parsedArguments === 'string') {
         try {
           parsedArguments = JSON.parse(parsedArguments);
-        } catch (e) {
+        } catch {
           // Keep as string if parsing fails
         }
       }
 
       // Extract the result - it might be in different places depending on the structure
       let result = undefined;
-      if (outputItem) {
-        result = outputItem.rawItem?.output ||
-                 outputItem.rawItem?.result ||
+      if (outputItem && isRecord(outputItem)) {
+        const outputRawItem = isRecord(outputItem.rawItem) ? outputItem.rawItem : undefined;
+        result = outputRawItem?.output ||
+                 outputRawItem?.result ||
                  outputItem.output ||
-                 outputItem.rawItem;
+                 outputRawItem;
       }
 
       toolCalls.push({
-        name: callItem.rawItem?.name || 'unknown',
+        name: (rawItem?.name as string | undefined) || 'unknown',
         arguments: parsedArguments || {},
         result: result,
         callId: callId,
-        status: callItem.rawItem?.status || 'completed',
+        status: (rawItem?.status as string | undefined) || 'completed',
       });
     });
 
@@ -141,24 +163,26 @@ export function getToolCallDetails(result: RunResult<any, any>): Array<{
 
   // Fallback method: Extract from rawResponses (doesn't include results)
   if (result.rawResponses && Array.isArray(result.rawResponses)) {
-    result.rawResponses.forEach((response: any) => {
-      if (response.toolCalls && Array.isArray(response.toolCalls)) {
-        response.toolCalls.forEach((tc: any) => {
-          let parsedArguments = tc.function?.arguments;
+    result.rawResponses.forEach((response: unknown) => {
+      if (isRecord(response) && Array.isArray(response.toolCalls)) {
+        response.toolCalls.forEach((tc: unknown) => {
+          if (!isRecord(tc)) return;
+          const fn = isRecord(tc.function) ? tc.function : undefined;
+          let parsedArguments = fn?.arguments;
           if (typeof parsedArguments === 'string') {
             try {
               parsedArguments = JSON.parse(parsedArguments);
-            } catch (e) {
+            } catch {
               // Keep as string if parsing fails
             }
           }
 
           toolCalls.push({
-            name: tc.function?.name || tc.name || 'unknown',
+            name: (fn?.name as string | undefined) || (tc.name as string | undefined) || 'unknown',
             arguments: parsedArguments || {},
             // Note: Results are not available in rawResponses
-            callId: tc.id,
-            status: tc.status || 'unknown',
+            callId: tc.id as string | undefined,
+            status: (tc.status as string | undefined) || 'unknown',
           });
         });
       }
@@ -173,7 +197,7 @@ export function getToolCallDetails(result: RunResult<any, any>): Array<{
  * @param result The result from run() function
  * @returns True if successful, false otherwise
  */
-export function isSuccessful(result: RunResult<any, any>): boolean {
+export function isSuccessful(result: RunResultLike): boolean {
   // Check if we have output and it's not empty
   return !!(result.output &&
            Array.isArray(result.output) &&

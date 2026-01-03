@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, isAxiosError } from 'axios';
 import { Card } from '../types/shared';
 
 /**
@@ -23,6 +23,16 @@ export class ScryfallService {
         'Accept': 'application/json',
       }
     });
+  }
+
+  private getErrorMessage(error: unknown, fallback: string): string {
+    if (isAxiosError(error)) {
+      return error.message || fallback;
+    }
+    if (error instanceof Error) {
+      return error.message || fallback;
+    }
+    return fallback;
   }
 
   /**
@@ -54,14 +64,15 @@ export class ScryfallService {
         }
       });
 
-      return this.transformScryfallCard(response.data);
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+      return this.transformScryfallCard(response.data as ScryfallCard);
+    } catch (error: unknown) {
+      if (isAxiosError(error) && error.response?.status === 404) {
         // Card not found
         return null;
       }
-      console.error('Scryfall API error:', error.message);
-      throw new Error(`Failed to search for card: ${error.message}`);
+      const message = this.getErrorMessage(error, 'Scryfall request failed');
+      console.error('Scryfall API error:', message);
+      throw new Error(`Failed to search for card: ${message}`);
     }
   }
 
@@ -79,14 +90,16 @@ export class ScryfallService {
         }
       });
 
-      return response.data.data.map((card: any) => this.transformScryfallCard(card));
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+      const data = response.data as ScryfallSearchResponse;
+      return data.data.map((card) => this.transformScryfallCard(card));
+    } catch (error: unknown) {
+      if (isAxiosError(error) && error.response?.status === 404) {
         // No cards found
         return [];
       }
-      console.error('Scryfall API error:', error.message);
-      throw new Error(`Failed to search cards: ${error.message}`);
+      const message = this.getErrorMessage(error, 'Scryfall request failed');
+      console.error('Scryfall API error:', message);
+      throw new Error(`Failed to search cards: ${message}`);
     }
   }
 
@@ -104,7 +117,8 @@ export class ScryfallService {
       const cards: Card[] = [];
       const notFound: string[] = [];
 
-      for (const item of response.data.data || []) {
+      const data = response.data as ScryfallCollectionResponse;
+      for (const item of data.data || []) {
         if (item.object === 'card') {
           cards.push(this.transformScryfallCard(item));
         } else if (item.object === 'not_found' && item.name) {
@@ -113,9 +127,10 @@ export class ScryfallService {
       }
 
       return { cards, notFound };
-    } catch (error: any) {
-      console.error('Scryfall API error:', error.message);
-      throw new Error(`Failed to fetch card collection: ${error.message}`);
+    } catch (error: unknown) {
+      const message = this.getErrorMessage(error, 'Scryfall request failed');
+      console.error('Scryfall API error:', message);
+      throw new Error(`Failed to fetch card collection: ${message}`);
     }
   }
 
@@ -132,10 +147,11 @@ export class ScryfallService {
         }
       });
 
-      return this.transformScryfallCard(response.data);
-    } catch (error: any) {
-      console.error('Scryfall API error:', error.message);
-      throw new Error(`Failed to get random commander: ${error.message}`);
+      return this.transformScryfallCard(response.data as ScryfallCard);
+    } catch (error: unknown) {
+      const message = this.getErrorMessage(error, 'Scryfall request failed');
+      console.error('Scryfall API error:', message);
+      throw new Error(`Failed to get random commander: ${message}`);
     }
   }
 
@@ -148,11 +164,11 @@ export class ScryfallService {
 
       const response = await this.client.get(`/cards/${cardId}/rulings`);
 
-      return response.data.data.map((ruling: any) =>
-        `[${ruling.published_at}] ${ruling.comment}`
-      );
-    } catch (error: any) {
-      console.error('Scryfall API error:', error.message);
+      const data = response.data as ScryfallRulingsResponse;
+      return data.data.map((ruling) => `[${ruling.published_at}] ${ruling.comment}`);
+    } catch (error: unknown) {
+      const message = this.getErrorMessage(error, 'Scryfall request failed');
+      console.error('Scryfall API error:', message);
       return [];
     }
   }
@@ -160,7 +176,7 @@ export class ScryfallService {
   /**
    * Transform Scryfall API response to our Card type
    */
-  private transformScryfallCard(scryfallCard: any): Card {
+  private transformScryfallCard(scryfallCard: ScryfallCard): Card {
     const imageUris =
       scryfallCard.image_uris ||
       (Array.isArray(scryfallCard.card_faces) ? scryfallCard.card_faces[0]?.image_uris : undefined);
@@ -179,6 +195,33 @@ export class ScryfallService {
     };
   }
 }
+
+type ScryfallCard = {
+  id: string;
+  name: string;
+  mana_cost?: string;
+  type_line: string;
+  oracle_text?: string;
+  colors?: string[];
+  color_identity: string[];
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  image_uris?: Record<string, string>;
+  card_faces?: Array<{ image_uris?: Record<string, string> }>;
+};
+
+type ScryfallSearchResponse = {
+  data: ScryfallCard[];
+};
+
+type ScryfallCollectionResponse = {
+  data: Array<ScryfallCard & { object: string; name?: string }>;
+};
+
+type ScryfallRulingsResponse = {
+  data: Array<{ published_at: string; comment: string }>;
+};
 
 // Export a singleton instance
 export const scryfallService = new ScryfallService();

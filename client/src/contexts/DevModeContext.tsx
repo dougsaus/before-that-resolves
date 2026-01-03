@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -11,8 +12,8 @@ interface DevModeContextType {
 interface AgentMetadata {
   toolCalls: Array<{
     name: string;
-    arguments: any;
-    result?: any;
+    arguments: unknown;
+    result?: unknown;
     duration?: number;
     status?: string;
   }>;
@@ -24,16 +25,15 @@ interface AgentMetadata {
 const DevModeContext = createContext<DevModeContextType | undefined>(undefined);
 
 export function DevModeProvider({ children }: { children: ReactNode }) {
-  const [isDevMode, setIsDevMode] = useState(false);
-  const [agentMetadata, setAgentMetadata] = useState<AgentMetadata | null>(null);
-
-  useEffect(() => {
+  const [isDevMode, setIsDevMode] = useState(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const devParam = urlParams.get('dev') === 'true';
     const envDev = import.meta.env.VITE_DEV_MODE === 'true';
+    return devParam || envDev;
+  });
+  const [agentMetadata, setAgentMetadata] = useState<AgentMetadata | null>(null);
 
-    setIsDevMode(devParam || envDev);
-
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault();
