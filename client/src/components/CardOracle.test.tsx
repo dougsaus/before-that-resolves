@@ -510,6 +510,7 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
+    await user.click(screen.getByRole('button', { name: 'Show' }));
     const keyInput = screen.getByPlaceholderText('sk-...');
     await user.clear(keyInput);
     await user.type(keyInput, TEST_OPENAI_KEY);

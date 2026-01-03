@@ -1047,7 +1047,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
               )}
               <div className="p-4 border-t border-gray-700">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-200">Model options</span>
+                  <span className="text-sm font-semibold text-gray-200">AI Options</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -1065,43 +1065,42 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                     {showModelOptions ? 'Hide' : 'Show'}
                   </button>
                 </div>
-                {showModelOptions && <div className="mt-3">{modelControls}</div>}
-              </div>
-              <div className="p-4 border-t border-gray-700">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-200">OpenAI API key</span>
-                </div>
-                <div className="mt-3 flex flex-col gap-3 text-sm text-gray-300">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showKey ? 'text' : 'password'}
-                      value={openAiKey}
-                      onChange={(e) => setOpenAiKey(e.target.value)}
-                      placeholder="sk-..."
-                      className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey((prev) => !prev)}
-                      className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors"
-                    >
-                      {showKey ? 'Hide' : 'Show'}
-                    </button>
+                {showModelOptions && (
+                  <div className="mt-3 flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 text-sm text-gray-300">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type={showKey ? 'text' : 'password'}
+                          value={openAiKey}
+                          onChange={(e) => setOpenAiKey(e.target.value)}
+                          placeholder="sk-..."
+                          className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowKey((prev) => !prev)}
+                          className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors"
+                        >
+                          {showKey ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-gray-400">
+                        <input
+                          type="checkbox"
+                          checked={saveKeyLocally}
+                          onChange={(e) => setSaveKeyLocally(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        Store this key in this browser (local storage)
+                      </label>
+                      <span className="text-[11px] text-gray-500">
+                        Keys are required for requests and are never stored by the server. Remove the
+                        stored key by unchecking the option above and clearing the field.
+                      </span>
+                    </div>
+                    <div>{modelControls}</div>
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-gray-400">
-                    <input
-                      type="checkbox"
-                      checked={saveKeyLocally}
-                      onChange={(e) => setSaveKeyLocally(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Store this key in this browser (local storage)
-                  </label>
-                  <span className="text-[11px] text-gray-500">
-                    Keys are required for requests and are never stored by the server. Remove the
-                    stored key by unchecking the option above and clearing the field.
-                  </span>
-                </div>
+                )}
               </div>
             </div>
           </aside>
