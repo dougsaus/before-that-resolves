@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { useDevMode } from '../contexts/DevModeContext';
 import { RichMTGText } from './RichMTGText';
 import { DeveloperInfo } from './DeveloperInfo';
 
 const OPENAI_KEY_STORAGE_KEY = 'before-that-resolves.openai-key';
+type ErrorWithResponse = {
+  response?: { data?: { error?: string } };
+  message?: string;
+  code?: string;
+  name?: string;
+};
 
 function createConversationId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -77,6 +83,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   >([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
+  const hasApiKey = Boolean(openAiKey.trim());
 
   useEffect(() => {
     const storedKey = window.localStorage.getItem(OPENAI_KEY_STORAGE_KEY);
@@ -119,8 +126,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
   const postWithOptionalConfig = (
     url: string,
-    data: any,
-    config?: { headers?: Record<string, string>; [key: string]: any }
+    data: unknown,
+    config?: AxiosRequestConfig
   ) => {
     const apiKeyHeaders = getApiKeyHeaders();
     const finalConfig = apiKeyHeaders
@@ -130,6 +137,11 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       return axios.post(url, data);
     }
     return axios.post(url, data, finalConfig);
+  };
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    const maybeError = error as ErrorWithResponse;
+    return maybeError?.response?.data?.error || maybeError?.message || fallback;
   };
 
   useEffect(() => {
@@ -191,12 +203,13 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         const errorMessage = result.data.error || 'Unknown error occurred';
         appendErrorMessage(errorMessage);
       }
-    } catch (err: any) {
-      if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+    } catch (err: unknown) {
+      const maybeError = err as ErrorWithResponse;
+      if (maybeError?.code === 'ERR_CANCELED' || maybeError?.name === 'CanceledError') {
         appendErrorMessage('Request cancelled.');
         return;
       }
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to connect to server';
+      const errorMessage = getErrorMessage(err, 'Failed to connect to server');
       appendErrorMessage(errorMessage);
     } finally {
       if (requestControllerRef.current === controller) {
@@ -269,12 +282,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     try {
       await postWithOptionalConfig('http://localhost:3001/api/deck/cache', { deckUrl });
       setDeckLoaded(true);
-    } catch (cacheError) {
-      const errorMessage =
-        (cacheError as any)?.response?.data?.error ||
-        (cacheError as any)?.message ||
-        'Failed to cache deck';
-      appendErrorMessage(errorMessage);
+    } catch (cacheError: unknown) {
+      appendErrorMessage(getErrorMessage(cacheError, 'Failed to cache deck'));
     } finally {
       setLoading(false);
     }
@@ -412,10 +421,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       link.download = filename;
       link.click();
       window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      const errorMessage =
-        error?.response?.data?.error || error?.message || 'Failed to export PDF';
-      appendErrorMessage(errorMessage);
+    } catch (error: unknown) {
+      appendErrorMessage(getErrorMessage(error, 'Failed to export PDF'));
     } finally {
       setExporting(false);
     }
@@ -481,18 +488,26 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   </div>
                   {showAnalyzeOptions && (
                     <div className="flex flex-col gap-3 text-sm text-gray-300 max-h-[18rem] overflow-y-auto pr-1">
-                      <button
-                        type="button"
-                        onClick={handleAnalyzeDeck}
-                        disabled={
-                          loading ||
-                          !deckLoaded ||
-                          !deckUrl.trim()
-                        }
-                        className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
-                      >
-                        Analyze Deck
-                      </button>
+                      <span className="relative group w-full">
+                        <button
+                          type="button"
+                          onClick={handleAnalyzeDeck}
+                          disabled={
+                            loading ||
+                            !deckLoaded ||
+                            !deckUrl.trim() ||
+                            !hasApiKey
+                          }
+                          className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                        >
+                          Analyze Deck
+                        </button>
+                        {!hasApiKey && (
+                          <span className="pointer-events-none absolute left-1/2 top-full mt-2 w-max -translate-x-1/2 rounded bg-gray-950 px-2 py-1 text-[11px] text-gray-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                            OpenAI API key is required.
+                          </span>
+                        )}
+                      </span>
                       <div className="flex items-center justify-start gap-2 text-xs">
                         <button
                           type="button"
@@ -687,14 +702,21 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   </div>
                   {showGoldfishOptions && (
                     <div className="flex flex-col gap-4 text-sm text-gray-300 flex-1 min-h-0 overflow-y-auto pr-1">
-                      <button
-                        type="button"
-                        onClick={handleGoldfishDeck}
-                        disabled={!deckLoaded || loading}
-                        className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
-                      >
-                        Goldfish Deck
-                      </button>
+                      <span className="relative group w-full">
+                        <button
+                          type="button"
+                          onClick={handleGoldfishDeck}
+                          disabled={!deckLoaded || loading || !hasApiKey}
+                          className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-semibold"
+                        >
+                          Goldfish Deck
+                        </button>
+                        {!hasApiKey && (
+                          <span className="pointer-events-none absolute left-1/2 top-full mt-2 w-max -translate-x-1/2 rounded bg-gray-950 px-2 py-1 text-[11px] text-gray-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                            OpenAI API key is required.
+                          </span>
+                        )}
+                      </span>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="flex flex-col gap-2">
                           <span>Games</span>
@@ -1045,7 +1067,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   )}
                 </div>
               )}
-              <div className="p-4 border-t border-gray-700">
+              <div className="p-4 border-t border-gray-700 mt-auto">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-gray-200">AI Options</span>
                   <button
@@ -1240,13 +1262,20 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={loading}
                 />
-                <button
-                  type="submit"
-                  disabled={loading || !query.trim()}
-                  className="px-6 py-2 w-[10.5rem] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
-                >
-                  Send
-                </button>
+                <span className="relative group">
+                  <button
+                    type="submit"
+                    disabled={loading || !query.trim() || !hasApiKey}
+                    className="px-6 py-2 w-[10.5rem] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  >
+                    Send
+                  </button>
+                  {!hasApiKey && (
+                    <span className="pointer-events-none absolute left-1/2 bottom-full mb-2 w-max -translate-x-1/2 rounded bg-gray-950 px-2 py-1 text-[11px] text-gray-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                      OpenAI API key is required.
+                    </span>
+                  )}
+                </span>
               </div>
             </form>
           </div>

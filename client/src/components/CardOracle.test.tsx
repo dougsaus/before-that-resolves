@@ -72,7 +72,7 @@ describe('CardOracle chat UI', () => {
 
   it('shows a thinking bubble and disables input while loading', async () => {
     const user = userEvent.setup();
-    const deferred = createDeferred<any>();
+    const deferred = createDeferred<{ data: { success: boolean; response: string } }>();
 
     mockedAxios.post.mockReturnValue(deferred.promise);
 
@@ -410,7 +410,9 @@ describe('CardOracle chat UI', () => {
     mockedAxios.post.mockResolvedValue({
       data: {
         success: true,
-        response: '[Rhox\\n Faithmender](https://scryfall.com/search?q=!\"Rhox\\n Faithmender\")'
+        response: `[Rhox
+ Faithmender](https://scryfall.com/search?q=!"Rhox
+ Faithmender")`
       }
     });
 
