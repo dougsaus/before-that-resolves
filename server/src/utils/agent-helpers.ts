@@ -7,7 +7,7 @@
 import { Agent, RunResult } from '@openai/agents';
 
 type UnknownRecord = Record<string, unknown>;
-type AnyAgent = Agent<any, any>;
+type AnyAgent = Agent<unknown, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;

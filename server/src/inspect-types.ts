@@ -93,7 +93,7 @@ async function inspectTypes() {
   return result;
 }
 
-function extractMessageText<TContext, TAgent extends Agent<any, any>>(
+function extractMessageText<TContext, TAgent extends Agent<unknown, unknown>>(
   result: RunResult<TContext, TAgent>
 ): string {
   // Type-safe extraction
