@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { Card } from '@before-that-resolves/shared';
+import { Card } from '../types/shared';
 
 /**
  * Scryfall API Service
