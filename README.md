@@ -63,6 +63,10 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
+## Container Deploys (Buildpacks)
+
+For local Docker or Cloud Run buildpacks, see `docs/container-buildpacks.md`.
+
 ## Common Tasks
 
 - Start frontend and backend together: `npm run dev`
