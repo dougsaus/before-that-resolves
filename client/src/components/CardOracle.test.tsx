@@ -12,6 +12,7 @@ vi.mock('axios', () => ({
 }));
 
 const mockedAxios = axios as unknown as { post: ReturnType<typeof vi.fn> };
+const TEST_OPENAI_KEY = 'sk-test';
 let createdAnchor: HTMLAnchorElement | null = null;
 
 function createDeferred<T>() {
@@ -46,6 +47,7 @@ describe('CardOracle chat UI', () => {
     globalThis.URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     window.localStorage.clear();
+    window.localStorage.setItem('before-that-resolves.openai-key', TEST_OPENAI_KEY);
     createdAnchor = null;
     vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       const element = document.createElementNS('http://www.w3.org/1999/xhtml', tagName);
@@ -171,7 +173,8 @@ describe('CardOracle chat UI', () => {
         'http://localhost:3001/api/deck/cache',
         {
           deckUrl: 'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
-        }
+        },
+        { headers: { 'x-openai-key': TEST_OPENAI_KEY } }
       );
     });
 
@@ -456,7 +459,7 @@ describe('CardOracle chat UI', () => {
           deckUrl: undefined,
           messages: expect.any(Array)
         }),
-        { responseType: 'blob' }
+        { headers: { 'x-openai-key': TEST_OPENAI_KEY }, responseType: 'blob' }
       );
     });
 
@@ -507,9 +510,9 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
-    await user.click(screen.getByLabelText('Use my key for requests (BYOK)'));
     const keyInput = screen.getByPlaceholderText('sk-...');
-    await user.type(keyInput, 'sk-test');
+    await user.clear(keyInput);
+    await user.type(keyInput, TEST_OPENAI_KEY);
 
     const input = screen.getByPlaceholderText('Type a question to the Oracle...');
     await user.type(input, 'Hello');
@@ -520,7 +523,7 @@ describe('CardOracle chat UI', () => {
         'http://localhost:3001/api/agent/query',
         expect.objectContaining({ query: 'Hello' }),
         expect.objectContaining({
-          headers: { 'x-openai-key': 'sk-test' }
+          headers: { 'x-openai-key': TEST_OPENAI_KEY }
         })
       );
     });

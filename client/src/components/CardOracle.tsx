@@ -68,7 +68,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   });
   const [conversationId, setConversationId] = useState(createConversationId);
   const { isDevMode, setAgentMetadata } = useDevMode();
-  const [useOwnKey, setUseOwnKey] = useState(false);
+  const useOwnKey = true;
   const [openAiKey, setOpenAiKey] = useState('');
   const [saveKeyLocally, setSaveKeyLocally] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -82,7 +82,6 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     const storedKey = window.localStorage.getItem(OPENAI_KEY_STORAGE_KEY);
     if (storedKey) {
       setOpenAiKey(storedKey);
-      setUseOwnKey(true);
       setSaveKeyLocally(true);
     }
   }, []);
@@ -143,7 +142,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   ) => {
     if (!text.trim()) return;
     if (useOwnKey && !openAiKey.trim()) {
-      appendErrorMessage('OpenAI API key is required when BYOK is enabled.');
+      appendErrorMessage('OpenAI API key is required.');
       return;
     }
 
@@ -1073,29 +1072,18 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                   <span className="text-sm font-semibold text-gray-200">OpenAI API key</span>
                 </div>
                 <div className="mt-3 flex flex-col gap-3 text-sm text-gray-300">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={useOwnKey}
-                      onChange={(e) => setUseOwnKey(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    Use my key for requests (BYOK)
-                  </label>
                   <div className="flex items-center gap-2">
                     <input
                       type={showKey ? 'text' : 'password'}
                       value={openAiKey}
                       onChange={(e) => setOpenAiKey(e.target.value)}
                       placeholder="sk-..."
-                      disabled={!useOwnKey}
-                      className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                      className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     />
                     <button
                       type="button"
                       onClick={() => setShowKey((prev) => !prev)}
-                      disabled={!useOwnKey}
-                      className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors disabled:opacity-50"
+                      className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors"
                     >
                       {showKey ? 'Hide' : 'Show'}
                     </button>
@@ -1110,8 +1098,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
                     Store this key in this browser (local storage)
                   </label>
                   <span className="text-[11px] text-gray-500">
-                    Keys are never sent or stored by the server. Remove the stored key by unchecking
-                    the option above and clearing the field.
+                    Keys are required for requests and are never stored by the server. Remove the
+                    stored key by unchecking the option above and clearing the field.
                   </span>
                 </div>
               </div>

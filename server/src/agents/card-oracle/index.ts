@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Agent, OpenAIProvider, Runner, type RunConfig } from '@openai/agents';
-import { getEnvOpenAIKey, openaiConfig } from '../../config/openai';
+import { openaiConfig } from '../../config/openai';
 import {
   searchCardTool,
   cardCollectionTool,
@@ -80,13 +80,13 @@ export async function executeCardOracle(
 ) {
   console.log('🎴 Card Oracle Agent executing query:', query);
   const startTime = Date.now();
-  const resolvedKey = apiKey ?? getEnvOpenAIKey();
+  const resolvedKey = apiKey;
 
   try {
     if (!resolvedKey) {
       return {
         success: false,
-        error: 'OpenAI API key is required. Provide one in the UI or set OPENAI_API_KEY.'
+        error: 'OpenAI API key is required. Provide one in the UI.'
       };
     }
 

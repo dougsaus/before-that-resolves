@@ -46,30 +46,10 @@ npm -v
 
 ## Set the API Key
 
-You can set the key in your shell or in a `.env` file.
-
-Option A: Shell (temporary, for the current terminal)
-
-```bash
-export OPENAI_API_KEY="your_api_key_here"
-```
-
-Option B: `.env` file (recommended)
-
-```bash
-cp .env.example .env
-```
-
-Then open `.env` and add:
-
-```
-OPENAI_API_KEY=your_api_key_here
-```
-
-Option C: In-app BYOK (stored locally)
+The app always uses a user-provided key from the UI.
 
 1. Start the app and open the sidebar section titled "OpenAI API key".
-2. Check "Use my key for requests (BYOK)" and paste your key.
+2. Paste your key.
 3. Optionally check "Store this key in this browser" to keep it in local storage.
 
 The key is sent with each request to the local server and is never stored server-side.
@@ -91,7 +71,7 @@ Then open http://localhost:5173 in your browser.
 
 ## Troubleshooting
 
-- If you see “OPENAI_API_KEY not found,” double‑check your `.env` file or terminal export.
+- If you see “OpenAI API key is required,” paste a key in the UI and try again.
 - If the app can’t connect, make sure the server is running on port 3001.
 
 ## Running Tests
@@ -108,7 +88,7 @@ Backend unit tests:
 npm run test --workspace=server
 ```
 
-Live integration tests (calls the OpenAI API and require a real key):
+Live integration tests (calls the OpenAI API; uses a key only for these tests):
 
 ```bash
 export OPENAI_API_KEY="your_api_key_here"
