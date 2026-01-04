@@ -1,0 +1,32 @@
+# Containerized deploy (Docker)
+
+This repo is set up for a single-service container that serves both the API and the built UI from the same server.
+
+## Local Docker
+
+Prereqs:
+- Docker
+
+Build the image:
+
+```bash
+npm run container:build
+```
+
+(Apple Silicon: `npm run container:build:arm` or `docker build --platform linux/arm64 -t before-that-resolves .`)
+
+Run the container:
+
+```bash
+npm run container:run
+```
+
+Then open http://localhost:3001.
+
+Notes:
+- The build runs `npm run build`, which produces `client/dist` and `server/dist`.
+- PDF export is disabled by default. To include Playwright + Chromium, build with `ENABLE_PDF=1` (e.g. `npm run container:build:pdf`), which switches the runtime base image to `mcr.microsoft.com/playwright:v1.57.0-jammy`.
+
+## GCP / Cloud Run (future)
+
+Cloud Run sets `PORT=8080` at runtime. The container starts with `npm start` from the repo root, which launches `server/dist/index.js` and serves the built UI.

@@ -63,9 +63,15 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
-## Container Deploys (Buildpacks)
+PDF export (optional):
 
-For local Docker or Cloud Run buildpacks, see `docs/container-buildpacks.md`.
+```bash
+npx playwright install chromium
+```
+
+## Container Deploys (Docker)
+
+For local Docker or Cloud Run container notes, see `docs/container-docker.md`.
 
 ## Common Tasks
 
