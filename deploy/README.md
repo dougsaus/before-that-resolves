@@ -27,6 +27,45 @@ Notes:
 - The build runs `npm run build`, which produces `client/dist` and `server/dist`.
 - PDF export is disabled by default. To include Playwright + Chromium, build with `ENABLE_PDF=1` (e.g. `npm run container:build:pdf`), which switches the runtime base image to `mcr.microsoft.com/playwright:v1.57.0-jammy`.
 
-## GCP / Cloud Run (future)
+## GCP / Cloud Run
+
+Prereqs:
+- gcloud CLI
+- Access to the GCP project
+
+One-time setup:
+
+```bash
+gcloud auth login
+gcloud config set project before-that-resolves
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+```
+
+Deploy (build + push + run):
+
+```bash
+deploy/cloudrun-deploy.sh
+```
+
+Common options (environment variables):
+- `PROJECT_ID` (default: `before-that-resolves`)
+- `REGION` (default: `us-central1`)
+- `SERVICE_NAME` (default: `before-that-resolves`)
+- `REPO` (default: `before-that-resolves`)
+- `IMAGE_NAME` (default: `before-that-resolves`)
+- `ENABLE_PDF` (default: `1`)
+- `OPENAI_API_KEY` (optional; stored in Secret Manager and injected as `OPENAI_API_KEY`)
+
+Example (set a server-side OpenAI key):
+
+```bash
+OPENAI_API_KEY="your_key_here" deploy/cloudrun-deploy.sh
+```
+
+Verify:
+
+```bash
+curl -s https://YOUR_SERVICE_URL/health
+```
 
 Cloud Run sets `PORT=8080` at runtime. The container starts with `npm start` from the repo root, which launches `server/dist/index.js` and serves the built UI.
