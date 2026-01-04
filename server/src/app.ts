@@ -48,8 +48,7 @@ export function createApp(deps: AppDeps = {}) {
     const bearerKey = authorization?.startsWith('Bearer ')
       ? authorization.slice('Bearer '.length).trim()
       : undefined;
-    const envApiKey = process.env.OPENAI_API_KEY;
-    const requestApiKey = headerKey || bearerKey || envApiKey;
+    const requestApiKey = headerKey || bearerKey;
 
     if (!query) {
       res.status(400).json({

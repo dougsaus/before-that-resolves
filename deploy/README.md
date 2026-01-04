@@ -38,7 +38,7 @@ One-time setup:
 ```bash
 gcloud auth login
 gcloud config set project before-that-resolves
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 ```
 
 IAM roles (minimums):
@@ -46,7 +46,6 @@ IAM roles (minimums):
 - `roles/iam.serviceAccountUser`
 - `roles/artifactregistry.writer`
 - `roles/cloudbuild.builds.editor`
-- `roles/secretmanager.admin` (or `roles/secretmanager.secretAccessor` if a secret already exists)
 
 Note: the Cloud Build service account (`PROJECT_NUMBER@cloudbuild.gserviceaccount.com`) must have `roles/artifactregistry.writer` to push images.
 
@@ -63,13 +62,8 @@ Common options (environment variables):
 - `REPO` (default: `before-that-resolves`)
 - `IMAGE_NAME` (default: `before-that-resolves`)
 - `ENABLE_PDF` (default: `1`)
-- `OPENAI_API_KEY` (optional; stored in Secret Manager and injected as `OPENAI_API_KEY`)
 
-Example (set a server-side OpenAI key):
-
-```bash
-OPENAI_API_KEY="your_key_here" deploy/cloudrun-deploy.sh
-```
+The service expects the OpenAI API key to be supplied by the client (via the UI or the request headers).
 
 Verify:
 
