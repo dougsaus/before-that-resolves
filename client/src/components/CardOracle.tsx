@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import axios, { type AxiosRequestConfig } from 'axios';
 import { useDevMode } from '../contexts/DevModeContext';
+import { buildApiUrl } from '../utils/api';
 import { RichMTGText } from './RichMTGText';
 import { DeveloperInfo } from './DeveloperInfo';
 
@@ -171,7 +172,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
     try {
       const result = await postWithOptionalConfig(
-        'http://localhost:3001/api/agent/query',
+        buildApiUrl('/api/agent/query'),
         {
           query: text,
           devMode: isDevMode,
@@ -229,7 +230,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
   const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
     try {
-      await postWithOptionalConfig('http://localhost:3001/api/agent/reset', {
+      await postWithOptionalConfig(buildApiUrl('/api/agent/reset'), {
         conversationId
       });
     } catch (resetError) {
@@ -280,7 +281,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     await resetConversationState({ preserveDeckUrl: true });
 
     try {
-      await postWithOptionalConfig('http://localhost:3001/api/deck/cache', { deckUrl });
+      await postWithOptionalConfig(buildApiUrl('/api/deck/cache'), { deckUrl });
       setDeckLoaded(true);
     } catch (cacheError: unknown) {
       appendErrorMessage(getErrorMessage(cacheError, 'Failed to cache deck'));
@@ -404,7 +405,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         ? `${deckSlug}.pdf`
         : 'before-that-resolves-conversation.pdf';
       const response = await postWithOptionalConfig(
-        'http://localhost:3001/api/chat/export-pdf',
+        buildApiUrl('/api/chat/export-pdf'),
         {
           title: 'Before That Resolves',
           subtitle: 'Commander Deck Analyzer & Strategy Assistant',

@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
 import { DevModeProvider } from '../contexts/DevModeContext';
+import { buildApiUrl } from '../utils/api';
 import { CardOracle } from './CardOracle';
 
 vi.mock('axios', () => ({
@@ -170,7 +171,7 @@ describe('CardOracle chat UI', () => {
 
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
-        'http://localhost:3001/api/deck/cache',
+        buildApiUrl('/api/deck/cache'),
         {
           deckUrl: 'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
         },
@@ -454,7 +455,7 @@ describe('CardOracle chat UI', () => {
 
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
-        'http://localhost:3001/api/chat/export-pdf',
+        buildApiUrl('/api/chat/export-pdf'),
         expect.objectContaining({
           title: 'Before That Resolves',
           subtitle: 'Commander Deck Analyzer & Strategy Assistant',
@@ -523,7 +524,7 @@ describe('CardOracle chat UI', () => {
 
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
-        'http://localhost:3001/api/agent/query',
+        buildApiUrl('/api/agent/query'),
         expect.objectContaining({ query: 'Hello' }),
         expect.objectContaining({
           headers: { 'x-openai-key': TEST_OPENAI_KEY }
