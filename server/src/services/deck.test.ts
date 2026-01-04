@@ -69,7 +69,10 @@ describe('deck service', () => {
       json: async () => deckData
     } as unknown as Response);
 
-    const deck = await cacheArchidektDeckFromUrl('https://archidekt.com/decks/99999/raw');
+    const deck = await cacheArchidektDeckFromUrl(
+      'https://archidekt.com/decks/99999/raw',
+      'conv-123'
+    );
 
     expect(deck.name).toBe('Raw Deck');
   });
@@ -94,8 +97,8 @@ describe('deck service', () => {
       json: async () => deckData
     } as unknown as Response);
 
-    await cacheArchidektDeckFromUrl('https://archidekt.com/decks/55555/cache');
-    const cached = getLastCachedArchidektDeck();
+    await cacheArchidektDeckFromUrl('https://archidekt.com/decks/55555/cache', 'conv-123');
+    const cached = getLastCachedArchidektDeck('conv-123');
 
     expect(cached?.name).toBe('Cached Deck');
     expect(cached?.cards[0]?.name).toBe('Edgar Markov');

@@ -121,7 +121,8 @@ describe('app routes', () => {
 
   it('resets conversations', async () => {
     const resetConversation = vi.fn().mockReturnValue(true);
-    const app = createApp({ resetConversation });
+    const resetArchidektDeckCache = vi.fn();
+    const app = createApp({ resetConversation, resetArchidektDeckCache });
 
     const response = await request(app)
       .post('/api/agent/reset')
@@ -130,6 +131,7 @@ describe('app routes', () => {
 
     expect(response.body.cleared).toBe(true);
     expect(resetConversation).toHaveBeenCalledWith('conv-123');
+    expect(resetArchidektDeckCache).toHaveBeenCalledWith('conv-123');
   });
 
   it('caches Archidekt decks', async () => {
@@ -138,12 +140,13 @@ describe('app routes', () => {
 
     const response = await request(app)
       .post('/api/deck/cache')
-      .send({ deckUrl: 'https://archidekt.com/decks/12345/test' })
+      .send({ deckUrl: 'https://archidekt.com/decks/12345/test', conversationId: 'conv-123' })
       .expect(200);
 
     expect(response.body.success).toBe(true);
     expect(cacheArchidektDeckFromUrl).toHaveBeenCalledWith(
-      'https://archidekt.com/decks/12345/test'
+      'https://archidekt.com/decks/12345/test',
+      'conv-123'
     );
   });
 

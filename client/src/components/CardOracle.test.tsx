@@ -172,9 +172,10 @@ describe('CardOracle chat UI', () => {
     await waitFor(() => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
         buildApiUrl('/api/deck/cache'),
-        {
-          deckUrl: 'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
-        },
+        expect.objectContaining({
+          deckUrl: 'https://archidekt.com/decks/17352990/the_world_is_a_vampire',
+          conversationId: expect.any(String)
+        }),
         { headers: { 'x-openai-key': TEST_OPENAI_KEY } }
       );
     });

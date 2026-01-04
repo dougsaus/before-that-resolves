@@ -40,9 +40,23 @@ type ArchidektDeck = {
   deckFormat?: string;
 };
 
-const archidektRawCache = new Map<string, ArchidektDeck>();
-let lastArchidektDeckId: string | null = null;
-let lastArchidektDeckUrl: string | null = null;
+type DeckCache = {
+  decks: Map<string, ArchidektDeck>;
+  lastDeckId?: string;
+  lastDeckUrl?: string;
+};
+
+const conversationDecks = new Map<string, DeckCache>();
+
+function getDeckCache(conversationId: string): DeckCache {
+  const existing = conversationDecks.get(conversationId);
+  if (existing) {
+    return existing;
+  }
+  const cache: DeckCache = { decks: new Map() };
+  conversationDecks.set(conversationId, cache);
+  return cache;
+}
 
 async function fetchJson(url: string): Promise<FetchResult> {
   try {
@@ -79,16 +93,20 @@ function parseDeckId(url: string, expectedHost: string): string | null {
   }
 }
 
-export async function cacheArchidektDeckFromUrl(deckUrl: string): Promise<ArchidektDeck> {
+export async function cacheArchidektDeckFromUrl(
+  deckUrl: string,
+  conversationId: string
+): Promise<ArchidektDeck> {
   const deckId = parseDeckId(deckUrl, 'archidekt.com');
   if (!deckId) {
     throw new Error('Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}');
   }
 
-  const cached = archidektRawCache.get(deckId);
+  const cache = getDeckCache(conversationId);
+  const cached = cache.decks.get(deckId);
   if (cached) {
-    lastArchidektDeckId = deckId;
-    lastArchidektDeckUrl = deckUrl;
+    cache.lastDeckId = deckId;
+    cache.lastDeckUrl = deckUrl;
     return cached;
   }
 
@@ -100,9 +118,9 @@ export async function cacheArchidektDeckFromUrl(deckUrl: string): Promise<Archid
   }
 
   const deck = result.json as ArchidektDeck;
-  archidektRawCache.set(deckId, deck);
-  lastArchidektDeckId = deckId;
-  lastArchidektDeckUrl = deckUrl;
+  cache.decks.set(deckId, deck);
+  cache.lastDeckId = deckId;
+  cache.lastDeckUrl = deckUrl;
   return deck;
 }
 
@@ -110,22 +128,28 @@ export function buildArchidektDeckData(deck: ArchidektDeck, deckUrl: string): De
   return buildDeckData(deck, deckUrl);
 }
 
-export function getLastCachedArchidektDeck(): DeckData | null {
-  if (!lastArchidektDeckId || !lastArchidektDeckUrl) {
+export function getLastCachedArchidektDeck(conversationId: string): DeckData | null {
+  const cache = conversationDecks.get(conversationId);
+  if (!cache?.lastDeckId || !cache?.lastDeckUrl) {
     return null;
   }
-  const cached = archidektRawCache.get(lastArchidektDeckId);
+  const cached = cache.decks.get(cache.lastDeckId);
   if (!cached) {
     return null;
   }
-  return buildDeckData(cached, lastArchidektDeckUrl);
+  return buildDeckData(cached, cache.lastDeckUrl);
 }
 
-export function getLastCachedArchidektDeckRaw(): ArchidektDeck | null {
-  if (!lastArchidektDeckId) {
+export function getLastCachedArchidektDeckRaw(conversationId: string): ArchidektDeck | null {
+  const cache = conversationDecks.get(conversationId);
+  if (!cache?.lastDeckId) {
     return null;
   }
-  return archidektRawCache.get(lastArchidektDeckId) ?? null;
+  return cache.decks.get(cache.lastDeckId) ?? null;
+}
+
+export function resetArchidektDeckCache(conversationId: string): void {
+  conversationDecks.delete(conversationId);
 }
 
 function buildDeckData(deck: ArchidektDeck, deckUrl: string): DeckData {

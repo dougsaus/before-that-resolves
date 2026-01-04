@@ -40,6 +40,14 @@ async function loadTools(): Promise<ToolSet> {
   return import('./index');
 }
 
+async function buildTools(conversationId = 'conv-123') {
+  const tools = await loadTools();
+  return {
+    ...tools,
+    loadDeck: tools.createLoadDeckTool(conversationId)
+  };
+}
+
 describe('goldfish tools', () => {
   beforeEach(() => {
     mockGetLastCachedArchidektDeck.mockReset();
@@ -47,7 +55,7 @@ describe('goldfish tools', () => {
   });
 
   it('loads a deck and resets zones with commander in command zone', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     const loadResult = await invokeTool<
       Record<string, never>,
@@ -72,7 +80,7 @@ describe('goldfish tools', () => {
 
   it('rejects decks that are not exactly 100 cards', async () => {
     mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(99, "Atraxa, Praetors' Voice"));
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     const loadResult = await invokeTool<
       Record<string, never>,
@@ -83,7 +91,7 @@ describe('goldfish tools', () => {
   });
 
   it('produces deterministic shuffles with a seed', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 42 });
@@ -98,7 +106,7 @@ describe('goldfish tools', () => {
   });
 
   it('draws cards into the requested zone', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 5 });
@@ -125,7 +133,7 @@ describe('goldfish tools', () => {
   });
 
   it('peeks without moving cards', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 9 });
@@ -137,7 +145,7 @@ describe('goldfish tools', () => {
   });
 
   it('moves cards by id between zones and validates library placement', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 3 });
@@ -178,7 +186,7 @@ describe('goldfish tools', () => {
   });
 
   it('moves cards between library and revealed to simulate scry', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 15 });
@@ -212,7 +220,7 @@ describe('goldfish tools', () => {
   });
 
   it('finds and moves a card by name with shuffling', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 11 });
@@ -233,7 +241,7 @@ describe('goldfish tools', () => {
   });
 
   it('returns ok:false when moves are impossible and preserves state', async () => {
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     await invokeTool(tools.loadDeck, {});
     await invokeTool(tools.reset, { seed: 21 });
@@ -259,7 +267,7 @@ describe('goldfish tools', () => {
 
   it('loads from the currently loaded deck', async () => {
     mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
-    const tools = await loadTools();
+    const tools = await buildTools();
 
     const loadResult = await invokeTool<
       Record<string, never>,

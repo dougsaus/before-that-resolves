@@ -241,7 +241,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       console.warn('Failed to reset conversation on server:', resetError);
     }
 
-    setConversationId(createConversationId());
+    const nextConversationId = createConversationId();
+    setConversationId(nextConversationId);
     setMessages([]);
     setAgentMetadata(null);
     setDeckAnalysisOptions(defaultDeckAnalysisOptions);
@@ -276,16 +277,20 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     if (!options?.preserveDeckUrl) {
       setDeckUrl('');
     }
+    return nextConversationId;
   };
 
   const handleLoadDeck = async () => {
     if (!deckUrl.trim()) return;
     setLoading(true);
 
-    await resetConversationState({ preserveDeckUrl: true });
+    const nextConversationId = await resetConversationState({ preserveDeckUrl: true });
 
     try {
-      await postWithOptionalConfig(buildApiUrl('/api/deck/cache'), { deckUrl });
+      await postWithOptionalConfig(buildApiUrl('/api/deck/cache'), {
+        deckUrl,
+        conversationId: nextConversationId || conversationId
+      });
       setDeckLoaded(true);
     } catch (cacheError: unknown) {
       appendErrorMessage(getErrorMessage(cacheError, 'Failed to cache deck'));

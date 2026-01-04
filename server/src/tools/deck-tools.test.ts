@@ -40,39 +40,45 @@ describe('deck tools', () => {
       cards: []
     });
     const tools = await loadTools();
+    const tool = tools.createArchidektDeckTool('conv-123');
 
     const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string } }>(
-      tools.getArchidektDeckTool,
+      tool,
       {}
     );
 
     expect(result.success).toBe(true);
     expect(result.deck?.name).toBe('Cached Deck');
+    expect(mockGetLastCachedArchidektDeck).toHaveBeenCalledWith('conv-123');
   });
 
   it('returns loaded raw data for get_archidekt_deck_raw', async () => {
     mockGetLastCachedArchidektDeckRaw.mockReturnValue({ name: 'Raw Cached Deck' });
     const tools = await loadTools();
+    const tool = tools.createArchidektDeckRawTool('conv-123');
 
     const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string } }>(
-      tools.getArchidektDeckRawTool,
+      tool,
       {}
     );
 
     expect(result.success).toBe(true);
     expect(result.deck?.name).toBe('Raw Cached Deck');
+    expect(mockGetLastCachedArchidektDeckRaw).toHaveBeenCalledWith('conv-123');
   });
 
   it('returns an error when no deck is loaded', async () => {
     mockGetLastCachedArchidektDeck.mockReturnValue(null);
     const tools = await loadTools();
+    const tool = tools.createArchidektDeckTool('conv-123');
 
     const result = await invokeTool<Record<string, never>, { success: boolean; message?: string }>(
-      tools.getArchidektDeckTool,
+      tool,
       {}
     );
 
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/No Archidekt deck is loaded/);
+    expect(mockGetLastCachedArchidektDeck).toHaveBeenCalledWith('conv-123');
   });
 });

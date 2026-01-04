@@ -105,55 +105,57 @@ function canMoveToLibrary(zone: Zone, toLibraryPosition?: 'top' | 'bottom') {
   return zone !== 'library' || !!toLibraryPosition;
 }
 
-export const loadDeck = tool({
-  name: 'loadDeck',
-  description: 'Load the currently loaded Archidekt deck into the goldfish tool state',
-  parameters: z.object({}).strict(),
-  execute: async () => {
-    console.log('🧪 Loading goldfish deck from current Archidekt cache.');
-    try {
-      resetZones();
-      deckList = null;
-      commanderName = null;
-      cardIdCounter = 1;
-      const cachedDeck = getLastCachedArchidektDeck();
-      if (!cachedDeck) {
-        console.warn('⚠️ No loaded Archidekt deck available for goldfish.');
-        return { ok: false, error: 'No Archidekt deck is loaded.' };
-      }
-      const commanderEntry = cachedDeck.cards.find((card) =>
-        (card.section || '').toLowerCase().includes('commander')
-      );
-      if (!commanderEntry) {
-        console.warn('⚠️ No commander card found in loaded deck.');
-        return { ok: false, error: 'No commander found in loaded deck.' };
-      }
-      commanderName = commanderEntry.name;
-      const cards = cachedDeck.cards.map((card) => ({
-        name: card.name,
-        quantity: card.quantity,
-        section: card.section
-      }));
-      deckList = cards;
-
-      const total = cards.reduce((sum, card) => sum + card.quantity, 0);
-      if (total !== 100) {
+export function createLoadDeckTool(conversationId: string) {
+  return tool({
+    name: 'loadDeck',
+    description: 'Load the currently loaded Archidekt deck into the goldfish tool state',
+    parameters: z.object({}).strict(),
+    execute: async () => {
+      console.log('🧪 Loading goldfish deck from current Archidekt cache.');
+      try {
+        resetZones();
         deckList = null;
-        console.warn(`⚠️ Goldfish deck invalid card count: ${total}`);
-        return { ok: false, error: 'Deck list must contain exactly 100 cards.' };
-      }
+        commanderName = null;
+        cardIdCounter = 1;
+        const cachedDeck = getLastCachedArchidektDeck(conversationId);
+        if (!cachedDeck) {
+          console.warn('⚠️ No loaded Archidekt deck available for goldfish.');
+          return { ok: false, error: 'No Archidekt deck is loaded.' };
+        }
+        const commanderEntry = cachedDeck.cards.find((card) =>
+          (card.section || '').toLowerCase().includes('commander')
+        );
+        if (!commanderEntry) {
+          console.warn('⚠️ No commander card found in loaded deck.');
+          return { ok: false, error: 'No commander found in loaded deck.' };
+        }
+        commanderName = commanderEntry.name;
+        const cards = cachedDeck.cards.map((card) => ({
+          name: card.name,
+          quantity: card.quantity,
+          section: card.section
+        }));
+        deckList = cards;
 
-      console.log(`👑 Goldfish commander: ${commanderName}`);
-      console.log(`✅ Goldfish deck loaded (${total} cards).`);
-      return { ok: true, cardCount: total };
-    } catch (error: unknown) {
-      deckList = null;
-      const message = error instanceof Error ? error.message : 'Failed to load deck.';
-      console.error('❌ Goldfish deck load failed:', message);
-      return { ok: false, error: message };
+        const total = cards.reduce((sum, card) => sum + card.quantity, 0);
+        if (total !== 100) {
+          deckList = null;
+          console.warn(`⚠️ Goldfish deck invalid card count: ${total}`);
+          return { ok: false, error: 'Deck list must contain exactly 100 cards.' };
+        }
+
+        console.log(`👑 Goldfish commander: ${commanderName}`);
+        console.log(`✅ Goldfish deck loaded (${total} cards).`);
+        return { ok: true, cardCount: total };
+      } catch (error: unknown) {
+        deckList = null;
+        const message = error instanceof Error ? error.message : 'Failed to load deck.';
+        console.error('❌ Goldfish deck load failed:', message);
+        return { ok: false, error: message };
+      }
     }
-  }
-});
+  });
+}
 
 export const reset = tool({
   name: 'reset',
@@ -359,13 +361,15 @@ export const findAndMoveByName = tool({
   }
 });
 
-export const goldfishTools = [
-  loadDeck,
-  reset,
-  shuffle,
-  draw,
-  peek,
-  zoneContents,
-  moveById,
-  findAndMoveByName
-];
+export function createGoldfishTools(conversationId: string) {
+  return [
+    createLoadDeckTool(conversationId),
+    reset,
+    shuffle,
+    draw,
+    peek,
+    zoneContents,
+    moveById,
+    findAndMoveByName
+  ];
+}
