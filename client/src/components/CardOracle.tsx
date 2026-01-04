@@ -170,6 +170,9 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       ]);
     }
 
+    const includeDeckUrl = options?.mode === 'analyze' || options?.mode === 'goldfish';
+    const requestDeckUrl = includeDeckUrl && deckLoaded ? deckUrl.trim() : undefined;
+
     try {
       const result = await postWithOptionalConfig(
         buildApiUrl('/api/agent/query'),
@@ -179,7 +182,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
           conversationId,
           model,
           reasoningEffort: reasoningEffort || undefined,
-          verbosity
+          verbosity,
+          ...(requestDeckUrl ? { deckUrl: requestDeckUrl } : {})
         },
         { signal: controller.signal }
       );

@@ -42,7 +42,7 @@ export function createApp(deps: AppDeps = {}) {
   });
 
   app.post('/api/agent/query', async (req, res) => {
-    const { query, devMode, conversationId, model, reasoningEffort, verbosity } = req.body;
+    const { query, devMode, conversationId, model, reasoningEffort, verbosity, deckUrl } = req.body;
     const headerKey = req.header('x-openai-key');
     const authorization = req.header('authorization');
     const bearerKey = authorization?.startsWith('Bearer ')
@@ -66,6 +66,18 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     try {
+      if (deckUrl) {
+        try {
+          await cacheDeck(deckUrl);
+        } catch (error: unknown) {
+          res.status(400).json({
+            success: false,
+            error: getErrorMessage(error, 'Failed to load deck')
+          });
+          return;
+        }
+      }
+
       console.log(`\n📨 Received query: "${query}" ${devMode ? '(Dev Mode)' : ''}`);
       const activeConversationId = conversationId || getConversationId();
 
