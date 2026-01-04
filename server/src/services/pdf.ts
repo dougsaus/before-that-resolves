@@ -398,7 +398,9 @@ export async function generateChatPdf(input: PdfInput) {
   const cardImages = await resolveCardImages(cardNames);
   const html = await buildChatHtml(input, cardImages);
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+  });
   try {
     const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
     await page.setContent(html, { waitUntil: 'networkidle' });

@@ -11,13 +11,19 @@
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "npm run dev --workspace=client",
     "dev:server": "npm run dev --workspace=server",
+    "start": "node server/dist/index.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "npm run build --workspace=client",
     "build:server": "npm run build --workspace=server",
     "lint": "npm run lint --workspace=server && npm run lint --workspace=client",
     "test": "npm run test --workspace=server && npm run test --workspace=client",
     "clean": "rm -rf node_modules client/node_modules server/node_modules",
-    "install-all": "npm install"
+    "install-all": "npm install",
+    "container:build": "docker build -f deploy/Dockerfile -t before-that-resolves .",
+    "container:build:arm": "docker build --platform linux/arm64 -f deploy/Dockerfile -t before-that-resolves .",
+    "container:build:pdf": "docker build --build-arg ENABLE_PDF=1 -f deploy/Dockerfile -t before-that-resolves .",
+    "container:build:arm:pdf": "docker build --platform linux/arm64 --build-arg ENABLE_PDF=1 -f deploy/Dockerfile -t before-that-resolves .",
+    "container:run": "docker run --rm -p 3001:3001 -e PORT=3001 before-that-resolves"
   },
   "keywords": [
     "mtg",

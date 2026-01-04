@@ -63,6 +63,16 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
+PDF export (optional):
+
+```bash
+npx playwright install chromium
+```
+
+## Container Deploys (Docker)
+
+For local Docker or Cloud Run container notes, see `deploy/README.md`.
+
 ## Common Tasks
 
 - Start frontend and backend together: `npm run dev`

@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
 import { cacheArchidektDeckFromUrl } from './services/deck';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
@@ -180,6 +182,15 @@ export function createApp(deps: AppDeps = {}) {
       description: 'Try these example queries to test the Card Oracle Agent!'
     });
   });
+
+  const clientDistPath = path.resolve(__dirname, '../../client/dist');
+  const clientIndexPath = path.join(clientDistPath, 'index.html');
+  if (fs.existsSync(clientIndexPath)) {
+    app.use(express.static(clientDistPath));
+    app.get(/^\/(?!api(?:\/|$))(?!health(?:\/|$)).*/, (_req, res) => {
+      res.sendFile(clientIndexPath);
+    });
+  }
 
   return app;
 }
