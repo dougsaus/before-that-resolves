@@ -16,8 +16,10 @@ describeLive('live integrations', () => {
   it(
     'loads an Archidekt deck from the live API',
     async () => {
+      const conversationId = getOrCreateConversationId();
       const raw = await cacheArchidektDeckFromUrl(
-        'https://archidekt.com/decks/17352990/the_world_is_a_vampire'
+        'https://archidekt.com/decks/17352990/the_world_is_a_vampire',
+        conversationId
       );
       const deck = buildArchidektDeckData(
         raw,
@@ -55,7 +57,8 @@ describeLive('live integrations', () => {
   it(
     'runs the goldfish agent tool chain against a live model',
     async () => {
-      const agent = createGoldfishAgent();
+      const conversationId = getOrCreateConversationId();
+      const agent = createGoldfishAgent(undefined, undefined, undefined, conversationId);
       const prompt = [
         'Goldfish this Commander deck using the goldfish tools only:',
         'https://archidekt.com/decks/17352990/the_world_is_a_vampire',

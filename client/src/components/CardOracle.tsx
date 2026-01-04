@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import axios, { type AxiosRequestConfig } from 'axios';
 import { useDevMode } from '../contexts/DevModeContext';
+import { buildApiUrl } from '../utils/api';
 import { RichMTGText } from './RichMTGText';
 import { DeveloperInfo } from './DeveloperInfo';
 
@@ -169,16 +170,20 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       ]);
     }
 
+    const includeDeckUrl = options?.mode === 'analyze' || options?.mode === 'goldfish';
+    const requestDeckUrl = includeDeckUrl && deckLoaded ? deckUrl.trim() : undefined;
+
     try {
       const result = await postWithOptionalConfig(
-        'http://localhost:3001/api/agent/query',
+        buildApiUrl('/api/agent/query'),
         {
           query: text,
           devMode: isDevMode,
           conversationId,
           model,
           reasoningEffort: reasoningEffort || undefined,
-          verbosity
+          verbosity,
+          ...(requestDeckUrl ? { deckUrl: requestDeckUrl } : {})
         },
         { signal: controller.signal }
       );
@@ -229,14 +234,15 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
 
   const resetConversationState = async (options?: { preserveDeckUrl?: boolean }) => {
     try {
-      await postWithOptionalConfig('http://localhost:3001/api/agent/reset', {
+      await postWithOptionalConfig(buildApiUrl('/api/agent/reset'), {
         conversationId
       });
     } catch (resetError) {
       console.warn('Failed to reset conversation on server:', resetError);
     }
 
-    setConversationId(createConversationId());
+    const nextConversationId = createConversationId();
+    setConversationId(nextConversationId);
     setMessages([]);
     setAgentMetadata(null);
     setDeckAnalysisOptions(defaultDeckAnalysisOptions);
@@ -271,16 +277,20 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     if (!options?.preserveDeckUrl) {
       setDeckUrl('');
     }
+    return nextConversationId;
   };
 
   const handleLoadDeck = async () => {
     if (!deckUrl.trim()) return;
     setLoading(true);
 
-    await resetConversationState({ preserveDeckUrl: true });
+    const nextConversationId = await resetConversationState({ preserveDeckUrl: true });
 
     try {
-      await postWithOptionalConfig('http://localhost:3001/api/deck/cache', { deckUrl });
+      await postWithOptionalConfig(buildApiUrl('/api/deck/cache'), {
+        deckUrl,
+        conversationId: nextConversationId || conversationId
+      });
       setDeckLoaded(true);
     } catch (cacheError: unknown) {
       appendErrorMessage(getErrorMessage(cacheError, 'Failed to cache deck'));
@@ -404,7 +414,7 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
         ? `${deckSlug}.pdf`
         : 'before-that-resolves-conversation.pdf';
       const response = await postWithOptionalConfig(
-        'http://localhost:3001/api/chat/export-pdf',
+        buildApiUrl('/api/chat/export-pdf'),
         {
           title: 'Before That Resolves',
           subtitle: 'Commander Deck Analyzer & Strategy Assistant',

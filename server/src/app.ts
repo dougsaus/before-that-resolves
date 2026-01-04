@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
-import { cacheArchidektDeckFromUrl } from './services/deck';
+import { cacheArchidektDeckFromUrl, resetArchidektDeckCache } from './services/deck';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
 
@@ -15,7 +15,8 @@ type AppDeps = {
   exampleQueries?: string[];
   getOrCreateConversationId?: () => string;
   resetConversation?: (conversationId: string) => boolean;
-  cacheArchidektDeckFromUrl?: (deckUrl: string) => Promise<unknown>;
+  cacheArchidektDeckFromUrl?: (deckUrl: string, conversationId: string) => Promise<unknown>;
+  resetArchidektDeckCache?: (conversationId: string) => void;
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
 };
 
@@ -26,6 +27,7 @@ export function createApp(deps: AppDeps = {}) {
   const getConversationId = deps.getOrCreateConversationId ?? getOrCreateConversationId;
   const reset = deps.resetConversation ?? resetConversation;
   const cacheDeck = deps.cacheArchidektDeckFromUrl ?? cacheArchidektDeckFromUrl;
+  const resetDeckCache = deps.resetArchidektDeckCache ?? resetArchidektDeckCache;
   const exportChatPdf = deps.generateChatPdf ?? generateChatPdf;
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
@@ -42,7 +44,7 @@ export function createApp(deps: AppDeps = {}) {
   });
 
   app.post('/api/agent/query', async (req, res) => {
-    const { query, devMode, conversationId, model, reasoningEffort, verbosity } = req.body;
+    const { query, devMode, conversationId, model, reasoningEffort, verbosity, deckUrl } = req.body;
     const headerKey = req.header('x-openai-key');
     const authorization = req.header('authorization');
     const bearerKey = authorization?.startsWith('Bearer ')
@@ -66,8 +68,20 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     try {
-      console.log(`\n📨 Received query: "${query}" ${devMode ? '(Dev Mode)' : ''}`);
       const activeConversationId = conversationId || getConversationId();
+      if (deckUrl) {
+        try {
+          await cacheDeck(deckUrl, activeConversationId);
+        } catch (error: unknown) {
+          res.status(400).json({
+            success: false,
+            error: getErrorMessage(error, 'Failed to load deck')
+          });
+          return;
+        }
+      }
+
+      console.log(`\n📨 Received query: "${query}" ${devMode ? '(Dev Mode)' : ''}`);
 
       const result = await execute(
         query,
@@ -101,11 +115,12 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const cleared = reset(conversationId);
+    resetDeckCache(conversationId);
     res.json({ success: true, cleared });
   });
 
   app.post('/api/deck/cache', async (req, res) => {
-    const { deckUrl } = req.body;
+    const { deckUrl, conversationId } = req.body;
 
     if (!deckUrl) {
       res.status(400).json({
@@ -115,8 +130,16 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
+    if (!conversationId) {
+      res.status(400).json({
+        success: false,
+        error: 'conversationId is required'
+      });
+      return;
+    }
+
     try {
-      await cacheDeck(deckUrl);
+      await cacheDeck(deckUrl, conversationId);
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({

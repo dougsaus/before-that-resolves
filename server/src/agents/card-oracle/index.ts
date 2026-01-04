@@ -10,7 +10,7 @@ import {
   randomCommanderTool,
   checkCommanderLegalityTool
 } from '../../tools/card-tools';
-import { getArchidektDeckTool, getArchidektDeckRawTool } from '../../tools/deck-tools';
+import { createArchidektDeckTool, createArchidektDeckRawTool } from '../../tools/deck-tools';
 import { createCommanderBracketTool } from '../../tools/bracket-tool';
 import { createGoldfishAgentTool } from '../../tools/goldfish-agent-tool';
 import { extractResponseText, countToolCalls, getToolCallDetails } from '../../utils/agent-helpers';
@@ -36,8 +36,12 @@ function createCardOracleAgent(
   model?: string,
   reasoningEffort?: ReasoningEffort,
   verbosity?: TextVerbosity,
-  runConfig?: Partial<RunConfig>
+  runConfig?: Partial<RunConfig>,
+  conversationId?: string
 ) {
+  if (!conversationId) {
+    throw new Error('Conversation ID is required to create the Card Oracle agent.');
+  }
   const normalizedEffort = toModelReasoningEffort(reasoningEffort);
   const modelSettings = normalizedEffort || verbosity
     ? {
@@ -58,10 +62,10 @@ function createCardOracleAgent(
       getCardRulingsTool,
       randomCommanderTool,
       checkCommanderLegalityTool,
-      getArchidektDeckTool,
-      getArchidektDeckRawTool,
+      createArchidektDeckTool(conversationId),
+      createArchidektDeckRawTool(conversationId),
       createCommanderBracketTool(model, reasoningEffort, verbosity, runConfig),
-      createGoldfishAgentTool(model, reasoningEffort, verbosity, runConfig)
+      createGoldfishAgentTool(model, reasoningEffort, verbosity, runConfig, conversationId)
     ]
   });
 }
@@ -100,7 +104,13 @@ export async function executeCardOracle(
         maxTurns: 100
       }
       : { context: { model, reasoningEffort, verbosity }, maxTurns: 100 };
-    const cardOracleAgent = createCardOracleAgent(model, reasoningEffort, verbosity, runConfig);
+    const cardOracleAgent = createCardOracleAgent(
+      model,
+      reasoningEffort,
+      verbosity,
+      runConfig,
+      conversationId
+    );
     const runner = new Runner(runConfig);
     const result = await runner.run(
       cardOracleAgent,

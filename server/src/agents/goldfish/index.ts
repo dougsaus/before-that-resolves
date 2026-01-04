@@ -5,7 +5,7 @@ import { openaiConfig } from '../../config/openai';
 import type { ReasoningEffort, TextVerbosity } from '../card-oracle';
 import { toModelReasoningEffort } from '../card-oracle';
 import {
-  loadDeck,
+  createLoadDeckTool,
   reset,
   shuffle,
   draw,
@@ -14,7 +14,7 @@ import {
   moveById,
   findAndMoveByName
 } from '../../tools/goldfish';
-import { getArchidektDeckRawTool } from '../../tools/deck-tools';
+import { createArchidektDeckRawTool } from '../../tools/deck-tools';
 import { cardCollectionTool, searchCardTool } from '../../tools/card-tools';
 
 function loadPrompt(filename: string): string {
@@ -25,7 +25,8 @@ function loadPrompt(filename: string): string {
 export function createGoldfishAgent(
   model?: string,
   reasoningEffort?: ReasoningEffort,
-  verbosity?: TextVerbosity
+  verbosity?: TextVerbosity,
+  conversationId?: string
 ) {
   const normalizedEffort = toModelReasoningEffort(reasoningEffort);
   const modelSettings = normalizedEffort || verbosity
@@ -35,13 +36,17 @@ export function createGoldfishAgent(
     }
     : undefined;
 
+  if (!conversationId) {
+    throw new Error('Conversation ID is required to create the goldfish agent.');
+  }
+
   return new Agent({
     name: 'Commander Goldfish Expert',
     model: model || openaiConfig.model || 'gpt-4o',
     modelSettings,
     instructions: loadPrompt('goldfish.md'),
     tools: [
-      loadDeck,
+      createLoadDeckTool(conversationId),
       reset,
       shuffle,
       draw,
@@ -49,7 +54,7 @@ export function createGoldfishAgent(
       zoneContents,
       moveById,
       findAndMoveByName,
-      getArchidektDeckRawTool,
+      createArchidektDeckRawTool(conversationId),
       searchCardTool,
       cardCollectionTool
     ]

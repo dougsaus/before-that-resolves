@@ -1,0 +1,18 @@
+substitutions:
+  _IMAGE: "us-central1-docker.pkg.dev/before-that-resolves/before-that-resolves/before-that-resolves"
+  _ENABLE_PDF: "1"
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - ENABLE_PDF=${_ENABLE_PDF}
+      - -f
+      - deploy/Dockerfile
+      - -t
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}

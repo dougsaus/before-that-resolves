@@ -8,6 +8,7 @@
 
 import dotenv from 'dotenv';
 import { executeCardOracle } from './agents/card-oracle';
+import { getOrCreateConversationId } from './utils/conversation-store';
 
 // Load environment variables
 dotenv.config();
@@ -40,7 +41,16 @@ async function testCardOracle() {
     console.log('-'.repeat(40));
 
     try {
-      const result = await executeCardOracle(query, false, undefined, undefined, undefined, undefined, openAiKey);
+      const conversationId = getOrCreateConversationId();
+      const result = await executeCardOracle(
+        query,
+        false,
+        conversationId,
+        undefined,
+        undefined,
+        undefined,
+        openAiKey
+      );
 
       if (result.success && 'toolCalls' in result) {
         console.log('✅ Success!');
