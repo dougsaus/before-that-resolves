@@ -71,7 +71,7 @@ npx playwright install chromium
 
 ## Container Deploys (Docker)
 
-For local Docker or Cloud Run container notes, see `docs/container-docker.md`.
+For local Docker or Cloud Run container notes, see `deploy/README.md`.
 
 ## Common Tasks
 

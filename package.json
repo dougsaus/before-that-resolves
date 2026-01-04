@@ -19,10 +19,10 @@
     "test": "npm run test --workspace=server && npm run test --workspace=client",
     "clean": "rm -rf node_modules client/node_modules server/node_modules",
     "install-all": "npm install",
-    "container:build": "docker build -t before-that-resolves .",
-    "container:build:arm": "docker build --platform linux/arm64 -t before-that-resolves .",
-    "container:build:pdf": "docker build --build-arg ENABLE_PDF=1 -t before-that-resolves .",
-    "container:build:arm:pdf": "docker build --platform linux/arm64 --build-arg ENABLE_PDF=1 -t before-that-resolves .",
+    "container:build": "docker build -f deploy/Dockerfile -t before-that-resolves .",
+    "container:build:arm": "docker build --platform linux/arm64 -f deploy/Dockerfile -t before-that-resolves .",
+    "container:build:pdf": "docker build --build-arg ENABLE_PDF=1 -f deploy/Dockerfile -t before-that-resolves .",
+    "container:build:arm:pdf": "docker build --platform linux/arm64 --build-arg ENABLE_PDF=1 -f deploy/Dockerfile -t before-that-resolves .",
     "container:run": "docker run --rm -p 3001:3001 -e PORT=3001 before-that-resolves"
   },
   "keywords": [

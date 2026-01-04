@@ -13,7 +13,7 @@ Build the image:
 npm run container:build
 ```
 
-(Apple Silicon: `npm run container:build:arm` or `docker build --platform linux/arm64 -t before-that-resolves .`)
+(Apple Silicon: `npm run container:build:arm` or `docker build --platform linux/arm64 -f deploy/Dockerfile -t before-that-resolves .`)
 
 Run the container:
 

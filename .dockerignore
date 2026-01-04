@@ -1,12 +1,1 @@
-node_modules/
-client/node_modules/
-server/node_modules/
-dist/
-client/dist/
-server/dist/
-.git/
-.gitignore
-npm-debug.log*
-yarn.lock
-pnpm-lock.yaml
-.DS_Store
+deploy/.dockerignore
