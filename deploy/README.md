@@ -41,6 +41,15 @@ gcloud config set project before-that-resolves
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
 ```
 
+IAM roles (minimums):
+- `roles/run.admin`
+- `roles/iam.serviceAccountUser`
+- `roles/artifactregistry.writer`
+- `roles/cloudbuild.builds.editor`
+- `roles/secretmanager.admin` (or `roles/secretmanager.secretAccessor` if a secret already exists)
+
+Note: the Cloud Build service account (`PROJECT_NUMBER@cloudbuild.gserviceaccount.com`) must have `roles/artifactregistry.writer` to push images.
+
 Deploy (build + push + run):
 
 ```bash
