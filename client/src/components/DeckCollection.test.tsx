@@ -41,17 +41,17 @@ describe('DeckCollection', () => {
     expect(within(table).getByRole('button', { name: /^Commander/ })).toBeInTheDocument();
     expect(within(table).getByRole('button', { name: /^Color identity/ })).toBeInTheDocument();
 
-    let rows = screen.getAllByRole('row');
+    let rows = within(table).getAllByRole('row');
     expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
 
     await user.click(within(table).getByRole('button', { name: /^Deck/ }));
 
-    rows = screen.getAllByRole('row');
+    rows = within(table).getAllByRole('row');
     expect(within(rows[1]).getByText('Beta')).toBeInTheDocument();
 
     await user.click(within(table).getByRole('button', { name: /^Commander/ }));
 
-    rows = screen.getAllByRole('row');
+    rows = within(table).getAllByRole('row');
     expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
   });
 
@@ -92,14 +92,15 @@ describe('DeckCollection', () => {
 
     render(<DeckCollection {...defaultProps} decks={decks} onRemoveDeck={onRemoveDeck} />);
 
-    await user.click(screen.getByRole('button', { name: 'Remove Delete Me' }));
+    const table = screen.getByRole('table');
+    await user.click(within(table).getByRole('button', { name: 'Remove Delete Me' }));
     expect(screen.getByText('Remove deck?')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onRemoveDeck).not.toHaveBeenCalled();
     expect(screen.queryByText('Remove deck?')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Remove Delete Me' }));
+    await user.click(within(table).getByRole('button', { name: 'Remove Delete Me' }));
     await user.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() => {

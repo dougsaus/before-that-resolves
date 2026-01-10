@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CardOracle } from './components/CardOracle';
 import { DeckCollection } from './components/DeckCollection';
 import { DeckAuthPanel } from './components/DeckAuthPanel';
@@ -50,6 +50,7 @@ function App() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const deckCollection = useDeckCollection();
+  const mainRef = useRef<HTMLElement | null>(null);
   const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
   const supportsVerbosity = models.find((model) => model.id === selectedModel)?.verbosity ?? false;
   const effortOptions = useMemo(() => {
@@ -132,6 +133,13 @@ function App() {
     setNavOpen(false);
   };
 
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, [view]);
+
   return (
     <DevModeProvider>
       <div className="min-h-[100svh] bg-gradient-to-br from-gray-900 to-gray-800 text-white">
@@ -149,7 +157,11 @@ function App() {
               navOpen ? 'translate-x-0' : '-translate-x-full'
             } ${navCollapsed ? 'lg:w-20' : 'lg:w-64'}`}
           >
-            <div className={`flex flex-1 flex-col gap-6 px-4 py-4 sm:px-6 lg:py-6 ${navCollapsed ? 'lg:px-3' : ''}`}>
+            <div
+              className={`flex flex-1 min-h-0 flex-col gap-6 overflow-y-auto px-4 py-4 sm:px-6 lg:py-6 ${
+                navCollapsed ? 'lg:px-3' : ''
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -250,6 +262,7 @@ function App() {
 
           <div className="flex min-h-[100svh] flex-1 flex-col">
             <main
+              ref={mainRef}
               className={`flex-1 min-h-0 px-4 pb-6 pt-6 sm:px-6 ${
                 view === 'oracle' ? 'overflow-hidden' : 'overflow-auto'
               }`}
@@ -258,10 +271,16 @@ function App() {
                 <button
                   type="button"
                   onClick={() => setNavOpen(true)}
-                  className="inline-flex items-center rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:bg-gray-800"
+                  className="inline-flex items-center rounded-md border border-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800"
                 >
                   Menu
                 </button>
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-100">
+                  <span className="ms ms-planeswalker text-xl leading-none"></span>
+                  <span>Before That Resolves</span>
+                  <span className="ms ms-planeswalker text-xl leading-none"></span>
+                </div>
+                <span className="w-[3.5rem]" aria-hidden="true"></span>
               </div>
               {view === 'oracle' && (
                 <CardOracle

@@ -197,6 +197,9 @@ export function DeckCollection({
     setSortDir('asc');
   };
 
+  const sortIndicator = (key: 'name' | 'commander' | 'color') =>
+    sortKey === key ? (sortDir === 'asc' ? '^' : 'v') : null;
+
   const resetManualForm = () => {
     setManualName('');
     setManualCommander('');
@@ -306,123 +309,215 @@ export function DeckCollection({
         )}
         {decks.length > 0 && (
           <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
-            <table className="w-full table-fixed text-left text-sm text-gray-200">
-              <colgroup>
-                <col className="w-[40%]" />
-                <col className="w-[35%]" />
-                <col className="w-[20%]" />
-                <col className="w-[5%]" />
-              </colgroup>
-              <thead className="sticky top-0 z-10 bg-gray-950">
-                <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
-                  <th className="px-4 py-3 font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('name')}
-                      className="inline-flex items-center gap-2 hover:text-gray-200"
-                    >
-                      Deck
-                      {sortKey === 'name' && (
-                        <span aria-hidden="true">{sortDir === 'asc' ? '^' : 'v'}</span>
-                      )}
-                    </button>
-                  </th>
-                  <th className="border-l border-gray-800 px-4 py-3 font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('commander')}
-                      className="inline-flex items-center gap-2 hover:text-gray-200"
-                    >
-                      Commander
-                      {sortKey === 'commander' && (
-                        <span aria-hidden="true">{sortDir === 'asc' ? '^' : 'v'}</span>
-                      )}
-                    </button>
-                  </th>
-                  <th className="border-l border-gray-800 px-4 py-3 font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('color')}
-                      className="inline-flex items-center gap-2 hover:text-gray-200"
-                    >
-                      Color identity
-                      {sortKey === 'color' && (
-                        <span aria-hidden="true">{sortDir === 'asc' ? '^' : 'v'}</span>
-                      )}
-                    </button>
-                  </th>
-                  <th className="border-l border-gray-800 px-4 py-3 text-center font-semibold">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {sortedDecks.map((deck) => (
-                  <tr key={deck.id} className="align-middle">
-                    <td className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-b border-gray-800 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 sm:hidden">
+              <span className="mr-2">Sort by</span>
+              <button
+                type="button"
+                onClick={() => handleSort('name')}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  sortKey === 'name' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
+                }`}
+              >
+                Deck {sortIndicator('name') || ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSort('commander')}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  sortKey === 'commander' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
+                }`}
+              >
+                Commander {sortIndicator('commander') || ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSort('color')}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  sortKey === 'color' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
+                }`}
+              >
+                Colors {sortIndicator('color') || ''}
+              </button>
+            </div>
+            <div className="divide-y divide-gray-800 sm:hidden">
+              {sortedDecks.map((deck) => (
+                <div key={deck.id} className="flex flex-col gap-3 px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       {deck.url ? (
                         <a
                           href={deck.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="block truncate font-semibold text-cyan-300 hover:text-cyan-200"
+                          className="block truncate text-base font-semibold text-cyan-300 hover:text-cyan-200"
                         >
                           {deck.name}
                         </a>
                       ) : (
-                        <p className="truncate font-semibold text-white">{deck.name}</p>
+                        <p className="truncate text-base font-semibold text-white">{deck.name}</p>
                       )}
                       {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
-                    </td>
-                    <td className="border-l border-gray-800 px-4 py-3">
-                      <p className="truncate text-sm text-gray-200">
-                        {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
-                      </p>
-                    </td>
-                    <td className="border-l border-gray-800 px-4 py-3">
-                      {deck.colorIdentity ? (
-                        <ColorIdentityIcons colors={deck.colorIdentity} />
-                      ) : (
-                        <span className="text-sm text-gray-500">—</span>
-                      )}
-                    </td>
-                    <td className="border-l border-gray-800 px-4 py-3">
-                      <div className="flex justify-center">
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(deck)}
-                          className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
-                          aria-label={`Remove ${deck.name}`}
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="h-5 w-5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                          >
-                            <path d="M3 6h18" />
-                            <path d="M8 6V4h8v2" />
-                            <path d="M19 6l-1 14H6L5 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(deck)}
+                      className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                      aria-label={`Remove ${deck.name}`}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Commander</p>
+                    <p className="text-sm text-gray-200">
+                      {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Color identity</p>
+                    {deck.colorIdentity ? (
+                      <ColorIdentityIcons colors={deck.colorIdentity} />
+                    ) : (
+                      <span className="text-sm text-gray-500">—</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden sm:block">
+              <table className="w-full table-fixed text-left text-sm text-gray-200">
+                <colgroup>
+                  <col className="w-[40%]" />
+                  <col className="w-[35%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[5%]" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-gray-950">
+                  <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('name')}
+                        className="inline-flex items-center gap-2 hover:text-gray-200"
+                      >
+                        Deck
+                        {sortIndicator('name') && (
+                          <span aria-hidden="true">{sortIndicator('name')}</span>
+                        )}
+                      </button>
+                    </th>
+                    <th className="border-l border-gray-800 px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('commander')}
+                        className="inline-flex items-center gap-2 hover:text-gray-200"
+                      >
+                        Commander
+                        {sortIndicator('commander') && (
+                          <span aria-hidden="true">{sortIndicator('commander')}</span>
+                        )}
+                      </button>
+                    </th>
+                    <th className="border-l border-gray-800 px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('color')}
+                        className="inline-flex items-center gap-2 hover:text-gray-200"
+                      >
+                        Color identity
+                        {sortIndicator('color') && (
+                          <span aria-hidden="true">{sortIndicator('color')}</span>
+                        )}
+                      </button>
+                    </th>
+                    <th className="border-l border-gray-800 px-4 py-3 text-center font-semibold">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {sortedDecks.map((deck) => (
+                    <tr key={deck.id} className="align-middle">
+                      <td className="px-4 py-3">
+                        {deck.url ? (
+                          <a
+                            href={deck.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate font-semibold text-cyan-300 hover:text-cyan-200"
+                          >
+                            {deck.name}
+                          </a>
+                        ) : (
+                          <p className="truncate font-semibold text-white">{deck.name}</p>
+                        )}
+                        {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
+                      </td>
+                      <td className="border-l border-gray-800 px-4 py-3">
+                        <p className="truncate text-sm text-gray-200">
+                          {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
+                        </p>
+                      </td>
+                      <td className="border-l border-gray-800 px-4 py-3">
+                        {deck.colorIdentity ? (
+                          <ColorIdentityIcons colors={deck.colorIdentity} />
+                        ) : (
+                          <span className="text-sm text-gray-500">—</span>
+                        )}
+                      </td>
+                      <td className="border-l border-gray-800 px-4 py-3">
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(deck)}
+                            className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                            aria-label={`Remove ${deck.name}`}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
 
       {manualModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 px-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
           <div className="w-full max-w-xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div>
@@ -514,7 +609,7 @@ export function DeckCollection({
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 px-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
           <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div>
