@@ -134,10 +134,39 @@ export function DeckCollection({
   const [manualColor, setManualColor] = useState('');
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DeckEntry | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [sortKey, setSortKey] = useState<'name' | 'commander' | 'color'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const colorMenuRef = useRef<HTMLDivElement | null>(null);
   const colorOptions = useMemo(() => buildColorOptions(), []);
   const selectedColor = colorOptions.find((option) => option.value === manualColor) || colorOptions[0];
+  const sortedDecks = useMemo(() => {
+    const sorted = [...decks];
+    const direction = sortDir === 'asc' ? 1 : -1;
+    const getCommanderValue = (deck: DeckEntry) =>
+      deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '';
+    const getColorValue = (deck: DeckEntry) => {
+      if (!deck.colorIdentity) return '';
+      return sortColorsForDisplay(deck.colorIdentity).join('');
+    };
+    sorted.sort((a, b) => {
+      let left = '';
+      let right = '';
+      if (sortKey === 'name') {
+        left = a.name;
+        right = b.name;
+      } else if (sortKey === 'commander') {
+        left = getCommanderValue(a);
+        right = getCommanderValue(b);
+      } else {
+        left = getColorValue(a);
+        right = getColorValue(b);
+      }
+      return left.localeCompare(right, undefined, { sensitivity: 'base' }) * direction;
+    });
+    return sorted;
+  }, [decks, sortDir, sortKey]);
 
   useEffect(() => {
     if (!colorMenuOpen) return;
@@ -157,6 +186,15 @@ export function DeckCollection({
     if (!deckUrl.trim()) return;
     await onAddArchidektDeck(deckUrl.trim());
     setDeckUrl('');
+  };
+
+  const handleSort = (key: 'name' | 'commander' | 'color') => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir('asc');
   };
 
   const resetManualForm = () => {
@@ -275,8 +313,51 @@ export function DeckCollection({
                 <col className="w-[20%]" />
                 <col className="w-[5%]" />
               </colgroup>
+              <thead className="sticky top-0 z-10 bg-gray-950">
+                <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('name')}
+                      className="inline-flex items-center gap-2 hover:text-gray-200"
+                    >
+                      Deck
+                      {sortKey === 'name' && (
+                        <span aria-hidden="true">{sortDir === 'asc' ? '^' : 'v'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="border-l border-gray-800 px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('commander')}
+                      className="inline-flex items-center gap-2 hover:text-gray-200"
+                    >
+                      Commander
+                      {sortKey === 'commander' && (
+                        <span aria-hidden="true">{sortDir === 'asc' ? '^' : 'v'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="border-l border-gray-800 px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('color')}
+                      className="inline-flex items-center gap-2 hover:text-gray-200"
+                    >
+                      Color identity
+                      {sortKey === 'color' && (
+                        <span aria-hidden="true">{sortDir === 'asc' ? '^' : 'v'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="border-l border-gray-800 px-4 py-3 text-center font-semibold">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
               <tbody className="divide-y divide-gray-800">
-                {decks.map((deck) => (
+                {sortedDecks.map((deck) => (
                   <tr key={deck.id} className="align-middle">
                     <td className="px-4 py-3">
                       {deck.url ? (
@@ -293,42 +374,44 @@ export function DeckCollection({
                       )}
                       {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="border-l border-gray-800 px-4 py-3">
                       <p className="truncate text-sm text-gray-200">
                         {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
                       </p>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="border-l border-gray-800 px-4 py-3">
                       {deck.colorIdentity ? (
                         <ColorIdentityIcons colors={deck.colorIdentity} />
                       ) : (
                         <span className="text-sm text-gray-500">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 pr-6 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onRemoveDeck(deck.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
-                        aria-label={`Remove ${deck.name}`}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                    <td className="border-l border-gray-800 px-4 py-3">
+                      <div className="flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(deck)}
+                          className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                          aria-label={`Remove ${deck.name}`}
                         >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v6" />
-                          <path d="M14 11v6" />
-                        </svg>
-                      </button>
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -423,6 +506,41 @@ export function DeckCollection({
                   className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
                 >
                   {loading ? 'Saving...' : 'Add Deck'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-lg font-semibold">Remove deck?</h3>
+                <p className="text-sm text-gray-400">
+                  This will remove <span className="text-gray-200">{deleteTarget.name}</span> from your collection.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const deckId = deleteTarget.id;
+                    setDeleteTarget(null);
+                    await onRemoveDeck(deckId);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-red-500/80 text-white font-semibold hover:bg-red-500"
+                >
+                  Remove
                 </button>
               </div>
             </div>

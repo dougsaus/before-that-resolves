@@ -10,6 +10,7 @@ type GoogleUser = {
 };
 
 const GOOGLE_SCRIPT_ID = 'google-identity-service';
+const TOKEN_STORAGE_KEY = 'btr_google_id_token';
 
 let googleScriptPromise: Promise<void> | null = null;
 
@@ -65,7 +66,7 @@ export function useDeckCollection() {
     setStatusMessage(null);
   };
 
-  const loadDecks = async (token: string) => {
+  const loadDecks = async (token: string): Promise<boolean> => {
     setLoading(true);
     setAuthError(null);
     try {
@@ -80,9 +81,11 @@ export function useDeckCollection() {
       }
       setUser(payload.user || null);
       setDecks(Array.isArray(payload.decks) ? payload.decks : []);
+      return true;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to load your decks.';
       setAuthError(message);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -111,8 +114,48 @@ export function useDeckCollection() {
       return;
     }
     setIdToken(credential);
-    loadDecks(credential);
+    try {
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, credential);
+    } catch {
+      // Ignore storage errors.
+    }
+    void loadDecks(credential).then((success) => {
+      if (!success) {
+        setIdToken(null);
+        try {
+          window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+        } catch {
+          // Ignore storage errors.
+        }
+      }
+    });
   };
+
+  useEffect(() => {
+    if (!googleClientId || idToken) {
+      return;
+    }
+    let storedToken: string | null = null;
+    try {
+      storedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    } catch {
+      storedToken = null;
+    }
+    if (!storedToken) {
+      return;
+    }
+    setIdToken(storedToken);
+    void loadDecks(storedToken).then((success) => {
+      if (!success) {
+        setIdToken(null);
+        try {
+          window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+        } catch {
+          // Ignore storage errors.
+        }
+      }
+    });
+  }, [googleClientId, idToken]);
 
   useEffect(() => {
     if (!googleClientId || idToken) {
@@ -240,6 +283,11 @@ export function useDeckCollection() {
     setAuthError(null);
     setDeckError(null);
     setStatusMessage('Signed out.');
+    try {
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors.
+    }
   };
 
   return {
