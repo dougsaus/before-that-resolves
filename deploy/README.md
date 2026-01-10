@@ -68,6 +68,7 @@ Common options (environment variables):
 - `REPO` (default: `before-that-resolves`)
 - `IMAGE_NAME` (default: `before-that-resolves`)
 - `ENABLE_PDF` (default: `1`)
+- `VITE_GOOGLE_CLIENT_ID` (Google login client ID baked into the build)
 
 App env vars (Cloud Run):
 - `GOOGLE_CLIENT_ID` (required for Google login / deck collections)
