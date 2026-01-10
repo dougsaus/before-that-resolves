@@ -55,6 +55,12 @@ Deploy (build + push + run):
 deploy/cloudrun-deploy.sh
 ```
 
+One-command deploy (from repo root):
+
+```bash
+npm run deploy:cloudrun
+```
+
 Common options (environment variables):
 - `PROJECT_ID` (default: `before-that-resolves`)
 - `REGION` (default: `us-central1`)
