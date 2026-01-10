@@ -295,4 +295,37 @@ describe('app routes', () => {
       source: 'manual'
     }));
   });
+
+  it('allows manual decks without a color identity', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-101' });
+    const upsertDeckInCollection = vi.fn().mockReturnValue([
+      {
+        id: 'manual-empty',
+        name: 'No Color Deck',
+        url: null,
+        format: null,
+        commanderNames: [],
+        colorIdentity: null,
+        source: 'manual',
+        addedAt: '2025-01-04T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertDeckInCollection
+    });
+
+    const response = await request(app)
+      .post('/api/decks/manual')
+      .set('authorization', 'Bearer token-101')
+      .send({ name: 'No Color Deck' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-101', expect.objectContaining({
+      name: 'No Color Deck',
+      colorIdentity: null,
+      source: 'manual'
+    }));
+  });
 });
