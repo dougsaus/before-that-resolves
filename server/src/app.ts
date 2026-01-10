@@ -4,7 +4,9 @@ import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
-import { cacheArchidektDeckFromUrl, resetArchidektDeckCache } from './services/deck';
+import { cacheArchidektDeckFromUrl, fetchArchidektDeckSummary, resetArchidektDeckCache } from './services/deck';
+import { listDeckCollection, removeDeckFromCollection, upsertDeckInCollection } from './services/deck-collection';
+import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
 
@@ -18,6 +20,14 @@ type AppDeps = {
   cacheArchidektDeckFromUrl?: (deckUrl: string, conversationId: string) => Promise<unknown>;
   resetArchidektDeckCache?: (conversationId: string) => void;
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
+  verifyGoogleIdToken?: (token: string) => Promise<GoogleUser>;
+  fetchArchidektDeckSummary?: (deckUrl: string) => Promise<{ id: string; name: string; format: string | null; url: string }>;
+  listDeckCollection?: (userId: string) => Array<{ id: string; name: string; format: string | null; url: string; addedAt: string }>;
+  upsertDeckInCollection?: (
+    userId: string,
+    deck: { id: string; name: string; format: string | null; url: string }
+  ) => Array<{ id: string; name: string; format: string | null; url: string; addedAt: string }>;
+  removeDeckFromCollection?: (userId: string, deckId: string) => Array<{ id: string; name: string; format: string | null; url: string; addedAt: string }>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -29,11 +39,40 @@ export function createApp(deps: AppDeps = {}) {
   const cacheDeck = deps.cacheArchidektDeckFromUrl ?? cacheArchidektDeckFromUrl;
   const resetDeckCache = deps.resetArchidektDeckCache ?? resetArchidektDeckCache;
   const exportChatPdf = deps.generateChatPdf ?? generateChatPdf;
+  const verifyGoogleToken = deps.verifyGoogleIdToken ?? verifyGoogleIdToken;
+  const fetchDeckSummary = deps.fetchArchidektDeckSummary ?? fetchArchidektDeckSummary;
+  const listUserDecks = deps.listDeckCollection ?? listDeckCollection;
+  const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
+  const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
       return error.message;
     }
     return fallback;
+  };
+  const getBearerToken = (authorization?: string | null): string | null => {
+    if (!authorization) return null;
+    if (!authorization.startsWith('Bearer ')) return null;
+    return authorization.slice('Bearer '.length).trim() || null;
+  };
+  const requireGoogleUser = async (req: express.Request, res: express.Response) => {
+    const token =
+      req.header('x-google-id-token') ||
+      getBearerToken(req.header('authorization')) ||
+      '';
+    if (!token) {
+      res.status(401).json({ success: false, error: 'Google ID token is required.' });
+      return null;
+    }
+    try {
+      return await verifyGoogleToken(token);
+    } catch (error: unknown) {
+      res.status(401).json({
+        success: false,
+        error: getErrorMessage(error, 'Invalid Google ID token')
+      });
+      return null;
+    }
   };
 
   app.use(cors());
@@ -147,6 +186,56 @@ export function createApp(deps: AppDeps = {}) {
         error: getErrorMessage(error, 'Failed to cache deck')
       });
     }
+  });
+
+  app.get('/api/decks', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const decks = listUserDecks(user.id);
+    res.json({ success: true, user, decks });
+  });
+
+  app.post('/api/decks', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { deckUrl } = req.body;
+    if (!deckUrl) {
+      res.status(400).json({
+        success: false,
+        error: 'deckUrl is required'
+      });
+      return;
+    }
+
+    try {
+      const summary = await fetchDeckSummary(deckUrl);
+      const decks = addDeckToCollection(user.id, summary);
+      res.json({ success: true, user, decks });
+    } catch (error: unknown) {
+      res.status(400).json({
+        success: false,
+        error: getErrorMessage(error, 'Failed to add deck')
+      });
+    }
+  });
+
+  app.delete('/api/decks/:deckId', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { deckId } = req.params;
+    if (!deckId) {
+      res.status(400).json({
+        success: false,
+        error: 'deckId is required'
+      });
+      return;
+    }
+
+    const decks = removeDeckFromUser(user.id, deckId);
+    res.json({ success: true, user, decks });
   });
 
   app.post('/api/chat/export-pdf', async (req, res) => {

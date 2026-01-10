@@ -69,6 +69,9 @@ Common options (environment variables):
 - `IMAGE_NAME` (default: `before-that-resolves`)
 - `ENABLE_PDF` (default: `1`)
 
+App env vars (Cloud Run):
+- `GOOGLE_CLIENT_ID` (required for Google login / deck collections)
+
 The service expects the OpenAI API key to be supplied by the client (via the UI or the request headers).
 
 Verify:

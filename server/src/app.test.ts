@@ -177,4 +177,77 @@ describe('app routes', () => {
 
     expect(response.body.error).toBe('messages are required');
   });
+
+  it('requires a Google token to access deck collections', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .get('/api/decks')
+      .expect(401);
+
+    expect(response.body.error).toBe('Google ID token is required.');
+  });
+
+  it('lists decks for an authenticated user', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-123', email: 'user@test.dev' });
+    const listDeckCollection = vi.fn().mockReturnValue([
+      {
+        id: '999',
+        name: 'Test Deck',
+        url: 'https://archidekt.com/decks/999/test',
+        format: 'commander',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({ verifyGoogleIdToken, listDeckCollection });
+
+    const response = await request(app)
+      .get('/api/decks')
+      .set('authorization', 'Bearer token-123')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.user.email).toBe('user@test.dev');
+    expect(response.body.decks[0]?.name).toBe('Test Deck');
+    expect(listDeckCollection).toHaveBeenCalledWith('user-123');
+  });
+
+  it('adds a deck to the collection', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-456' });
+    const fetchArchidektDeckSummary = vi.fn().mockResolvedValue({
+      id: '123',
+      name: 'Added Deck',
+      url: 'https://archidekt.com/decks/123/added',
+      format: 'commander'
+    });
+    const upsertDeckInCollection = vi.fn().mockReturnValue([
+      {
+        id: '123',
+        name: 'Added Deck',
+        url: 'https://archidekt.com/decks/123/added',
+        format: 'commander',
+        addedAt: '2025-01-02T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      fetchArchidektDeckSummary,
+      upsertDeckInCollection
+    });
+
+    const response = await request(app)
+      .post('/api/decks')
+      .set('authorization', 'Bearer token-456')
+      .send({ deckUrl: 'https://archidekt.com/decks/123/added' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(fetchArchidektDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/123/added');
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-456', {
+      id: '123',
+      name: 'Added Deck',
+      url: 'https://archidekt.com/decks/123/added',
+      format: 'commander'
+    });
+  });
 });

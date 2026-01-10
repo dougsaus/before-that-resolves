@@ -93,6 +93,37 @@ function parseDeckId(url: string, expectedHost: string): string | null {
   }
 }
 
+async function fetchArchidektDeckById(deckId: string): Promise<ArchidektDeck> {
+  const apiUrl = `https://archidekt.com/api/decks/${deckId}/`;
+  const result = await fetchJson(apiUrl);
+
+  if (!result.ok || !result.json) {
+    throw new Error(result.error || 'Failed to load Archidekt deck');
+  }
+
+  return result.json as ArchidektDeck;
+}
+
+export async function fetchArchidektDeckSummary(deckUrl: string): Promise<{
+  id: string;
+  name: string;
+  format: string | null;
+  url: string;
+}> {
+  const deckId = parseDeckId(deckUrl, 'archidekt.com');
+  if (!deckId) {
+    throw new Error('Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}');
+  }
+
+  const deck = await fetchArchidektDeckById(deckId);
+  return {
+    id: deckId,
+    name: deck.name || 'Untitled Deck',
+    format: deck.format || deck.deckFormat || null,
+    url: deckUrl
+  };
+}
+
 export async function cacheArchidektDeckFromUrl(
   deckUrl: string,
   conversationId: string
@@ -110,14 +141,7 @@ export async function cacheArchidektDeckFromUrl(
     return cached;
   }
 
-  const apiUrl = `https://archidekt.com/api/decks/${deckId}/`;
-  const result = await fetchJson(apiUrl);
-
-  if (!result.ok || !result.json) {
-    throw new Error(result.error || 'Failed to load Archidekt deck');
-  }
-
-  const deck = result.json as ArchidektDeck;
+  const deck = await fetchArchidektDeckById(deckId);
   cache.decks.set(deckId, deck);
   cache.lastDeckId = deckId;
   cache.lastDeckUrl = deckUrl;
