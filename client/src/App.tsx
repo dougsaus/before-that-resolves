@@ -86,15 +86,15 @@ function App() {
 
   return (
     <DevModeProvider>
-      <div className="h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white flex flex-col overflow-hidden">
-        <div className="w-full max-w-none py-6 px-6 flex-1 flex flex-col min-h-0 overflow-hidden">
-          <header className="text-center mb-6 px-6">
-            <h1 className="text-5xl font-bold mb-4 flex items-center justify-center gap-3">
-              <span className="ms ms-planeswalker text-3xl"></span>
+      <div className="min-h-[100svh] bg-gradient-to-br from-gray-900 to-gray-800 text-white flex flex-col overflow-hidden lg:h-screen">
+        <div className="w-full max-w-none py-4 px-4 flex-1 flex flex-col min-h-0 overflow-hidden sm:py-6 sm:px-6">
+          <header className="text-center mb-4 px-2 sm:mb-6 sm:px-6">
+            <h1 className="text-3xl font-bold mb-3 flex flex-wrap items-center justify-center gap-3 leading-tight sm:text-4xl lg:text-5xl">
+              <span className="ms ms-planeswalker text-2xl sm:text-3xl"></span>
               Before That Resolves
-              <span className="ms ms-planeswalker text-3xl"></span>
+              <span className="ms ms-planeswalker text-2xl sm:text-3xl"></span>
             </h1>
-            <p className="text-xl text-gray-300">
+            <p className="text-base text-gray-300 sm:text-lg lg:text-xl">
               Commander Deck Analyzer & Strategy Assistant
             </p>
           </header>
