@@ -196,6 +196,9 @@ describe('app routes', () => {
         name: 'Test Deck',
         url: 'https://archidekt.com/decks/999/test',
         format: 'commander',
+        commanderNames: ['Test Commander'],
+        colorIdentity: ['W', 'B'],
+        source: 'archidekt',
         addedAt: '2025-01-01T00:00:00.000Z'
       }
     ]);
@@ -218,7 +221,9 @@ describe('app routes', () => {
       id: '123',
       name: 'Added Deck',
       url: 'https://archidekt.com/decks/123/added',
-      format: 'commander'
+      format: 'commander',
+      commanderNames: ['Edgar Markov'],
+      colorIdentity: ['W', 'B', 'R']
     });
     const upsertDeckInCollection = vi.fn().mockReturnValue([
       {
@@ -226,6 +231,9 @@ describe('app routes', () => {
         name: 'Added Deck',
         url: 'https://archidekt.com/decks/123/added',
         format: 'commander',
+        commanderNames: ['Edgar Markov'],
+        colorIdentity: ['W', 'B', 'R'],
+        source: 'archidekt',
         addedAt: '2025-01-02T00:00:00.000Z'
       }
     ]);
@@ -247,7 +255,44 @@ describe('app routes', () => {
       id: '123',
       name: 'Added Deck',
       url: 'https://archidekt.com/decks/123/added',
-      format: 'commander'
+      format: 'commander',
+      commanderNames: ['Edgar Markov'],
+      colorIdentity: ['W', 'B', 'R'],
+      source: 'archidekt'
     });
+  });
+
+  it('adds a manual deck to the collection', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-789' });
+    const upsertDeckInCollection = vi.fn().mockReturnValue([
+      {
+        id: 'manual-abc',
+        name: 'Manual Deck',
+        url: null,
+        format: null,
+        commanderNames: ['Commander One'],
+        colorIdentity: ['G'],
+        source: 'manual',
+        addedAt: '2025-01-03T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertDeckInCollection
+    });
+
+    const response = await request(app)
+      .post('/api/decks/manual')
+      .set('authorization', 'Bearer token-789')
+      .send({ name: 'Manual Deck', commanderNames: 'Commander One', colorIdentity: 'G' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-789', expect.objectContaining({
+      name: 'Manual Deck',
+      commanderNames: ['Commander One'],
+      colorIdentity: ['G'],
+      source: 'manual'
+    }));
   });
 });

@@ -1,10 +1,15 @@
 export type DeckCollectionEntry = {
   id: string;
   name: string;
-  url: string;
+  url: string | null;
   format: string | null;
+  commanderNames: string[];
+  colorIdentity: string[] | null;
+  source: 'archidekt' | 'manual';
   addedAt: string;
 };
+
+export type DeckCollectionInput = Omit<DeckCollectionEntry, 'addedAt'>;
 
 type DeckCollection = {
   decks: Map<string, DeckCollectionEntry>;
@@ -32,13 +37,16 @@ export function listDeckCollection(userId: string): DeckCollectionEntry[] {
 
 export function upsertDeckInCollection(
   userId: string,
-  deck: Omit<DeckCollectionEntry, 'addedAt'>,
+  deck: DeckCollectionInput,
   addedAt: string = new Date().toISOString()
 ): DeckCollectionEntry[] {
   const collection = getCollection(userId);
+  const existing = collection.decks.get(deck.id);
   const entry: DeckCollectionEntry = {
     ...deck,
-    addedAt
+    commanderNames: deck.commanderNames ?? [],
+    colorIdentity: deck.colorIdentity ?? null,
+    addedAt: existing?.addedAt ?? addedAt
   };
   collection.decks.set(deck.id, entry);
   return listDeckCollection(userId);

@@ -1,354 +1,432 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildApiUrl } from '../utils/api';
+import { ManaSymbol } from './ManaSymbol';
 
-type DeckEntry = {
+export type DeckEntry = {
   id: string;
   name: string;
-  url: string;
+  url: string | null;
   format: string | null;
+  commanderNames: string[];
+  colorIdentity: string[] | null;
+  source: 'archidekt' | 'manual';
   addedAt: string;
 };
 
-type GoogleUser = {
-  id: string;
-  email?: string;
-  name?: string;
-  picture?: string;
+export type ManualDeckInput = {
+  name: string;
+  commanderNames?: string;
+  colorIdentity?: string[];
 };
 
 type DeckCollectionProps = {
-  onBack?: () => void;
+  enabled: boolean;
+  idToken: string | null;
+  decks: DeckEntry[];
+  loading: boolean;
+  deckError: string | null;
+  onAddArchidektDeck: (deckUrl: string) => Promise<void>;
+  onAddManualDeck: (input: ManualDeckInput) => Promise<boolean>;
+  onRemoveDeck: (deckId: string) => Promise<void>;
 };
 
-const GOOGLE_SCRIPT_ID = 'google-identity-service';
+type ColorOption = {
+  value: string;
+  label: string;
+  colors: string[] | null;
+};
 
-let googleScriptPromise: Promise<void> | null = null;
+const WUBRG_ORDER = ['W', 'U', 'B', 'R', 'G'] as const;
+const WUBRG_INDEX: Record<(typeof WUBRG_ORDER)[number], number> = {
+  W: 0,
+  U: 1,
+  B: 2,
+  R: 3,
+  G: 4
+};
 
-function loadGoogleScript(): Promise<void> {
-  if (googleScriptPromise) {
-    return googleScriptPromise;
+const COLOR_OPTIONS: ColorOption[] = [
+  { value: '', label: 'No color identity', colors: null },
+  { value: 'C', label: 'Colorless', colors: [] },
+  { value: 'W', label: 'White', colors: ['W'] },
+  { value: 'U', label: 'Blue', colors: ['U'] },
+  { value: 'B', label: 'Black', colors: ['B'] },
+  { value: 'R', label: 'Red', colors: ['R'] },
+  { value: 'G', label: 'Green', colors: ['G'] },
+  { value: 'WU', label: 'Azorius', colors: ['W', 'U'] },
+  { value: 'UB', label: 'Dimir', colors: ['U', 'B'] },
+  { value: 'BR', label: 'Rakdos', colors: ['B', 'R'] },
+  { value: 'RG', label: 'Gruul', colors: ['R', 'G'] },
+  { value: 'GW', label: 'Selesnya', colors: ['G', 'W'] },
+  { value: 'WB', label: 'Orzhov', colors: ['W', 'B'] },
+  { value: 'UR', label: 'Izzet', colors: ['U', 'R'] },
+  { value: 'BG', label: 'Golgari', colors: ['B', 'G'] },
+  { value: 'RW', label: 'Boros', colors: ['R', 'W'] },
+  { value: 'GU', label: 'Simic', colors: ['G', 'U'] },
+  { value: 'WUB', label: 'Esper', colors: ['W', 'U', 'B'] },
+  { value: 'UBR', label: 'Grixis', colors: ['U', 'B', 'R'] },
+  { value: 'BRG', label: 'Jund', colors: ['B', 'R', 'G'] },
+  { value: 'RGW', label: 'Naya', colors: ['R', 'G', 'W'] },
+  { value: 'GWU', label: 'Bant', colors: ['G', 'W', 'U'] },
+  { value: 'WBG', label: 'Abzan', colors: ['W', 'B', 'G'] },
+  { value: 'URW', label: 'Jeskai', colors: ['U', 'R', 'W'] },
+  { value: 'BGU', label: 'Sultai', colors: ['B', 'G', 'U'] },
+  { value: 'RWB', label: 'Mardu', colors: ['R', 'W', 'B'] },
+  { value: 'GRU', label: 'Temur', colors: ['G', 'R', 'U'] },
+  { value: 'UBRG', label: 'Glint-Eye', colors: ['U', 'B', 'R', 'G'] },
+  { value: 'BRGW', label: 'Dune-Brood', colors: ['B', 'R', 'G', 'W'] },
+  { value: 'RGWU', label: 'Ink-Treader', colors: ['R', 'G', 'W', 'U'] },
+  { value: 'GWUB', label: 'Witch-Maw', colors: ['G', 'W', 'U', 'B'] },
+  { value: 'WUBR', label: 'Yore-Tiller', colors: ['W', 'U', 'B', 'R'] },
+  { value: 'WUBRG', label: 'Maelstrom', colors: ['W', 'U', 'B', 'R', 'G'] }
+];
+
+const COLOR_IDENTITY_DISPLAY_MAP: Record<string, string[]> = COLOR_OPTIONS.reduce((map, option) => {
+  if (!option.colors) {
+    return map;
   }
+  const key =
+    option.colors.length === 0
+      ? 'C'
+      : [...option.colors]
+          .sort((a, b) => WUBRG_INDEX[a as keyof typeof WUBRG_INDEX] - WUBRG_INDEX[b as keyof typeof WUBRG_INDEX])
+          .join('');
+  map[key] = option.colors;
+  return map;
+}, {} as Record<string, string[]>);
 
-  googleScriptPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById(GOOGLE_SCRIPT_ID);
-    if (existing) {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = GOOGLE_SCRIPT_ID;
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Identity Services.'));
-    document.head.appendChild(script);
-  });
-
-  return googleScriptPromise;
+function buildColorOptions(): ColorOption[] {
+  return COLOR_OPTIONS;
 }
 
-export function DeckCollection({ onBack }: DeckCollectionProps) {
-  const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
-  const buttonRef = useRef<HTMLDivElement | null>(null);
-  const [idToken, setIdToken] = useState<string | null>(null);
-  const [user, setUser] = useState<GoogleUser | null>(null);
-  const [decks, setDecks] = useState<DeckEntry[]>([]);
+function sortColorsForDisplay(colors: string[]): string[] {
+  if (colors.length === 0) return ['C'];
+  const key = [...colors]
+    .filter((color) => color !== 'C')
+    .sort((a, b) => WUBRG_INDEX[a as keyof typeof WUBRG_INDEX] - WUBRG_INDEX[b as keyof typeof WUBRG_INDEX])
+    .join('');
+  return COLOR_IDENTITY_DISPLAY_MAP[key] ?? colors;
+}
+
+function ColorIdentityIcons({ colors }: { colors: string[] }) {
+  const displayColors = sortColorsForDisplay(colors);
+  return (
+    <span className="inline-flex items-center gap-1">
+      {displayColors.map((color) => (
+        <ManaSymbol key={color} symbol={`{${color}}`} size="small" />
+      ))}
+    </span>
+  );
+}
+
+export function DeckCollection({
+  enabled,
+  idToken,
+  decks,
+  loading,
+  deckError,
+  onAddArchidektDeck,
+  onAddManualDeck,
+  onRemoveDeck
+}: DeckCollectionProps) {
   const [deckUrl, setDeckUrl] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  const headers = useMemo(() => {
-    if (!idToken) return null;
-    return {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json'
-    };
-  }, [idToken]);
-
-  const resetMessages = () => {
-    setErrorMessage(null);
-    setStatusMessage(null);
-  };
-
-  const loadDecks = async (token: string) => {
-    setLoading(true);
-    resetMessages();
-    try {
-      const response = await fetch(buildApiUrl('/api/decks'), {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || 'Unable to load your decks.');
-      }
-      setUser(payload.user || null);
-      setDecks(Array.isArray(payload.decks) ? payload.decks : []);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to load your decks.';
-      setErrorMessage(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCredentialResponse = (credential?: string) => {
-    if (!credential) {
-      setErrorMessage('Google login failed. Please try again.');
-      return;
-    }
-    setIdToken(credential);
-    loadDecks(credential);
-  };
+  const [manualName, setManualName] = useState('');
+  const [manualCommander, setManualCommander] = useState('');
+  const [manualColor, setManualColor] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const colorMenuRef = useRef<HTMLDivElement | null>(null);
+  const colorOptions = useMemo(() => buildColorOptions(), []);
+  const selectedColor = colorOptions.find((option) => option.value === manualColor) || colorOptions[0];
 
   useEffect(() => {
-    if (!googleClientId || idToken) {
-      return;
-    }
-
-    let cancelled = false;
-
-    loadGoogleScript()
-      .then(() => {
-        if (cancelled) return;
-        const googleApi = (window as { google?: any }).google;
-        if (!googleApi?.accounts?.id) {
-          setErrorMessage('Google sign-in is unavailable.');
-          return;
-        }
-        googleApi.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: (response: { credential?: string }) => {
-            handleCredentialResponse(response.credential);
-          }
-        });
-        if (buttonRef.current) {
-          buttonRef.current.innerHTML = '';
-          googleApi.accounts.id.renderButton(buttonRef.current, {
-            theme: 'outline',
-            size: 'large',
-            text: 'continue_with',
-            width: 280
-          });
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'Google sign-in failed to load.';
-        setErrorMessage(message);
-      });
-
-    return () => {
-      cancelled = true;
+    if (!colorMenuOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      if (!colorMenuRef.current) return;
+      if (!colorMenuRef.current.contains(event.target as Node)) {
+        setColorMenuOpen(false);
+      }
     };
-  }, [googleClientId, idToken]);
+    document.addEventListener('mousedown', handleClick);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+    };
+  }, [colorMenuOpen]);
 
-  const handleAddDeck = async () => {
+  const handleAddArchidektDeck = async () => {
     if (!deckUrl.trim()) return;
-    if (!headers) {
-      setErrorMessage('Sign in with Google to add decks.');
-      return;
-    }
-    setLoading(true);
-    resetMessages();
-    try {
-      const response = await fetch(buildApiUrl('/api/decks'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ deckUrl: deckUrl.trim() })
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || 'Unable to add deck.');
-      }
-      setDecks(Array.isArray(payload.decks) ? payload.decks : []);
-      setDeckUrl('');
-      setStatusMessage('Deck added.');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to add deck.';
-      setErrorMessage(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRemoveDeck = async (deckId: string) => {
-    if (!headers) {
-      setErrorMessage('Sign in with Google to manage decks.');
-      return;
-    }
-    setLoading(true);
-    resetMessages();
-    try {
-      const response = await fetch(buildApiUrl(`/api/decks/${deckId}`), {
-        method: 'DELETE',
-        headers
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || 'Unable to remove deck.');
-      }
-      setDecks(Array.isArray(payload.decks) ? payload.decks : []);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to remove deck.';
-      setErrorMessage(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignOut = () => {
-    setIdToken(null);
-    setUser(null);
-    setDecks([]);
+    await onAddArchidektDeck(deckUrl.trim());
     setDeckUrl('');
-    setStatusMessage('Signed out.');
   };
 
-  if (!googleClientId) {
+  const resetManualForm = () => {
+    setManualName('');
+    setManualCommander('');
+    setManualColor('');
+    setManualError(null);
+    setColorMenuOpen(false);
+  };
+
+  const openManualModal = () => {
+    setManualError(null);
+    setManualModalOpen(true);
+  };
+
+  const closeManualModal = () => {
+    setManualModalOpen(false);
+    setColorMenuOpen(false);
+  };
+
+  const handleAddManualDeck = async () => {
+    if (!manualName.trim()) {
+      setManualError('Deck name is required.');
+      return;
+    }
+    setManualError(null);
+    const input: ManualDeckInput = {
+      name: manualName.trim(),
+      commanderNames: manualCommander.trim() || undefined
+    };
+    if (manualColor === 'C') {
+      input.colorIdentity = [];
+    } else if (manualColor) {
+      input.colorIdentity = manualColor.split('');
+    }
+    const saved = await onAddManualDeck(input);
+    if (!saved) return;
+    resetManualForm();
+    closeManualModal();
+  };
+
+  if (!enabled) {
     return (
       <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <h2 className="text-2xl font-semibold mb-3">Your Decks</h2>
         <p className="text-gray-300">
           Google login is not configured. Set `VITE_GOOGLE_CLIENT_ID` to enable deck collections.
         </p>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-gray-200 hover:bg-gray-700"
-          >
-            Back
-          </button>
-        )}
+      </div>
+    );
+  }
+
+  if (!idToken) {
+    return (
+      <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+        <h2 className="text-2xl font-semibold mb-3">Your Decks</h2>
+        <p className="text-gray-300">
+          Sign in from the Profile page to start saving decks to your collection.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-semibold">Your Decks</h2>
-          <p className="text-gray-300">
-            Keep a personal list of Archidekt decks you want to analyze.
-          </p>
+    <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
+      <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8 flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
+          <h3 className="text-lg font-semibold">Add deck to collection</h3>
+          <label className="text-sm text-gray-300" htmlFor="deck-url-input">
+            Archidekt deck URL
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              id="deck-url-input"
+              type="url"
+              value={deckUrl}
+              onChange={(event) => setDeckUrl(event.target.value)}
+              placeholder="https://archidekt.com/decks/..."
+              className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            />
+            <button
+              type="button"
+              onClick={handleAddArchidektDeck}
+              disabled={loading}
+              className="px-5 py-3 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
+            >
+              {loading ? 'Saving...' : 'Add Deck'}
+            </button>
+          </div>
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-gray-400">Or add a manual deck entry.</span>
+            <button
+              type="button"
+              onClick={openManualModal}
+              className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+            >
+              Add Deck Manually
+            </button>
+          </div>
         </div>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-gray-200 hover:bg-gray-700"
-          >
-            Back
-          </button>
+      </div>
+
+      {deckError && <p className="text-red-400">{deckError}</p>}
+
+  <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+    {loading && <p className="text-gray-400">Loading...</p>}
+    {!loading && decks.length === 0 && (
+      <p className="text-gray-400">No decks yet. Add your first deck above.</p>
+        )}
+        {decks.length > 0 && (
+          <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
+            <table className="w-full table-fixed text-left text-sm text-gray-200">
+              <colgroup>
+                <col className="w-[40%]" />
+                <col className="w-[35%]" />
+                <col className="w-[20%]" />
+                <col className="w-[5%]" />
+              </colgroup>
+              <tbody className="divide-y divide-gray-800">
+                {decks.map((deck) => (
+                  <tr key={deck.id} className="align-middle">
+                    <td className="px-4 py-3">
+                      {deck.url ? (
+                        <a
+                          href={deck.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate font-semibold text-cyan-300 hover:text-cyan-200"
+                        >
+                          {deck.name}
+                        </a>
+                      ) : (
+                        <p className="truncate font-semibold text-white">{deck.name}</p>
+                      )}
+                      {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="truncate text-sm text-gray-200">
+                        {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {deck.colorIdentity ? (
+                        <ColorIdentityIcons colors={deck.colorIdentity} />
+                      ) : (
+                        <span className="text-sm text-gray-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 pr-6 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onRemoveDeck(deck.id)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                        aria-label={`Remove ${deck.name}`}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {!idToken && (
-        <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8 flex flex-col gap-4">
-          <p className="text-gray-200">
-            Sign in with Google to start building your deck collection.
-          </p>
-          <div ref={buttonRef} />
-          {errorMessage && <p className="text-red-400">{errorMessage}</p>}
-        </div>
-      )}
-
-      {idToken && (
-        <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8 flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              {user?.picture && (
-                <img
-                  src={user.picture}
-                  alt={user.name || 'Google profile'}
-                  className="h-12 w-12 rounded-full border border-gray-700"
-                />
-              )}
+      {manualModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
               <div>
-                <p className="text-lg font-semibold">{user?.name || 'Signed in'}</p>
-                {user?.email && <p className="text-sm text-gray-400">{user.email}</p>}
+                <h3 className="text-lg font-semibold">Add manual deck</h3>
+                <p className="text-sm text-gray-400">Enter deck details to save without Archidekt.</p>
               </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-600 text-gray-200 hover:bg-gray-800"
-            >
-              Sign out
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <label className="text-sm text-gray-300" htmlFor="deck-url-input">
-              Add an Archidekt deck URL
-            </label>
-            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="text-sm text-gray-300" htmlFor="manual-deck-name">
+                Deck name (required)
+              </label>
               <input
-                id="deck-url-input"
-                type="url"
-                value={deckUrl}
-                onChange={(event) => setDeckUrl(event.target.value)}
-                placeholder="https://archidekt.com/decks/..."
-                className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                id="manual-deck-name"
+                type="text"
+                value={manualName}
+                onChange={(event) => setManualName(event.target.value)}
+                placeholder="My custom deck"
+                className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
-              <button
-                type="button"
-                onClick={handleAddDeck}
-                disabled={loading}
-                className="px-5 py-3 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
-              >
-                {loading ? 'Saving...' : 'Add Deck'}
-              </button>
-            </div>
-            {statusMessage && <p className="text-emerald-400">{statusMessage}</p>}
-            {errorMessage && <p className="text-red-400">{errorMessage}</p>}
-          </div>
-        </div>
-      )}
-
-      {idToken && (
-        <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
-          <h3 className="text-xl font-semibold mb-4">Saved decks</h3>
-          {loading && <p className="text-gray-400">Loading...</p>}
-          {!loading && decks.length === 0 && (
-            <p className="text-gray-400">No decks yet. Add your first Archidekt deck URL above.</p>
-          )}
-          <ul className="space-y-3">
-            {decks.map((deck) => (
-              <li
-                key={deck.id}
-                className="flex flex-col gap-3 rounded-xl border border-gray-800 bg-gray-950/60 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-semibold text-white">{deck.name}</p>
-                  <p className="text-sm text-gray-400">
-                    {deck.format ? `${deck.format} · ` : ''}
-                    <a
-                      href={deck.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-cyan-400 hover:text-cyan-300"
-                    >
-                      Open on Archidekt
-                    </a>
-                  </p>
+              <label className="text-sm text-gray-300" htmlFor="manual-deck-commander">
+                Commander name(s) (optional)
+              </label>
+              <input
+                id="manual-deck-commander"
+                type="text"
+                value={manualCommander}
+                onChange={(event) => setManualCommander(event.target.value)}
+                placeholder="Atraxa, Praetors' Voice"
+                className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+              <div className="flex flex-col gap-2">
+                <span className="text-sm text-gray-300">Color identity (optional)</span>
+                <div ref={colorMenuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setColorMenuOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left text-sm text-gray-200 hover:border-gray-600"
+                  >
+                    <span className="flex items-center gap-2">
+                      {selectedColor.colors && <ColorIdentityIcons colors={selectedColor.colors} />}
+                      <span className="text-gray-300">{selectedColor.label}</span>
+                    </span>
+                    <span className="text-xs text-gray-400">{colorMenuOpen ? 'Close' : 'Select'}</span>
+                  </button>
+                  {colorMenuOpen && (
+                    <div className="absolute z-10 mt-2 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-700 bg-gray-950/95 p-2 shadow-lg">
+                      {colorOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setManualColor(option.value);
+                            setColorMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-800 ${
+                            option.value === selectedColor.value ? 'bg-gray-800 text-white' : 'text-gray-200'
+                          }`}
+                        >
+                          {option.colors && <ColorIdentityIcons colors={option.colors} />}
+                          <span className="text-gray-300">{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              </div>
+              {manualError && <p className="text-red-400">{manualError}</p>}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => handleRemoveDeck(deck.id)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-800"
+                  onClick={() => {
+                    resetManualForm();
+                    closeManualModal();
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
                 >
-                  Remove
+                  Cancel
                 </button>
-              </li>
-            ))}
-          </ul>
+                <button
+                  type="button"
+                  onClick={handleAddManualDeck}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
+                >
+                  {loading ? 'Saving...' : 'Add Deck'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

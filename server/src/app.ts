@@ -3,8 +3,10 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
 import { cacheArchidektDeckFromUrl, fetchArchidektDeckSummary, resetArchidektDeckCache } from './services/deck';
+import type { DeckCollectionInput } from './services/deck-collection';
 import { listDeckCollection, removeDeckFromCollection, upsertDeckInCollection } from './services/deck-collection';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
@@ -21,13 +23,37 @@ type AppDeps = {
   resetArchidektDeckCache?: (conversationId: string) => void;
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
   verifyGoogleIdToken?: (token: string) => Promise<GoogleUser>;
-  fetchArchidektDeckSummary?: (deckUrl: string) => Promise<{ id: string; name: string; format: string | null; url: string }>;
-  listDeckCollection?: (userId: string) => Array<{ id: string; name: string; format: string | null; url: string; addedAt: string }>;
-  upsertDeckInCollection?: (
-    userId: string,
-    deck: { id: string; name: string; format: string | null; url: string }
-  ) => Array<{ id: string; name: string; format: string | null; url: string; addedAt: string }>;
-  removeDeckFromCollection?: (userId: string, deckId: string) => Array<{ id: string; name: string; format: string | null; url: string; addedAt: string }>;
+  fetchArchidektDeckSummary?: (deckUrl: string) => Promise<{ id: string; name: string; format: string | null; url: string; commanderNames: string[]; colorIdentity: string[] }>;
+  listDeckCollection?: (userId: string) => Array<{
+    id: string;
+    name: string;
+    format: string | null;
+    url: string | null;
+    commanderNames: string[];
+    colorIdentity: string[] | null;
+    source: 'archidekt' | 'manual';
+    addedAt: string;
+  }>;
+  upsertDeckInCollection?: (userId: string, deck: DeckCollectionInput) => Array<{
+    id: string;
+    name: string;
+    format: string | null;
+    url: string | null;
+    commanderNames: string[];
+    colorIdentity: string[] | null;
+    source: 'archidekt' | 'manual';
+    addedAt: string;
+  }>;
+  removeDeckFromCollection?: (userId: string, deckId: string) => Array<{
+    id: string;
+    name: string;
+    format: string | null;
+    url: string | null;
+    commanderNames: string[];
+    colorIdentity: string[] | null;
+    source: 'archidekt' | 'manual';
+    addedAt: string;
+  }>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -49,6 +75,46 @@ export function createApp(deps: AppDeps = {}) {
       return error.message;
     }
     return fallback;
+  };
+  const parseCommanderNames = (input: unknown): string[] => {
+    if (Array.isArray(input)) {
+      return input
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean);
+    }
+    if (typeof input === 'string') {
+      return input
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+  const parseColorIdentityInput = (input: unknown): string[] | null => {
+    const order = ['W', 'U', 'B', 'R', 'G'];
+    if (input === undefined || input === null) {
+      return null;
+    }
+    if (Array.isArray(input)) {
+      const colors = input
+        .map((value) => (typeof value === 'string' ? value.trim().toUpperCase() : ''))
+        .filter((value) => ['W', 'U', 'B', 'R', 'G'].includes(value));
+      return Array.from(new Set(colors)).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    }
+    if (typeof input === 'string') {
+      const normalized = input.trim().toUpperCase();
+      if (!normalized) {
+        return null;
+      }
+      if (normalized === 'C' || normalized === 'COLORLESS') {
+        return [];
+      }
+      const colors = normalized
+        .split('')
+        .filter((value) => ['W', 'U', 'B', 'R', 'G'].includes(value));
+      return Array.from(new Set(colors)).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    }
+    return [];
   };
   const getBearerToken = (authorization?: string | null): string | null => {
     if (!authorization) return null;
@@ -211,7 +277,14 @@ export function createApp(deps: AppDeps = {}) {
 
     try {
       const summary = await fetchDeckSummary(deckUrl);
-      const decks = addDeckToCollection(user.id, summary);
+      const decks = addDeckToCollection(user.id, {
+        ...summary,
+        url: summary.url,
+        format: summary.format,
+        commanderNames: summary.commanderNames,
+        colorIdentity: summary.colorIdentity,
+        source: 'archidekt'
+      });
       res.json({ success: true, user, decks });
     } catch (error: unknown) {
       res.status(400).json({
@@ -219,6 +292,33 @@ export function createApp(deps: AppDeps = {}) {
         error: getErrorMessage(error, 'Failed to add deck')
       });
     }
+  });
+
+  app.post('/api/decks/manual', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { name, commanderNames, colorIdentity } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'name is required'
+      });
+      return;
+    }
+
+    const deck: DeckCollectionInput = {
+      id: `manual-${crypto.randomUUID()}`,
+      name: name.trim(),
+      url: null,
+      format: null,
+      commanderNames: parseCommanderNames(commanderNames),
+      colorIdentity: parseColorIdentityInput(colorIdentity),
+      source: 'manual'
+    };
+
+    const decks = addDeckToCollection(user.id, deck);
+    res.json({ success: true, user, decks });
   });
 
   app.delete('/api/decks/:deckId', async (req, res) => {
