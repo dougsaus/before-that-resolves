@@ -7,6 +7,7 @@ SERVICE_NAME=${SERVICE_NAME:-before-that-resolves}
 REPO=${REPO:-before-that-resolves}
 IMAGE_NAME=${IMAGE_NAME:-before-that-resolves}
 ENABLE_PDF=${ENABLE_PDF:-1}
+VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}"
 
 printf 'Using project %s in %s\n' "$PROJECT_ID" "$REGION"
@@ -26,7 +27,7 @@ fi
 
 gcloud builds submit \
   --config deploy/cloudbuild.yaml \
-  --substitutions=_IMAGE="${IMAGE}",_ENABLE_PDF="${ENABLE_PDF}" \
+  --substitutions=_IMAGE="${IMAGE}",_ENABLE_PDF="${ENABLE_PDF}",_VITE_GOOGLE_CLIENT_ID="${VITE_GOOGLE_CLIENT_ID}" \
   .
 
 DEPLOY_FLAGS=(

@@ -1,6 +1,7 @@
 substitutions:
   _IMAGE: "us-central1-docker.pkg.dev/before-that-resolves/before-that-resolves/before-that-resolves"
   _ENABLE_PDF: "1"
+  _VITE_GOOGLE_CLIENT_ID: ""
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -8,6 +9,8 @@ steps:
       - build
       - --build-arg
       - ENABLE_PDF=${_ENABLE_PDF}
+      - --build-arg
+      - VITE_GOOGLE_CLIENT_ID=${_VITE_GOOGLE_CLIENT_ID}
       - -f
       - deploy/Dockerfile
       - -t

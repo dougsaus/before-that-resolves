@@ -177,4 +177,155 @@ describe('app routes', () => {
 
     expect(response.body.error).toBe('messages are required');
   });
+
+  it('requires a Google token to access deck collections', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .get('/api/decks')
+      .expect(401);
+
+    expect(response.body.error).toBe('Google ID token is required.');
+  });
+
+  it('lists decks for an authenticated user', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-123', email: 'user@test.dev' });
+    const listDeckCollection = vi.fn().mockReturnValue([
+      {
+        id: '999',
+        name: 'Test Deck',
+        url: 'https://archidekt.com/decks/999/test',
+        format: 'commander',
+        commanderNames: ['Test Commander'],
+        colorIdentity: ['W', 'B'],
+        source: 'archidekt',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({ verifyGoogleIdToken, listDeckCollection });
+
+    const response = await request(app)
+      .get('/api/decks')
+      .set('authorization', 'Bearer token-123')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.user.email).toBe('user@test.dev');
+    expect(response.body.decks[0]?.name).toBe('Test Deck');
+    expect(listDeckCollection).toHaveBeenCalledWith('user-123');
+  });
+
+  it('adds a deck to the collection', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-456' });
+    const fetchArchidektDeckSummary = vi.fn().mockResolvedValue({
+      id: '123',
+      name: 'Added Deck',
+      url: 'https://archidekt.com/decks/123/added',
+      format: 'commander',
+      commanderNames: ['Edgar Markov'],
+      colorIdentity: ['W', 'B', 'R']
+    });
+    const upsertDeckInCollection = vi.fn().mockReturnValue([
+      {
+        id: '123',
+        name: 'Added Deck',
+        url: 'https://archidekt.com/decks/123/added',
+        format: 'commander',
+        commanderNames: ['Edgar Markov'],
+        colorIdentity: ['W', 'B', 'R'],
+        source: 'archidekt',
+        addedAt: '2025-01-02T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      fetchArchidektDeckSummary,
+      upsertDeckInCollection
+    });
+
+    const response = await request(app)
+      .post('/api/decks')
+      .set('authorization', 'Bearer token-456')
+      .send({ deckUrl: 'https://archidekt.com/decks/123/added' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(fetchArchidektDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/123/added');
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-456', {
+      id: '123',
+      name: 'Added Deck',
+      url: 'https://archidekt.com/decks/123/added',
+      format: 'commander',
+      commanderNames: ['Edgar Markov'],
+      colorIdentity: ['W', 'B', 'R'],
+      source: 'archidekt'
+    });
+  });
+
+  it('adds a manual deck to the collection', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-789' });
+    const upsertDeckInCollection = vi.fn().mockReturnValue([
+      {
+        id: 'manual-abc',
+        name: 'Manual Deck',
+        url: null,
+        format: null,
+        commanderNames: ['Commander One'],
+        colorIdentity: ['G'],
+        source: 'manual',
+        addedAt: '2025-01-03T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertDeckInCollection
+    });
+
+    const response = await request(app)
+      .post('/api/decks/manual')
+      .set('authorization', 'Bearer token-789')
+      .send({ name: 'Manual Deck', commanderNames: 'Commander One', colorIdentity: 'G' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-789', expect.objectContaining({
+      name: 'Manual Deck',
+      commanderNames: ['Commander One'],
+      colorIdentity: ['G'],
+      source: 'manual'
+    }));
+  });
+
+  it('allows manual decks without a color identity', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-101' });
+    const upsertDeckInCollection = vi.fn().mockReturnValue([
+      {
+        id: 'manual-empty',
+        name: 'No Color Deck',
+        url: null,
+        format: null,
+        commanderNames: [],
+        colorIdentity: null,
+        source: 'manual',
+        addedAt: '2025-01-04T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertDeckInCollection
+    });
+
+    const response = await request(app)
+      .post('/api/decks/manual')
+      .set('authorization', 'Bearer token-101')
+      .send({ name: 'No Color Deck' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-101', expect.objectContaining({
+      name: 'No Color Deck',
+      colorIdentity: null,
+      source: 'manual'
+    }));
+  });
 });

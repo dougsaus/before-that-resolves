@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildArchidektDeckData, cacheArchidektDeckFromUrl, getLastCachedArchidektDeck } from './deck';
+import {
+  buildArchidektDeckData,
+  cacheArchidektDeckFromUrl,
+  fetchArchidektDeckSummary,
+  getLastCachedArchidektDeck
+} from './deck';
 
 describe('deck service', () => {
   beforeEach(() => {
@@ -102,5 +107,26 @@ describe('deck service', () => {
 
     expect(cached?.name).toBe('Cached Deck');
     expect(cached?.cards[0]?.name).toBe('Edgar Markov');
+  });
+
+  it('ignores numeric deck format values in summaries', async () => {
+    const deckData = {
+      name: 'Numeric Format Deck',
+      deckFormat: 3,
+      cards: []
+    };
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => deckData
+    } as unknown as Response);
+
+    const summary = await fetchArchidektDeckSummary(
+      'https://archidekt.com/decks/77777/numeric'
+    );
+
+    expect(summary.format).toBeNull();
   });
 });

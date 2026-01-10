@@ -178,10 +178,13 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
   };
 
   useEffect(() => {
-    if (!isMobile || mobilePanel === 'chat') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length === 0 && !loadingMode) {
+      return;
     }
-  }, [messages.length, loading, isMobile, mobilePanel]);
+    if (!isMobile || mobilePanel === 'chat') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [messages.length, loadingMode, isMobile, mobilePanel]);
 
   const submitQuery = async (
     text: string,
