@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PostgreSqlContainer } from 'testcontainers';
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { closePool, initializeDatabase, resetPool } from './db';
 import { listDeckCollection, removeDeckFromCollection, upsertDeckInCollection, upsertUser } from './deck-collection';
 
@@ -7,7 +7,7 @@ const runIntegration = process.env.RUN_INTEGRATION_TESTS === '1';
 const integration = runIntegration ? describe : describe.skip;
 
 integration('deck collection persistence (integration)', () => {
-  let container: PostgreSqlContainer;
+  let container: StartedPostgreSqlContainer;
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer('postgres:16-alpine').start();
