@@ -7,7 +7,12 @@ import crypto from 'node:crypto';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
 import { cacheArchidektDeckFromUrl, fetchArchidektDeckSummary, resetArchidektDeckCache } from './services/deck';
 import type { DeckCollectionInput } from './services/deck-collection';
-import { listDeckCollection, removeDeckFromCollection, upsertDeckInCollection } from './services/deck-collection';
+import {
+  listDeckCollection,
+  removeDeckFromCollection,
+  upsertDeckInCollection,
+  upsertUser
+} from './services/deck-collection';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
@@ -24,7 +29,7 @@ type AppDeps = {
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
   verifyGoogleIdToken?: (token: string) => Promise<GoogleUser>;
   fetchArchidektDeckSummary?: (deckUrl: string) => Promise<{ id: string; name: string; format: string | null; url: string; commanderNames: string[]; colorIdentity: string[] }>;
-  listDeckCollection?: (userId: string) => Array<{
+  listDeckCollection?: (userId: string) => Promise<Array<{
     id: string;
     name: string;
     format: string | null;
@@ -33,8 +38,8 @@ type AppDeps = {
     colorIdentity: string[] | null;
     source: 'archidekt' | 'manual';
     addedAt: string;
-  }>;
-  upsertDeckInCollection?: (userId: string, deck: DeckCollectionInput) => Array<{
+  }>>;
+  upsertDeckInCollection?: (userId: string, deck: DeckCollectionInput) => Promise<Array<{
     id: string;
     name: string;
     format: string | null;
@@ -43,8 +48,8 @@ type AppDeps = {
     colorIdentity: string[] | null;
     source: 'archidekt' | 'manual';
     addedAt: string;
-  }>;
-  removeDeckFromCollection?: (userId: string, deckId: string) => Array<{
+  }>>;
+  removeDeckFromCollection?: (userId: string, deckId: string) => Promise<Array<{
     id: string;
     name: string;
     format: string | null;
@@ -53,7 +58,8 @@ type AppDeps = {
     colorIdentity: string[] | null;
     source: 'archidekt' | 'manual';
     addedAt: string;
-  }>;
+  }>>;
+  upsertUser?: (user: GoogleUser) => Promise<void>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -70,6 +76,7 @@ export function createApp(deps: AppDeps = {}) {
   const listUserDecks = deps.listDeckCollection ?? listDeckCollection;
   const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
   const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
+  const saveUser = deps.upsertUser ?? upsertUser;
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
       return error.message;
@@ -131,7 +138,17 @@ export function createApp(deps: AppDeps = {}) {
       return null;
     }
     try {
-      return await verifyGoogleToken(token);
+      const user = await verifyGoogleToken(token);
+      try {
+        await saveUser(user);
+      } catch (error: unknown) {
+        res.status(500).json({
+          success: false,
+          error: getErrorMessage(error, 'Failed to save user')
+        });
+        return null;
+      }
+      return user;
     } catch (error: unknown) {
       res.status(401).json({
         success: false,
@@ -258,7 +275,7 @@ export function createApp(deps: AppDeps = {}) {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
 
-    const decks = listUserDecks(user.id);
+    const decks = await listUserDecks(user.id);
     res.json({ success: true, user, decks });
   });
 
@@ -277,7 +294,7 @@ export function createApp(deps: AppDeps = {}) {
 
     try {
       const summary = await fetchDeckSummary(deckUrl);
-      const decks = addDeckToCollection(user.id, {
+      const decks = await addDeckToCollection(user.id, {
         ...summary,
         url: summary.url,
         format: summary.format,
@@ -317,7 +334,7 @@ export function createApp(deps: AppDeps = {}) {
       source: 'manual'
     };
 
-    const decks = addDeckToCollection(user.id, deck);
+    const decks = await addDeckToCollection(user.id, deck);
     res.json({ success: true, user, decks });
   });
 
@@ -334,7 +351,7 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
-    const decks = removeDeckFromUser(user.id, deckId);
+    const decks = await removeDeckFromUser(user.id, deckId);
     res.json({ success: true, user, decks });
   });
 

@@ -190,7 +190,7 @@ describe('app routes', () => {
 
   it('lists decks for an authenticated user', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-123', email: 'user@test.dev' });
-    const listDeckCollection = vi.fn().mockReturnValue([
+    const listDeckCollection = vi.fn().mockResolvedValue([
       {
         id: '999',
         name: 'Test Deck',
@@ -202,7 +202,8 @@ describe('app routes', () => {
         addedAt: '2025-01-01T00:00:00.000Z'
       }
     ]);
-    const app = createApp({ verifyGoogleIdToken, listDeckCollection });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({ verifyGoogleIdToken, listDeckCollection, upsertUser });
 
     const response = await request(app)
       .get('/api/decks')
@@ -225,7 +226,7 @@ describe('app routes', () => {
       commanderNames: ['Edgar Markov'],
       colorIdentity: ['W', 'B', 'R']
     });
-    const upsertDeckInCollection = vi.fn().mockReturnValue([
+    const upsertDeckInCollection = vi.fn().mockResolvedValue([
       {
         id: '123',
         name: 'Added Deck',
@@ -237,10 +238,12 @@ describe('app routes', () => {
         addedAt: '2025-01-02T00:00:00.000Z'
       }
     ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
       fetchArchidektDeckSummary,
-      upsertDeckInCollection
+      upsertDeckInCollection,
+      upsertUser
     });
 
     const response = await request(app)
@@ -264,7 +267,7 @@ describe('app routes', () => {
 
   it('adds a manual deck to the collection', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-789' });
-    const upsertDeckInCollection = vi.fn().mockReturnValue([
+    const upsertDeckInCollection = vi.fn().mockResolvedValue([
       {
         id: 'manual-abc',
         name: 'Manual Deck',
@@ -276,9 +279,11 @@ describe('app routes', () => {
         addedAt: '2025-01-03T00:00:00.000Z'
       }
     ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
-      upsertDeckInCollection
+      upsertDeckInCollection,
+      upsertUser
     });
 
     const response = await request(app)
@@ -298,7 +303,7 @@ describe('app routes', () => {
 
   it('allows manual decks without a color identity', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-101' });
-    const upsertDeckInCollection = vi.fn().mockReturnValue([
+    const upsertDeckInCollection = vi.fn().mockResolvedValue([
       {
         id: 'manual-empty',
         name: 'No Color Deck',
@@ -310,9 +315,11 @@ describe('app routes', () => {
         addedAt: '2025-01-04T00:00:00.000Z'
       }
     ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
-      upsertDeckInCollection
+      upsertDeckInCollection,
+      upsertUser
     });
 
     const response = await request(app)

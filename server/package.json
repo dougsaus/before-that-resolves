@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:live": "RUN_LIVE_TESTS=1 vitest run"
+    "test:live": "RUN_LIVE_TESTS=1 vitest run",
+    "test:integration": "RUN_INTEGRATION_TESTS=1 vitest run"
   },
   "dependencies": {
     "@openai/agents": "^0.3.7",
@@ -20,6 +21,7 @@
     "express": "^5.2.1",
     "marked": "^12.0.2",
     "openai": "^6.15.0",
+    "pg": "^8.13.3",
     "playwright": "^1.54.1",
     "zod": "^4.3.3"
   },
@@ -27,7 +29,9 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@eslint/js": "^9.39.2",
+    "@testcontainers/postgresql": "^10.17.1",
     "@types/node": "^25.0.3",
+    "@types/pg": "^8.10.10",
     "@types/supertest": "^6.0.3",
     "eslint": "^9.39.2",
     "globals": "^16.5.0",

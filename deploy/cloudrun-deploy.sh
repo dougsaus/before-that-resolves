@@ -8,6 +8,13 @@ REPO=${REPO:-before-that-resolves}
 IMAGE_NAME=${IMAGE_NAME:-before-that-resolves}
 ENABLE_PDF=${ENABLE_PDF:-1}
 VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+CLOUD_SQL_INSTANCE=${CLOUD_SQL_INSTANCE:-}
+DB_NAME=${DB_NAME:-btr}
+DB_USER=${DB_USER:-btr}
+DB_PASSWORD=${DB_PASSWORD:-}
+DB_HOST=${DB_HOST:-}
+DB_SSL=${DB_SSL:-false}
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}"
 
 printf 'Using project %s in %s\n' "$PROJECT_ID" "$REGION"
@@ -34,7 +41,31 @@ DEPLOY_FLAGS=(
   --image "${IMAGE}"
   --region "${REGION}"
   --allow-unauthenticated
-  --set-env-vars NODE_ENV=production
 )
+
+ENV_VARS=("NODE_ENV=production")
+
+if [[ -n "$GOOGLE_CLIENT_ID" ]]; then
+  ENV_VARS+=("GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}")
+fi
+
+if [[ -n "$CLOUD_SQL_INSTANCE" ]]; then
+  if [[ -z "$DB_HOST" ]]; then
+    DB_HOST="/cloudsql/${CLOUD_SQL_INSTANCE}"
+  fi
+  DEPLOY_FLAGS+=(--add-cloudsql-instances "${CLOUD_SQL_INSTANCE}")
+fi
+
+if [[ -n "$DB_HOST" ]]; then
+  ENV_VARS+=("DB_HOST=${DB_HOST}")
+  ENV_VARS+=("DB_NAME=${DB_NAME}")
+  ENV_VARS+=("DB_USER=${DB_USER}")
+  ENV_VARS+=("DB_PASSWORD=${DB_PASSWORD}")
+  ENV_VARS+=("DB_SSL=${DB_SSL}")
+fi
+
+if [[ "${#ENV_VARS[@]}" -gt 0 ]]; then
+  DEPLOY_FLAGS+=(--set-env-vars "$(IFS=,; echo "${ENV_VARS[*]}")")
+fi
 
 gcloud run deploy "$SERVICE_NAME" "${DEPLOY_FLAGS[@]}"
