@@ -313,12 +313,8 @@ function App() {
                 <GameLogs
                   enabled={decksEnabled}
                   idToken={deckCollection.idToken}
-                  user={deckCollection.user}
-                  authError={deckCollection.authError}
                   loading={deckCollection.loading}
                   decks={deckCollection.decks}
-                  buttonRef={deckCollection.buttonRef}
-                  onSignOut={deckCollection.signOut}
                 />
               )}
               {view === 'profile' && (
