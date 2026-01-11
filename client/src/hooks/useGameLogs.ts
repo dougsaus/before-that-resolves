@@ -33,7 +33,10 @@ type GameLogResponse = {
   error?: string;
 };
 
-export function useGameLogs(idToken: string | null) {
+export function useGameLogs(
+  idToken: string | null,
+  options: { autoLoad?: boolean } = {}
+) {
   const [logs, setLogs] = useState<GameLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,8 +77,11 @@ export function useGameLogs(idToken: string | null) {
       setLogs([]);
       return;
     }
+    if (options.autoLoad === false) {
+      return;
+    }
     void loadLogs();
-  }, [headers, loadLogs]);
+  }, [headers, loadLogs, options.autoLoad]);
 
   const addLog = useCallback(async (input: GameLogInput): Promise<boolean> => {
     if (!headers) {

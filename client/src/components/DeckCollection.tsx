@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ManaSymbol } from './ManaSymbol';
+import { useGameLogs } from '../hooks/useGameLogs';
 
 export type DeckEntry = {
   id: string;
@@ -16,6 +17,11 @@ export type ManualDeckInput = {
   name: string;
   commanderNames?: string;
   colorIdentity?: string[];
+};
+
+type OpponentForm = {
+  commander: string;
+  colorIdentity: string;
 };
 
 type DeckCollectionProps = {
@@ -135,12 +141,28 @@ export function DeckCollection({
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeckEntry | null>(null);
+  const [logTarget, setLogTarget] = useState<DeckEntry | null>(null);
+  const [logDate, setLogDate] = useState('');
+  const [logOpponentsCount, setLogOpponentsCount] = useState(1);
+  const [logOpponents, setLogOpponents] = useState<OpponentForm[]>([
+    { commander: '', colorIdentity: '' }
+  ]);
+  const [logResult, setLogResult] = useState<'win' | 'loss'>('win');
+  const [logGoodGame, setLogGoodGame] = useState(true);
+  const [logFormError, setLogFormError] = useState<string | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'commander' | 'color'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const colorMenuRef = useRef<HTMLDivElement | null>(null);
   const colorOptions = useMemo(() => buildColorOptions(), []);
   const selectedColor = colorOptions.find((option) => option.value === manualColor) || colorOptions[0];
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const {
+    addLog,
+    error: logError,
+    loading: logLoading,
+    statusMessage: logStatusMessage
+  } = useGameLogs(idToken, { autoLoad: false });
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
@@ -218,6 +240,20 @@ export function DeckCollection({
     setColorMenuOpen(false);
   };
 
+  const resetLogForm = () => {
+    setLogDate(today);
+    setLogOpponentsCount(1);
+    setLogOpponents([{ commander: '', colorIdentity: '' }]);
+    setLogResult('win');
+    setLogGoodGame(true);
+    setLogFormError(null);
+  };
+
+  const openLogModal = (deck: DeckEntry) => {
+    resetLogForm();
+    setLogTarget(deck);
+  };
+
   const handleAddManualDeck = async () => {
     if (!manualName.trim()) {
       setManualError('Deck name is required.');
@@ -237,6 +273,38 @@ export function DeckCollection({
     if (!saved) return;
     resetManualForm();
     closeManualModal();
+  };
+
+  const updateLogOpponent = (index: number, field: keyof OpponentForm, value: string) => {
+    setLogOpponents((current) => {
+      const next = [...current];
+      const target = next[index] ?? { commander: '', colorIdentity: '' };
+      next[index] = { ...target, [field]: value };
+      return next;
+    });
+  };
+
+  const handleSaveLog = async () => {
+    if (!logTarget) {
+      setLogFormError('Choose a deck to log.');
+      return;
+    }
+    setLogFormError(null);
+    const success = await addLog({
+      deckId: logTarget.id,
+      datePlayed: logDate || today,
+      opponentsCount: logOpponentsCount,
+      opponents: logOpponents.map((opponent) => ({
+        commander: opponent.commander.trim(),
+        colorIdentity: opponent.colorIdentity.trim()
+      })),
+      result: logResult,
+      goodGame: logGoodGame
+    });
+    if (success) {
+      setLogTarget(null);
+      resetLogForm();
+    }
   };
 
   if (!enabled) {
@@ -358,29 +426,52 @@ export function DeckCollection({
                       )}
                       {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(deck)}
-                      className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
-                      aria-label={`Remove ${deck.name}`}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openLogModal(deck)}
+                        className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-emerald-300"
+                        aria-label={`Log game for ${deck.name}`}
                       >
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v6" />
-                        <path d="M14 11v6" />
-                      </svg>
-                    </button>
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 8v8" />
+                          <path d="M8 12h8" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(deck)}
+                        className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                        aria-label={`Remove ${deck.name}`}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-gray-500">Commander</p>
@@ -403,9 +494,9 @@ export function DeckCollection({
               <table className="w-full table-fixed text-left text-sm text-gray-200">
                 <colgroup>
                   <col className="w-[40%]" />
-                  <col className="w-[35%]" />
+                  <col className="w-[33%]" />
                   <col className="w-[20%]" />
-                  <col className="w-[5%]" />
+                  <col className="w-[7%]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-gray-950">
                   <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
@@ -481,7 +572,28 @@ export function DeckCollection({
                         )}
                       </td>
                       <td className="border-l border-gray-800 px-4 py-3">
-                        <div className="flex justify-center">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openLogModal(deck)}
+                            className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-emerald-300"
+                            aria-label={`Log game for ${deck.name}`}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <circle cx="12" cy="12" r="9" />
+                              <path d="M12 8v8" />
+                              <path d="M8 12h8" />
+                            </svg>
+                          </button>
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(deck)}
@@ -601,6 +713,138 @@ export function DeckCollection({
                   className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
                 >
                   {loading ? 'Saving...' : 'Add Deck'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {logTarget && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
+          <div className="w-full max-w-xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">Log a game</h3>
+                  <p className="text-sm text-gray-400">{logTarget.name}</p>
+                </div>
+                {logStatusMessage && (
+                  <span className="text-xs text-emerald-300">{logStatusMessage}</span>
+                )}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm text-gray-300">
+                  Date played
+                  <input
+                    type="date"
+                    value={logDate}
+                    onChange={(event) => setLogDate(event.target.value)}
+                    className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm text-gray-300">
+                  Number of opponents
+                  <input
+                    type="number"
+                    min={0}
+                    max={6}
+                    value={logOpponentsCount}
+                    onChange={(event) => {
+                      const parsed = Number.parseInt(event.target.value, 10);
+                      const nextCount = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+                      setLogOpponentsCount(nextCount);
+                      setLogOpponents((current) => {
+                        const next = [...current];
+                        while (next.length < nextCount) {
+                          next.push({ commander: '', colorIdentity: '' });
+                        }
+                        return next.slice(0, nextCount);
+                      });
+                    }}
+                    className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+              </div>
+              {logOpponents.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-gray-300">Opponent commanders</p>
+                  {logOpponents.map((opponent, index) => (
+                    <div key={`${logTarget.id}-opponent-${index}`} className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        type="text"
+                        value={opponent.commander}
+                        onChange={(event) => updateLogOpponent(index, 'commander', event.target.value)}
+                        placeholder={`Opponent ${index + 1} commander`}
+                        className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                      <input
+                        type="text"
+                        value={opponent.colorIdentity}
+                        onChange={(event) => updateLogOpponent(index, 'colorIdentity', event.target.value)}
+                        placeholder="Color identity (WUBRG)"
+                        className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLogResult('win')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                      logResult === 'win'
+                        ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
+                        : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                    }`}
+                  >
+                    Win
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogResult('loss')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                      logResult === 'loss'
+                        ? 'border-rose-400 bg-rose-500/20 text-rose-100'
+                        : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                    }`}
+                  >
+                    Loss
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={logGoodGame}
+                    onChange={(event) => setLogGoodGame(event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Good game?
+                </label>
+              </div>
+              {(logFormError || logError) && (
+                <p className="text-xs text-red-400">{logFormError || logError}</p>
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogTarget(null);
+                    resetLogForm();
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLog}
+                  disabled={logLoading}
+                  className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
+                >
+                  {logLoading ? 'Saving...' : 'Save log'}
                 </button>
               </div>
             </div>
