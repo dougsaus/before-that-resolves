@@ -119,3 +119,55 @@ curl -s https://YOUR_SERVICE_URL/health
 ```
 
 Cloud Run sets `PORT=8080` at runtime. The container starts with `npm start` from the repo root, which launches `server/dist/index.js` and serves the built UI.
+
+## Continuous Deployment (GitHub Actions)
+
+The workflow in `.github/workflows/cd.yml` deploys on every merge to `main`.
+
+Required GitHub secrets:
+- `GCP_SA_KEY` (service account JSON for deploying to Cloud Run)
+- `GOOGLE_CLIENT_ID`
+- `VITE_GOOGLE_CLIENT_ID`
+- `CLOUD_SQL_INSTANCE` (e.g. `before-that-resolves:us-central1:btr-postgres`)
+- `DB_PASSWORD`
+
+Optional GitHub variables:
+- `GCP_PROJECT_ID` (default: `before-that-resolves`)
+- `GCP_REGION` (default: `us-central1`)
+- `GCP_SERVICE_NAME` (default: `before-that-resolves`)
+- `GCP_ARTIFACT_REPO` (default: `before-that-resolves`)
+- `GCP_IMAGE_NAME` (default: `before-that-resolves`)
+- `ENABLE_PDF` (default: `1`)
+- `DB_NAME` (default: `btr`)
+- `DB_USER` (default: `btr`)
+- `DB_SSL` (default: `false`)
+
+Version bumping is still manual. If you want versioned releases, bump `package.json` before merging to `main` (for example: `npm version patch`).
+
+### Setup (GitHub Actions)
+
+1) Create a service account with deploy permissions (one-time):
+- Roles: `roles/run.admin`, `roles/iam.serviceAccountUser`, `roles/artifactregistry.writer`, `roles/cloudbuild.builds.editor`, `roles/cloudsql.client`
+- Download a JSON key
+
+2) Store secrets/variables in GitHub (example with `gh`):
+
+```bash
+gh secret set GCP_SA_KEY -b "$(cat /path/to/deploy-cloud-run.key.json)"
+gh secret set GOOGLE_CLIENT_ID -b "YOUR_GOOGLE_CLIENT_ID"
+gh secret set VITE_GOOGLE_CLIENT_ID -b "YOUR_GOOGLE_CLIENT_ID"
+gh secret set CLOUD_SQL_INSTANCE -b "PROJECT:REGION:INSTANCE"
+gh secret set DB_PASSWORD -b "YOUR_DB_PASSWORD"
+
+gh variable set GCP_PROJECT_ID -b "before-that-resolves"
+gh variable set GCP_REGION -b "us-central1"
+gh variable set GCP_SERVICE_NAME -b "before-that-resolves"
+gh variable set GCP_ARTIFACT_REPO -b "before-that-resolves"
+gh variable set GCP_IMAGE_NAME -b "before-that-resolves"
+gh variable set ENABLE_PDF -b "1"
+gh variable set DB_NAME -b "btr"
+gh variable set DB_USER -b "btr"
+gh variable set DB_SSL -b "false"
+```
+
+After this, merges to `main` will trigger a Cloud Build + Cloud Run deploy using the same script as local deploys (`deploy/cloudrun-deploy.sh`).
