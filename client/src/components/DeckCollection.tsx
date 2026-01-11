@@ -761,7 +761,7 @@ export function DeckCollection({
                     setDeckUrl(event.target.value);
                     setDeckPreviewError(null);
                   }}
-                  placeholder="https://archidekt.com/decks/..."
+                  placeholder="https://..."
                   className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
                 <button
@@ -773,6 +773,7 @@ export function DeckCollection({
                   {deckPreviewLoading ? 'Loading...' : 'Load deck'}
                 </button>
               </div>
+              <p className="text-xs text-gray-500">Load deck supports Archidekt deck links.</p>
               <label className="text-sm text-gray-300" htmlFor="deck-name-input">
                 Deck name (required)
               </label>
