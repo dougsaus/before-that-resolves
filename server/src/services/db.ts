@@ -32,11 +32,19 @@ const schemaQueries = [
     played_at DATE NOT NULL,
     opponents_count INTEGER NOT NULL DEFAULT 0,
     opponents JSONB NOT NULL DEFAULT '[]'::jsonb,
-    result TEXT NOT NULL CHECK (result IN ('win', 'loss')),
+    result TEXT CHECK (result IN ('win', 'loss')),
     good_game BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     FOREIGN KEY (user_id, deck_id) REFERENCES decks(user_id, deck_id) ON DELETE CASCADE
   );`,
+  `DO $$
+   BEGIN
+     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'game_logs') THEN
+       ALTER TABLE game_logs ALTER COLUMN result DROP NOT NULL;
+       ALTER TABLE game_logs DROP CONSTRAINT IF EXISTS game_logs_result_check;
+       ALTER TABLE game_logs ADD CONSTRAINT game_logs_result_check CHECK (result IN ('win', 'loss'));
+     END IF;
+   END $$;`,
   `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx
     ON game_logs (user_id, played_at DESC, created_at DESC);`
 ];

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { getPool } from './db';
 
 export type GameLogOpponent = {
+  name: string | null;
   commander: string | null;
   colorIdentity: string[] | null;
 };
@@ -13,7 +14,7 @@ export type GameLogEntry = {
   playedAt: string;
   opponentsCount: number;
   opponents: GameLogOpponent[];
-  result: 'win' | 'loss';
+  result: 'win' | 'loss' | null;
   goodGame: boolean;
   createdAt: string;
 };
@@ -24,9 +25,11 @@ export type GameLogInput = {
   playedAt: string;
   opponentsCount: number;
   opponents: GameLogOpponent[];
-  result: 'win' | 'loss';
+  result: 'win' | 'loss' | null;
   goodGame: boolean;
 };
+
+export type GameLogUpdate = Omit<GameLogInput, 'deckId' | 'deckName'>;
 
 type GameLogRow = {
   id: string;
@@ -35,7 +38,7 @@ type GameLogRow = {
   played_at: string | Date;
   opponents_count: number;
   opponents: unknown;
-  result: 'win' | 'loss';
+  result: 'win' | 'loss' | null;
   good_game: boolean;
   created_at: string | Date;
 };
@@ -45,6 +48,10 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
     return null;
   }
   const record = entry as Record<string, unknown>;
+  const name =
+    typeof record.name === 'string' && record.name.trim()
+      ? record.name.trim()
+      : null;
   const commander =
     typeof record.commander === 'string' && record.commander.trim()
       ? record.commander.trim()
@@ -52,10 +59,11 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
   const colorIdentity = Array.isArray(record.colorIdentity)
     ? record.colorIdentity.filter((value): value is string => typeof value === 'string')
     : null;
-  if (!commander && (!colorIdentity || colorIdentity.length === 0)) {
+  if (!name && !commander && (!colorIdentity || colorIdentity.length === 0)) {
     return null;
   }
   return {
+    name,
     commander,
     colorIdentity: colorIdentity && colorIdentity.length > 0 ? colorIdentity : null
   };
@@ -132,6 +140,33 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       JSON.stringify(input.opponents ?? []),
       input.result,
       input.goodGame
+    ]
+  );
+  return listGameLogs(userId);
+}
+
+export async function updateGameLog(
+  userId: string,
+  logId: string,
+  input: GameLogUpdate
+): Promise<GameLogEntry[]> {
+  const db = getPool();
+  await db.query(
+    `UPDATE game_logs
+     SET played_at = $1::date,
+         opponents_count = $2,
+         opponents = $3::jsonb,
+         result = $4,
+         good_game = $5
+     WHERE user_id = $6 AND id = $7`,
+    [
+      input.playedAt,
+      input.opponentsCount,
+      JSON.stringify(input.opponents ?? []),
+      input.result,
+      input.goodGame,
+      userId,
+      logId
     ]
   );
   return listGameLogs(userId);

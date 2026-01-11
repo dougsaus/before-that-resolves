@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
 
 export type GameLogOpponent = {
+  name: string | null;
   commander: string | null;
   colorIdentity: string[] | null;
 };
@@ -13,7 +14,7 @@ export type GameLogEntry = {
   playedAt: string;
   opponentsCount: number;
   opponents: GameLogOpponent[];
-  result: 'win' | 'loss';
+  result: 'win' | 'loss' | null;
   goodGame: boolean;
   createdAt: string;
 };
@@ -22,10 +23,12 @@ export type GameLogInput = {
   deckId: string;
   datePlayed: string;
   opponentsCount: number;
-  opponents: Array<{ commander: string; colorIdentity: string }>;
-  result: 'win' | 'loss';
+  opponents: Array<{ name: string; commander: string; colorIdentity: string }>;
+  result: 'win' | 'loss' | null;
   goodGame: boolean;
 };
+
+export type GameLogUpdate = Omit<GameLogInput, 'deckId'>;
 
 type GameLogResponse = {
   success: boolean;
@@ -142,6 +145,36 @@ export function useGameLogs(
     }
   }, [headers]);
 
+  const updateLog = useCallback(async (logId: string, input: GameLogUpdate): Promise<boolean> => {
+    if (!headers) {
+      setError('Sign in with Google to edit game logs.');
+      return false;
+    }
+    setLoading(true);
+    setError(null);
+    setStatusMessage(null);
+    try {
+      const response = await fetch(buildApiUrl(`/api/game-logs/${logId}`), {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(input)
+      });
+      const payload = (await response.json()) as GameLogResponse;
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to update game log.');
+      }
+      setLogs(Array.isArray(payload.logs) ? payload.logs : []);
+      setStatusMessage('Game log updated.');
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to update game log.';
+      setError(message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [headers]);
+
   return {
     logs,
     loading,
@@ -149,6 +182,7 @@ export function useGameLogs(
     statusMessage,
     addLog,
     removeLog,
+    updateLog,
     refreshLogs: loadLogs
   };
 }

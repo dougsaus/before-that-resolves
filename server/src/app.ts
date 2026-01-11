@@ -13,8 +13,8 @@ import {
   upsertDeckInCollection,
   upsertUser
 } from './services/deck-collection';
-import type { GameLogEntry, GameLogInput } from './services/game-logs';
-import { createGameLog, listGameLogs, removeGameLog } from './services/game-logs';
+import type { GameLogEntry, GameLogInput, GameLogUpdate } from './services/game-logs';
+import { createGameLog, listGameLogs, removeGameLog, updateGameLog } from './services/game-logs';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
@@ -64,6 +64,7 @@ type AppDeps = {
   upsertUser?: (user: GoogleUser) => Promise<void>;
   listGameLogs?: (userId: string) => Promise<GameLogEntry[]>;
   createGameLog?: (userId: string, log: GameLogInput) => Promise<GameLogEntry[]>;
+  updateGameLog?: (userId: string, logId: string, log: GameLogUpdate) => Promise<GameLogEntry[]>;
   removeGameLog?: (userId: string, logId: string) => Promise<GameLogEntry[]>;
 };
 
@@ -84,6 +85,7 @@ export function createApp(deps: AppDeps = {}) {
   const saveUser = deps.upsertUser ?? upsertUser;
   const listLogs = deps.listGameLogs ?? listGameLogs;
   const createLog = deps.createGameLog ?? createGameLog;
+  const updateLog = deps.updateGameLog ?? updateGameLog;
   const deleteLog = deps.removeGameLog ?? removeGameLog;
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
@@ -150,19 +152,30 @@ export function createApp(deps: AppDeps = {}) {
     }
     return fallback;
   };
-  const parseResultInput = (input: unknown): 'win' | 'loss' => {
-    if (typeof input === 'string') {
-      return input.trim().toLowerCase() === 'win' ? 'win' : 'loss';
+  const parseResultInput = (input: unknown): 'win' | 'loss' | null => {
+    if (input === undefined || input === null || input === '') {
+      return null;
     }
-    return input === true ? 'win' : 'loss';
+    if (typeof input === 'string') {
+      const normalized = input.trim().toLowerCase();
+      if (!normalized) {
+        return null;
+      }
+      return normalized === 'win' ? 'win' : normalized === 'loss' ? 'loss' : null;
+    }
+    return input === true ? 'win' : input === false ? 'loss' : null;
   };
   const parseOpponentEntry = (
     input: unknown
-  ): { commander: string | null; colorIdentity: string[] | null } | null => {
+  ): { name: string | null; commander: string | null; colorIdentity: string[] | null } | null => {
     if (!input || typeof input !== 'object') {
       return null;
     }
     const record = input as Record<string, unknown>;
+    const name =
+      typeof record.name === 'string' && record.name.trim()
+        ? record.name.trim()
+        : null;
     const commander =
       typeof record.commander === 'string' && record.commander.trim()
         ? record.commander.trim()
@@ -175,10 +188,11 @@ export function createApp(deps: AppDeps = {}) {
           ? rawColorIdentity.length > 0
           : false;
     const parsedColorIdentity = hasColorInput ? parseColorIdentityInput(rawColorIdentity) : null;
-    if (!commander && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
+    if (!name && !commander && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
       return null;
     }
     return {
+      name,
       commander,
       colorIdentity: parsedColorIdentity
     };
@@ -189,7 +203,7 @@ export function createApp(deps: AppDeps = {}) {
     }
     return input
       .map((entry) => parseOpponentEntry(entry))
-      .filter((entry): entry is { commander: string | null; colorIdentity: string[] | null } => Boolean(entry));
+      .filter((entry): entry is { name: string | null; commander: string | null; colorIdentity: string[] | null } => Boolean(entry));
   };
   const parseOpponentsCount = (input: unknown, opponents: Array<{ commander: string | null }>) => {
     if (typeof input === 'number' && Number.isFinite(input)) {
@@ -479,6 +493,34 @@ export function createApp(deps: AppDeps = {}) {
     };
 
     const logs = await createLog(user.id, logInput);
+    res.json({ success: true, logs });
+  });
+
+  app.patch('/api/game-logs/:logId', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { logId } = req.params;
+    if (!logId) {
+      res.status(400).json({
+        success: false,
+        error: 'logId is required'
+      });
+      return;
+    }
+
+    const { datePlayed, opponentsCount, opponents, result, goodGame } = req.body ?? {};
+    const parsedOpponents = parseOpponentEntries(opponents);
+    const normalizedOpponentsCount = parseOpponentsCount(opponentsCount, parsedOpponents);
+    const logUpdate: GameLogUpdate = {
+      playedAt: normalizeDateInput(datePlayed),
+      opponentsCount: normalizedOpponentsCount,
+      opponents: parsedOpponents,
+      result: parseResultInput(result),
+      goodGame: parseBooleanInput(goodGame)
+    };
+
+    const logs = await updateLog(user.id, logId, logUpdate);
     res.json({ success: true, logs });
   });
 

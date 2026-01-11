@@ -357,7 +357,7 @@ describe('app routes', () => {
         playedAt: '2025-02-14',
         opponentsCount: 2,
         opponents: [],
-        result: 'win',
+        result: null,
         goodGame: true,
         createdAt: '2025-02-14T00:00:00.000Z'
       }
@@ -402,7 +402,7 @@ describe('app routes', () => {
             colorIdentity: ['W', 'B', 'G']
           }
         ],
-        result: 'win',
+        result: null,
         goodGame: true,
         createdAt: '2025-02-14T00:00:00.000Z'
       }
@@ -427,7 +427,7 @@ describe('app routes', () => {
             colorIdentity: 'WBG'
           }
         ],
-        result: 'win',
+        result: null,
         goodGame: true
       })
       .expect(200);
@@ -440,12 +440,56 @@ describe('app routes', () => {
       opponentsCount: 2,
       opponents: [
         {
+          name: null,
           commander: 'Ghave, Guru of Spores',
           colorIdentity: ['W', 'B', 'G']
         }
       ],
-      result: 'win',
+      result: null,
       goodGame: true
+    }));
+  });
+
+  it('updates a game log', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-999' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const updateGameLog = vi.fn().mockResolvedValue([
+      {
+        id: 'log-5',
+        deckId: 'deck-1',
+        deckName: 'Esper Knights',
+        playedAt: '2025-02-15',
+        opponentsCount: 3,
+        opponents: [],
+        result: 'win',
+        goodGame: false,
+        createdAt: '2025-02-14T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertUser,
+      updateGameLog
+    });
+
+    const response = await request(app)
+      .patch('/api/game-logs/log-5')
+      .set('authorization', 'Bearer token-999')
+      .send({
+        datePlayed: '2025-02-15',
+        opponentsCount: 3,
+        opponents: [],
+        result: 'win',
+        goodGame: false
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(updateGameLog).toHaveBeenCalledWith('user-999', 'log-5', expect.objectContaining({
+      playedAt: '2025-02-15',
+      opponentsCount: 3,
+      result: 'win',
+      goodGame: false
     }));
   });
 });

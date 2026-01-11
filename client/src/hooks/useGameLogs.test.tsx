@@ -28,29 +28,29 @@ describe('useGameLogs', () => {
             playedAt: '2025-02-14',
             opponentsCount: 2,
             opponents: [],
-            result: 'win',
-            goodGame: true,
-            createdAt: '2025-02-14T00:00:00.000Z'
-          }
-        ]
+              result: null,
+              goodGame: true,
+              createdAt: '2025-02-14T00:00:00.000Z'
+            }
+          ]
       })
     });
 
     const { result } = renderHook(() => useGameLogs('token-123'));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        buildApiUrl('/api/game-logs'),
-        expect.objectContaining({
-          headers: {
-            Authorization: 'Bearer token-123',
-            'Content-Type': 'application/json'
-          }
-        })
-      );
+      expect(result.current.logs).toHaveLength(1);
     });
 
-    expect(result.current.logs).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      buildApiUrl('/api/game-logs'),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer token-123',
+          'Content-Type': 'application/json'
+        }
+      })
+    );
   });
 
   it('adds a log and updates the list', async () => {
@@ -71,7 +71,7 @@ describe('useGameLogs', () => {
               playedAt: '2025-03-01',
               opponentsCount: 1,
               opponents: [],
-              result: 'loss',
+              result: null,
               goodGame: false,
               createdAt: '2025-03-01T00:00:00.000Z'
             }
@@ -90,8 +90,8 @@ describe('useGameLogs', () => {
         deckId: 'deck-2',
         datePlayed: '2025-03-01',
         opponentsCount: 1,
-        opponents: [{ commander: 'Atraxa', colorIdentity: 'WUBG' }],
-        result: 'loss',
+        opponents: [{ name: 'Player 2', commander: 'Atraxa', colorIdentity: 'WUBG' }],
+        result: null,
         goodGame: false
       });
     });
@@ -103,5 +103,69 @@ describe('useGameLogs', () => {
       })
     );
     expect(result.current.logs).toHaveLength(1);
+  });
+
+  it('updates a log and refreshes results', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          logs: [
+            {
+              id: 'log-3',
+              deckId: 'deck-3',
+              deckName: 'Third Deck',
+              playedAt: '2025-03-02',
+              opponentsCount: 3,
+              opponents: [],
+              result: null,
+              goodGame: false,
+              createdAt: '2025-03-02T00:00:00.000Z'
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          logs: [
+            {
+              id: 'log-3',
+              deckId: 'deck-3',
+              deckName: 'Third Deck',
+              playedAt: '2025-03-02',
+              opponentsCount: 3,
+              opponents: [],
+              result: 'win',
+              goodGame: true,
+              createdAt: '2025-03-02T00:00:00.000Z'
+            }
+          ]
+        })
+      });
+
+    const { result } = renderHook(() => useGameLogs('token-789'));
+
+    await waitFor(() => {
+      expect(result.current.logs).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.updateLog('log-3', {
+        datePlayed: '2025-03-02',
+        opponentsCount: 3,
+        opponents: [],
+        result: 'win',
+        goodGame: true
+      });
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      buildApiUrl('/api/game-logs/log-3'),
+      expect.objectContaining({ method: 'PATCH' })
+    );
+    expect(result.current.logs[0]?.result).toBe('win');
   });
 });
