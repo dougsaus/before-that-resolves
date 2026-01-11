@@ -8,7 +8,8 @@ type GameLogsProps = {
 };
 
 function formatDate(value: string): string {
-  const parsed = new Date(value);
+  // Append time to treat date-only strings as local time, not UTC
+  const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`);
   if (Number.isNaN(parsed.valueOf())) {
     return value;
   }
