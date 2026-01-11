@@ -314,6 +314,7 @@ function App() {
                     setPendingDeckUrl(deckUrl);
                     setView('oracle');
                   }}
+                  onRefreshDecks={deckCollection.refreshDecks}
                 />
               )}
               {view === 'logs' && (

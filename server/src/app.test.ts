@@ -203,7 +203,8 @@ describe('app routes', () => {
       }
     ]);
     const upsertUser = vi.fn().mockResolvedValue(undefined);
-    const app = createApp({ verifyGoogleIdToken, listDeckCollection, upsertUser });
+    const getDeckStats = vi.fn().mockResolvedValue(new Map());
+    const app = createApp({ verifyGoogleIdToken, listDeckCollection, upsertUser, getDeckStats });
 
     const response = await request(app)
       .get('/api/decks')
@@ -213,7 +214,72 @@ describe('app routes', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.user.email).toBe('user@test.dev');
     expect(response.body.decks[0]?.name).toBe('Test Deck');
+    expect(response.body.decks[0]?.stats).toBe(null);
     expect(listDeckCollection).toHaveBeenCalledWith('user-123');
+    expect(getDeckStats).toHaveBeenCalledWith('user-123');
+  });
+
+  it('includes deck stats when available', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-123', email: 'user@test.dev' });
+    const listDeckCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-with-stats',
+        name: 'Active Deck',
+        url: null,
+        format: 'commander',
+        commanderNames: ['Test Commander'],
+        colorIdentity: ['U', 'R'],
+        source: 'manual',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      },
+      {
+        id: 'deck-no-stats',
+        name: 'New Deck',
+        url: null,
+        format: null,
+        commanderNames: [],
+        colorIdentity: null,
+        source: 'manual',
+        addedAt: '2025-01-02T00:00:00.000Z'
+      }
+    ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getDeckStats = vi.fn().mockResolvedValue(
+      new Map([
+        [
+          'deck-with-stats',
+          {
+            deckId: 'deck-with-stats',
+            totalGames: 10,
+            wins: 6,
+            losses: 4,
+            winRate: 0.6,
+            lastPlayed: '2025-06-15'
+          }
+        ]
+      ])
+    );
+    const app = createApp({ verifyGoogleIdToken, listDeckCollection, upsertUser, getDeckStats });
+
+    const response = await request(app)
+      .get('/api/decks')
+      .set('authorization', 'Bearer token-123')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.decks).toHaveLength(2);
+
+    const deckWithStats = response.body.decks.find((d: { id: string }) => d.id === 'deck-with-stats');
+    expect(deckWithStats.stats).toEqual({
+      totalGames: 10,
+      wins: 6,
+      losses: 4,
+      winRate: 0.6,
+      lastPlayed: '2025-06-15'
+    });
+
+    const deckNoStats = response.body.decks.find((d: { id: string }) => d.id === 'deck-no-stats');
+    expect(deckNoStats.stats).toBe(null);
   });
 
   it('adds a deck to the collection', async () => {
