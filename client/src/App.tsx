@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CardOracle } from './components/CardOracle';
 import { DeckCollection } from './components/DeckCollection';
 import { DeckAuthPanel } from './components/DeckAuthPanel';
+import { GameLogs } from './components/GameLogs';
 import { DevModeProvider } from './contexts/DevModeContext';
 import { DevPanel } from './components/DevPanel';
 import { useDeckCollection } from './hooks/useDeckCollection';
@@ -12,10 +13,10 @@ const reasoningOptions = {
   'gpt-5.2': ['low', 'medium', 'high']
 } as const;
 
-type AppView = 'oracle' | 'decks' | 'profile';
+type AppView = 'oracle' | 'decks' | 'logs' | 'profile';
 
 type NavItem = {
-  id: 'oracle' | 'decks';
+  id: 'oracle' | 'decks' | 'logs';
   label: string;
   shortLabel: string;
   description: string;
@@ -122,6 +123,12 @@ function App() {
       label: 'Decks',
       shortLabel: 'Decks',
       description: 'Save Archidekt lists to revisit later.'
+    },
+    {
+      id: 'logs',
+      label: 'Game Logs',
+      shortLabel: 'Logs',
+      description: 'Track results for decks in your collection.'
     }
   ];
   const decksEnabled = Boolean(deckCollection.googleClientId);
@@ -300,6 +307,18 @@ function App() {
                   onAddArchidektDeck={deckCollection.addArchidektDeck}
                   onAddManualDeck={deckCollection.addManualDeck}
                   onRemoveDeck={deckCollection.removeDeck}
+                />
+              )}
+              {view === 'logs' && (
+                <GameLogs
+                  enabled={decksEnabled}
+                  idToken={deckCollection.idToken}
+                  user={deckCollection.user}
+                  authError={deckCollection.authError}
+                  loading={deckCollection.loading}
+                  decks={deckCollection.decks}
+                  buttonRef={deckCollection.buttonRef}
+                  onSignOut={deckCollection.signOut}
                 />
               )}
               {view === 'profile' && (

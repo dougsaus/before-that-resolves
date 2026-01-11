@@ -13,6 +13,8 @@ import {
   upsertDeckInCollection,
   upsertUser
 } from './services/deck-collection';
+import type { GameLogEntry, GameLogInput } from './services/game-logs';
+import { createGameLog, listGameLogs, removeGameLog } from './services/game-logs';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
@@ -60,6 +62,9 @@ type AppDeps = {
     addedAt: string;
   }>>;
   upsertUser?: (user: GoogleUser) => Promise<void>;
+  listGameLogs?: (userId: string) => Promise<GameLogEntry[]>;
+  createGameLog?: (userId: string, log: GameLogInput) => Promise<GameLogEntry[]>;
+  removeGameLog?: (userId: string, logId: string) => Promise<GameLogEntry[]>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -77,6 +82,9 @@ export function createApp(deps: AppDeps = {}) {
   const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
   const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
   const saveUser = deps.upsertUser ?? upsertUser;
+  const listLogs = deps.listGameLogs ?? listGameLogs;
+  const createLog = deps.createGameLog ?? createGameLog;
+  const deleteLog = deps.removeGameLog ?? removeGameLog;
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
       return error.message;
@@ -122,6 +130,78 @@ export function createApp(deps: AppDeps = {}) {
       return Array.from(new Set(colors)).sort((a, b) => order.indexOf(a) - order.indexOf(b));
     }
     return [];
+  };
+  const normalizeDateInput = (input: unknown): string => {
+    if (input instanceof Date) {
+      return input.toISOString().slice(0, 10);
+    }
+    if (typeof input === 'string') {
+      const parsed = new Date(input);
+      if (!Number.isNaN(parsed.valueOf())) {
+        return parsed.toISOString().slice(0, 10);
+      }
+    }
+    return new Date().toISOString().slice(0, 10);
+  };
+  const parseBooleanInput = (input: unknown, fallback = false): boolean => {
+    if (typeof input === 'boolean') return input;
+    if (typeof input === 'string') {
+      return input.trim().toLowerCase() === 'true';
+    }
+    return fallback;
+  };
+  const parseResultInput = (input: unknown): 'win' | 'loss' => {
+    if (typeof input === 'string') {
+      return input.trim().toLowerCase() === 'win' ? 'win' : 'loss';
+    }
+    return input === true ? 'win' : 'loss';
+  };
+  const parseOpponentEntry = (
+    input: unknown
+  ): { commander: string | null; colorIdentity: string[] | null } | null => {
+    if (!input || typeof input !== 'object') {
+      return null;
+    }
+    const record = input as Record<string, unknown>;
+    const commander =
+      typeof record.commander === 'string' && record.commander.trim()
+        ? record.commander.trim()
+        : null;
+    const rawColorIdentity = record.colorIdentity;
+    const hasColorInput =
+      typeof rawColorIdentity === 'string'
+        ? rawColorIdentity.trim().length > 0
+        : Array.isArray(rawColorIdentity)
+          ? rawColorIdentity.length > 0
+          : false;
+    const parsedColorIdentity = hasColorInput ? parseColorIdentityInput(rawColorIdentity) : null;
+    if (!commander && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
+      return null;
+    }
+    return {
+      commander,
+      colorIdentity: parsedColorIdentity
+    };
+  };
+  const parseOpponentEntries = (input: unknown) => {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+    return input
+      .map((entry) => parseOpponentEntry(entry))
+      .filter((entry): entry is { commander: string | null; colorIdentity: string[] | null } => Boolean(entry));
+  };
+  const parseOpponentsCount = (input: unknown, opponents: Array<{ commander: string | null }>) => {
+    if (typeof input === 'number' && Number.isFinite(input)) {
+      return Math.max(0, Math.floor(input));
+    }
+    if (typeof input === 'string' && input.trim()) {
+      const parsed = Number.parseInt(input, 10);
+      if (!Number.isNaN(parsed)) {
+        return Math.max(0, parsed);
+      }
+    }
+    return opponents.length;
   };
   const getBearerToken = (authorization?: string | null): string | null => {
     if (!authorization) return null;
@@ -353,6 +433,70 @@ export function createApp(deps: AppDeps = {}) {
 
     const decks = await removeDeckFromUser(user.id, deckId);
     res.json({ success: true, user, decks });
+  });
+
+  app.get('/api/game-logs', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const logs = await listLogs(user.id);
+    res.json({ success: true, logs });
+  });
+
+  app.post('/api/game-logs', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { deckId, datePlayed, opponentsCount, opponents, result, goodGame } = req.body ?? {};
+    if (!deckId || typeof deckId !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'deckId is required'
+      });
+      return;
+    }
+
+    const decks = await listUserDecks(user.id);
+    const deck = decks.find((entry) => entry.id === deckId);
+    if (!deck) {
+      res.status(400).json({
+        success: false,
+        error: 'Deck not found in your collection'
+      });
+      return;
+    }
+
+    const parsedOpponents = parseOpponentEntries(opponents);
+    const normalizedOpponentsCount = parseOpponentsCount(opponentsCount, parsedOpponents);
+    const logInput: GameLogInput = {
+      deckId: deck.id,
+      deckName: deck.name,
+      playedAt: normalizeDateInput(datePlayed),
+      opponentsCount: normalizedOpponentsCount,
+      opponents: parsedOpponents,
+      result: parseResultInput(result),
+      goodGame: parseBooleanInput(goodGame)
+    };
+
+    const logs = await createLog(user.id, logInput);
+    res.json({ success: true, logs });
+  });
+
+  app.delete('/api/game-logs/:logId', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { logId } = req.params;
+    if (!logId) {
+      res.status(400).json({
+        success: false,
+        error: 'logId is required'
+      });
+      return;
+    }
+
+    const logs = await deleteLog(user.id, logId);
+    res.json({ success: true, logs });
   });
 
   app.post('/api/chat/export-pdf', async (req, res) => {

@@ -1,0 +1,148 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { buildApiUrl } from '../utils/api';
+
+export type GameLogOpponent = {
+  commander: string | null;
+  colorIdentity: string[] | null;
+};
+
+export type GameLogEntry = {
+  id: string;
+  deckId: string;
+  deckName: string;
+  playedAt: string;
+  opponentsCount: number;
+  opponents: GameLogOpponent[];
+  result: 'win' | 'loss';
+  goodGame: boolean;
+  createdAt: string;
+};
+
+export type GameLogInput = {
+  deckId: string;
+  datePlayed: string;
+  opponentsCount: number;
+  opponents: Array<{ commander: string; colorIdentity: string }>;
+  result: 'win' | 'loss';
+  goodGame: boolean;
+};
+
+type GameLogResponse = {
+  success: boolean;
+  logs?: GameLogEntry[];
+  error?: string;
+};
+
+export function useGameLogs(idToken: string | null) {
+  const [logs, setLogs] = useState<GameLogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const headers = useMemo(() => {
+    if (!idToken) return null;
+    return {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json'
+    };
+  }, [idToken]);
+
+  const loadLogs = useCallback(async () => {
+    if (!headers) {
+      setLogs([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(buildApiUrl('/api/game-logs'), { headers });
+      const payload = (await response.json()) as GameLogResponse;
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to load game logs.');
+      }
+      setLogs(Array.isArray(payload.logs) ? payload.logs : []);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to load game logs.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [headers]);
+
+  useEffect(() => {
+    if (!headers) {
+      setLogs([]);
+      return;
+    }
+    void loadLogs();
+  }, [headers, loadLogs]);
+
+  const addLog = useCallback(async (input: GameLogInput): Promise<boolean> => {
+    if (!headers) {
+      setError('Sign in with Google to add game logs.');
+      return false;
+    }
+    setLoading(true);
+    setError(null);
+    setStatusMessage(null);
+    try {
+      const response = await fetch(buildApiUrl('/api/game-logs'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(input)
+      });
+      const payload = (await response.json()) as GameLogResponse;
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to add game log.');
+      }
+      setLogs(Array.isArray(payload.logs) ? payload.logs : []);
+      setStatusMessage('Game log saved.');
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to add game log.';
+      setError(message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [headers]);
+
+  const removeLog = useCallback(async (logId: string): Promise<boolean> => {
+    if (!headers) {
+      setError('Sign in with Google to remove game logs.');
+      return false;
+    }
+    setLoading(true);
+    setError(null);
+    setStatusMessage(null);
+    try {
+      const response = await fetch(buildApiUrl(`/api/game-logs/${logId}`), {
+        method: 'DELETE',
+        headers
+      });
+      const payload = (await response.json()) as GameLogResponse;
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to remove game log.');
+      }
+      setLogs(Array.isArray(payload.logs) ? payload.logs : []);
+      setStatusMessage('Game log removed.');
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to remove game log.';
+      setError(message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [headers]);
+
+  return {
+    logs,
+    loading,
+    error,
+    statusMessage,
+    addLog,
+    removeLog,
+    refreshLogs: loadLogs
+  };
+}
