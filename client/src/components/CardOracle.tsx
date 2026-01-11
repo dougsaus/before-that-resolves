@@ -25,11 +25,20 @@ type CardOracleProps = {
   reasoningEffort?: 'low' | 'medium' | 'high';
   verbosity?: 'low' | 'medium' | 'high';
   modelControls?: React.ReactNode;
+  initialDeckUrl?: string;
+  onInitialDeckUrlConsumed?: () => void;
 };
 
 type MobilePanel = 'chat' | 'deck' | 'ai';
 
-export function CardOracle({ model, reasoningEffort, verbosity, modelControls }: CardOracleProps) {
+export function CardOracle({
+  model,
+  reasoningEffort,
+  verbosity,
+  modelControls,
+  initialDeckUrl,
+  onInitialDeckUrlConsumed
+}: CardOracleProps) {
   const defaultDeckAnalysisOptions = {
     summary: true,
     winCons: true,
@@ -317,16 +326,16 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
     return nextConversationId;
   };
 
-  const handleLoadDeck = async () => {
-    const trimmedDeckUrl = deckUrl.trim();
-    if (!trimmedDeckUrl) return;
+  const loadDeckFromUrl = async (url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
     setLoading(true);
 
     const nextConversationId = await resetConversationState({ preserveDeckUrl: true });
 
     try {
       await postWithOptionalConfig(buildApiUrl('/api/deck/cache'), {
-        deckUrl: trimmedDeckUrl,
+        deckUrl: trimmedUrl,
         conversationId: nextConversationId || conversationId
       });
       setDeckLoaded(true);
@@ -336,6 +345,8 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       setLoading(false);
     }
   };
+
+  const handleLoadDeck = () => loadDeckFromUrl(deckUrl);
 
   const handleAnalyzeDeck = async () => {
     if (!deckUrl.trim() || !deckLoaded) return;
@@ -475,6 +486,20 @@ export function CardOracle({ model, reasoningEffort, verbosity, modelControls }:
       setExporting(false);
     }
   };
+
+  // Use refs for stable callback references to avoid stale closures
+  const loadDeckFromUrlRef = useRef(loadDeckFromUrl);
+  loadDeckFromUrlRef.current = loadDeckFromUrl;
+  const onInitialDeckUrlConsumedRef = useRef(onInitialDeckUrlConsumed);
+  onInitialDeckUrlConsumedRef.current = onInitialDeckUrlConsumed;
+
+  useEffect(() => {
+    if (initialDeckUrl) {
+      setDeckUrl(initialDeckUrl);
+      loadDeckFromUrlRef.current(initialDeckUrl);
+      onInitialDeckUrlConsumedRef.current?.();
+    }
+  }, [initialDeckUrl]);
 
   const deckPanelContent = (
     <>
