@@ -1,6 +1,63 @@
 import { z } from 'zod';
 import { tool } from '@openai/agents';
 import { scryfallService } from '../services/scryfall';
+import type { Card, CardFace } from '../types/shared';
+
+type ToolCardFace = {
+  name?: string;
+  manaCost?: string;
+  type?: string;
+  oracleText?: string;
+  colors?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+};
+
+type ToolCard = {
+  name: string;
+  layout?: string;
+  manaCost?: string;
+  type: string;
+  oracleText?: string;
+  colors: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  cardFaces?: ToolCardFace[];
+};
+
+function formatColors(colors?: string[]) {
+  return colors && colors.length > 0 ? colors.join(', ') : 'Colorless';
+}
+
+function formatCardFace(face: CardFace): ToolCardFace {
+  return {
+    name: face.name,
+    manaCost: face.mana_cost,
+    type: face.type_line,
+    oracleText: face.oracle_text,
+    colors: formatColors(face.colors),
+    power: face.power,
+    toughness: face.toughness,
+    loyalty: face.loyalty
+  };
+}
+
+function formatToolCard(card: Card): ToolCard {
+  return {
+    name: card.name,
+    layout: card.layout,
+    manaCost: card.mana_cost,
+    type: card.type_line,
+    oracleText: card.oracle_text,
+    colors: formatColors(card.color_identity),
+    power: card.power,
+    toughness: card.toughness,
+    loyalty: card.loyalty,
+    cardFaces: card.card_faces?.map(formatCardFace)
+  };
+}
 
 /**
  * Card Search Tool
@@ -30,15 +87,7 @@ export const searchCardTool = tool({
 
     return {
       success: true,
-      card: {
-        name: card.name,
-        manaCost: card.mana_cost,
-        type: card.type_line,
-        oracleText: card.oracle_text,
-        colors: card.color_identity.join(', ') || 'Colorless',
-        power: card.power,
-        toughness: card.toughness
-      }
+      card: formatToolCard(card)
     };
   }
 });
@@ -64,15 +113,7 @@ export const cardCollectionTool = tool({
       success: true,
       count: cards.length,
       notFound,
-      cards: cards.map(card => ({
-        name: card.name,
-        manaCost: card.mana_cost,
-        type: card.type_line,
-        oracleText: card.oracle_text,
-        colors: card.color_identity.join(', ') || 'Colorless',
-        power: card.power,
-        toughness: card.toughness
-      }))
+      cards: cards.map((card) => formatToolCard(card))
     };
   }
 });
@@ -117,12 +158,7 @@ export const advancedSearchTool = tool({
     return {
       success: true,
       count: cards.length,
-      cards: cards.map(card => ({
-        name: card.name,
-        manaCost: card.mana_cost,
-        type: card.type_line,
-        colors: card.color_identity.join(', ') || 'Colorless'
-      }))
+      cards: cards.map((card) => formatToolCard(card))
     };
   }
 });
@@ -186,15 +222,7 @@ export const randomCommanderTool = tool({
 
     return {
       success: true,
-      commander: {
-        name: commander.name,
-        manaCost: commander.mana_cost,
-        type: commander.type_line,
-        colors: commander.color_identity.join(', ') || 'Colorless',
-        oracleText: commander.oracle_text,
-        power: commander.power,
-        toughness: commander.toughness
-      }
+      commander: formatToolCard(commander)
     };
   }
 });

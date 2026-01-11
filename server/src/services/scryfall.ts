@@ -180,9 +180,23 @@ export class ScryfallService {
     const imageUris =
       scryfallCard.image_uris ||
       (Array.isArray(scryfallCard.card_faces) ? scryfallCard.card_faces[0]?.image_uris : undefined);
+    const cardFaces = Array.isArray(scryfallCard.card_faces)
+      ? scryfallCard.card_faces.map((face) => ({
+        name: face.name,
+        mana_cost: face.mana_cost,
+        type_line: face.type_line,
+        oracle_text: face.oracle_text,
+        colors: face.colors,
+        power: face.power,
+        toughness: face.toughness,
+        loyalty: face.loyalty,
+        image_uris: face.image_uris
+      }))
+      : undefined;
     return {
       id: scryfallCard.id,
       name: scryfallCard.name,
+      layout: scryfallCard.layout,
       mana_cost: scryfallCard.mana_cost,
       type_line: scryfallCard.type_line,
       oracle_text: scryfallCard.oracle_text,
@@ -191,7 +205,8 @@ export class ScryfallService {
       power: scryfallCard.power,
       toughness: scryfallCard.toughness,
       loyalty: scryfallCard.loyalty,
-      image_uris: imageUris
+      image_uris: imageUris,
+      card_faces: cardFaces
     };
   }
 }
@@ -199,6 +214,7 @@ export class ScryfallService {
 type ScryfallCard = {
   id: string;
   name: string;
+  layout?: string;
   mana_cost?: string;
   type_line: string;
   oracle_text?: string;
@@ -208,7 +224,19 @@ type ScryfallCard = {
   toughness?: string;
   loyalty?: string;
   image_uris?: Record<string, string>;
-  card_faces?: Array<{ image_uris?: Record<string, string> }>;
+  card_faces?: ScryfallCardFace[];
+};
+
+type ScryfallCardFace = {
+  name?: string;
+  mana_cost?: string;
+  type_line?: string;
+  oracle_text?: string;
+  colors?: string[];
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  image_uris?: Record<string, string>;
 };
 
 type ScryfallSearchResponse = {
