@@ -203,7 +203,8 @@ describe('app routes', () => {
       }
     ]);
     const upsertUser = vi.fn().mockResolvedValue(undefined);
-    const app = createApp({ verifyGoogleIdToken, listDeckCollection, upsertUser });
+    const getDeckStats = vi.fn().mockResolvedValue(new Map());
+    const app = createApp({ verifyGoogleIdToken, listDeckCollection, upsertUser, getDeckStats });
 
     const response = await request(app)
       .get('/api/decks')
@@ -213,7 +214,9 @@ describe('app routes', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.user.email).toBe('user@test.dev');
     expect(response.body.decks[0]?.name).toBe('Test Deck');
+    expect(response.body.decks[0]?.stats).toBe(null);
     expect(listDeckCollection).toHaveBeenCalledWith('user-123');
+    expect(getDeckStats).toHaveBeenCalledWith('user-123');
   });
 
   it('adds a deck to the collection', async () => {
