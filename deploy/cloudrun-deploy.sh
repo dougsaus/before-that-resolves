@@ -38,11 +38,36 @@ if [[ "$SKIP_ARTIFACT_REPO_CREATE" != "1" ]]; then
   fi
 fi
 
-gcloud builds submit \
+BUILD_ID=$(gcloud builds submit \
+  --async \
+  --format='value(id)' \
   --config deploy/cloudbuild.yaml \
   --substitutions=_IMAGE="${IMAGE}",_ENABLE_PDF="${ENABLE_PDF}",_VITE_GOOGLE_CLIENT_ID="${VITE_GOOGLE_CLIENT_ID}" \
   --suppress-logs \
-  .
+  .)
+
+if [[ -z "$BUILD_ID" ]]; then
+  printf 'Cloud Build submission failed.\n' >&2
+  exit 1
+fi
+
+printf 'Submitted Cloud Build %s\n' "$BUILD_ID"
+
+while true; do
+  BUILD_STATUS=$(gcloud builds describe "$BUILD_ID" --format='value(status)')
+  case "$BUILD_STATUS" in
+    SUCCESS)
+      break
+      ;;
+    FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED)
+      printf 'Cloud Build %s failed with status %s\n' "$BUILD_ID" "$BUILD_STATUS" >&2
+      exit 1
+      ;;
+    *)
+      sleep 5
+      ;;
+  esac
+done
 
 DEPLOY_FLAGS=(
   --image "${IMAGE}"
