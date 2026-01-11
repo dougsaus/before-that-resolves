@@ -14,6 +14,22 @@ function formatLastPlayed(lastPlayed: string | null): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function isArchidektUrl(input: string): boolean {
+  if (!input.trim()) return false;
+  try {
+    const parsed = new URL(input);
+    return parsed.host.includes('archidekt.com') && parsed.pathname.includes('/decks/');
+  } catch {
+    return false;
+  }
+}
+
+function formatColorValue(colors: string[] | null): string {
+  if (!colors) return '';
+  if (colors.length === 0) return 'C';
+  return sortColorsForDisplay(colors).join('');
+}
+
 export type DeckStats = {
   totalGames: number;
   wins: number;
@@ -34,10 +50,27 @@ export type DeckEntry = {
   stats: DeckStats | null;
 };
 
-export type ManualDeckInput = {
+export type DeckFormInput = {
+  deckId?: string;
   name: string;
+  url?: string | null;
+  format?: string | null;
   commanderNames?: string;
   colorIdentity?: string[];
+};
+
+export type DeckPreview = {
+  id: string;
+  name: string;
+  url: string;
+  format: string | null;
+  commanderNames: string[];
+  colorIdentity: string[];
+};
+
+export type DeckPreviewResult = {
+  deck?: DeckPreview;
+  error?: string;
 };
 
 type OpponentForm = {
@@ -52,8 +85,9 @@ type DeckCollectionProps = {
   decks: DeckEntry[];
   loading: boolean;
   deckError: string | null;
-  onAddArchidektDeck: (deckUrl: string) => Promise<void>;
-  onAddManualDeck: (input: ManualDeckInput) => Promise<boolean>;
+  onCreateDeck: (input: DeckFormInput) => Promise<boolean>;
+  onUpdateDeck: (deckId: string, input: DeckFormInput) => Promise<boolean>;
+  onPreviewDeck: (deckUrl: string) => Promise<DeckPreviewResult>;
   onRemoveDeck: (deckId: string) => Promise<void>;
   onOpenInOracle?: (deckUrl: string) => void;
   onRefreshDecks?: () => Promise<void>;
@@ -65,18 +99,24 @@ export function DeckCollection({
   decks,
   loading,
   deckError,
-  onAddArchidektDeck,
-  onAddManualDeck,
+  onCreateDeck,
+  onUpdateDeck,
+  onPreviewDeck,
   onRemoveDeck,
   onOpenInOracle,
   onRefreshDecks
 }: DeckCollectionProps) {
+  const [deckId, setDeckId] = useState<string | null>(null);
   const [deckUrl, setDeckUrl] = useState('');
-  const [manualName, setManualName] = useState('');
-  const [manualCommander, setManualCommander] = useState('');
-  const [manualColor, setManualColor] = useState('');
-  const [manualError, setManualError] = useState<string | null>(null);
-  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [deckName, setDeckName] = useState('');
+  const [deckCommander, setDeckCommander] = useState('');
+  const [deckColor, setDeckColor] = useState('');
+  const [deckFormat, setDeckFormat] = useState('');
+  const [deckFormError, setDeckFormError] = useState<string | null>(null);
+  const [deckPreviewError, setDeckPreviewError] = useState<string | null>(null);
+  const [deckModalOpen, setDeckModalOpen] = useState(false);
+  const [deckPreviewLoading, setDeckPreviewLoading] = useState(false);
+  const [editTarget, setEditTarget] = useState<DeckEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeckEntry | null>(null);
   const [logTarget, setLogTarget] = useState<DeckEntry | null>(null);
   const [logDate, setLogDate] = useState('');
@@ -120,12 +160,6 @@ export function DeckCollection({
     return sorted;
   }, [decks, sortDir, sortKey]);
 
-  const handleAddArchidektDeck = async () => {
-    if (!deckUrl.trim()) return;
-    await onAddArchidektDeck(deckUrl.trim());
-    setDeckUrl('');
-  };
-
   const handleSort = (key: 'name' | 'commander' | 'color') => {
     if (sortKey === key) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -138,20 +172,42 @@ export function DeckCollection({
   const sortIndicator = (key: 'name' | 'commander' | 'color') =>
     sortKey === key ? (sortDir === 'asc' ? '^' : 'v') : null;
 
-  const resetManualForm = () => {
-    setManualName('');
-    setManualCommander('');
-    setManualColor('');
-    setManualError(null);
+  const resetDeckForm = () => {
+    setDeckId(null);
+    setDeckUrl('');
+    setDeckName('');
+    setDeckCommander('');
+    setDeckColor('');
+    setDeckFormat('');
+    setDeckFormError(null);
+    setDeckPreviewError(null);
+    setDeckPreviewLoading(false);
   };
 
-  const openManualModal = () => {
-    setManualError(null);
-    setManualModalOpen(true);
+  const openAddModal = () => {
+    setEditTarget(null);
+    resetDeckForm();
+    setDeckModalOpen(true);
   };
 
-  const closeManualModal = () => {
-    setManualModalOpen(false);
+  const openEditModal = (deck: DeckEntry) => {
+    setEditTarget(deck);
+    setDeckId(deck.id);
+    setDeckUrl(deck.url ?? '');
+    setDeckName(deck.name);
+    setDeckCommander(deck.commanderNames.join(', '));
+    setDeckColor(formatColorValue(deck.colorIdentity));
+    setDeckFormat(deck.format ?? '');
+    setDeckFormError(null);
+    setDeckPreviewError(null);
+    setDeckPreviewLoading(false);
+    setDeckModalOpen(true);
+  };
+
+  const closeDeckModal = () => {
+    setDeckModalOpen(false);
+    setEditTarget(null);
+    setDeckPreviewLoading(false);
   };
 
   const resetLogForm = () => {
@@ -175,25 +231,51 @@ export function DeckCollection({
     setLogTarget(deck);
   };
 
-  const handleAddManualDeck = async () => {
-    if (!manualName.trim()) {
-      setManualError('Deck name is required.');
+  const handlePreviewDeck = async () => {
+    const trimmedUrl = deckUrl.trim();
+    if (!isArchidektUrl(trimmedUrl)) return;
+    setDeckPreviewError(null);
+    setDeckPreviewLoading(true);
+    const result = await onPreviewDeck(trimmedUrl);
+    setDeckPreviewLoading(false);
+    if (!result.deck) {
+      setDeckPreviewError(result.error || 'Unable to load deck.');
       return;
     }
-    setManualError(null);
-    const input: ManualDeckInput = {
-      name: manualName.trim(),
-      commanderNames: manualCommander.trim() || undefined
-    };
-    if (manualColor === 'C') {
-      input.colorIdentity = [];
-    } else if (manualColor) {
-      input.colorIdentity = manualColor.split('');
+    const { deck } = result;
+    setDeckName(deck.name);
+    setDeckFormat(deck.format ?? '');
+    setDeckCommander(deck.commanderNames.join(', '));
+    setDeckColor(formatColorValue(deck.colorIdentity));
+    setDeckUrl(deck.url);
+    if (!editTarget) {
+      setDeckId(deck.id);
     }
-    const saved = await onAddManualDeck(input);
+  };
+
+  const handleSaveDeck = async () => {
+    if (!deckName.trim()) {
+      setDeckFormError('Deck name is required.');
+      return;
+    }
+    setDeckFormError(null);
+    const input: DeckFormInput = {
+      name: deckName.trim(),
+      url: deckUrl.trim() ? deckUrl.trim() : null,
+      format: deckFormat.trim() ? deckFormat.trim() : null,
+      commanderNames: deckCommander.trim() || undefined
+    };
+    if (deckColor === 'C') {
+      input.colorIdentity = [];
+    } else if (deckColor) {
+      input.colorIdentity = deckColor.split('');
+    }
+    const saved = editTarget
+      ? await onUpdateDeck(editTarget.id, input)
+      : await onCreateDeck({ ...input, ...(deckId ? { deckId } : {}) });
     if (!saved) return;
-    resetManualForm();
-    closeManualModal();
+    resetDeckForm();
+    closeDeckModal();
   };
 
   const updateLogOpponent = (index: number, field: keyof OpponentForm, value: string) => {
@@ -256,106 +338,85 @@ export function DeckCollection({
 
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
-      <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8 flex flex-col gap-4">
-        <div className="flex flex-col gap-3">
-          <h3 className="text-lg font-semibold">Add deck to collection</h3>
-          <label className="text-sm text-gray-300" htmlFor="deck-url-input">
-            Archidekt deck URL
-          </label>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              id="deck-url-input"
-              type="url"
-              value={deckUrl}
-              onChange={(event) => setDeckUrl(event.target.value)}
-              placeholder="https://archidekt.com/decks/..."
-              className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-            />
-            <button
-              type="button"
-              onClick={handleAddArchidektDeck}
-              disabled={loading}
-              className="px-5 py-3 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
-            >
-              {loading ? 'Saving...' : 'Add Deck'}
-            </button>
-          </div>
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-gray-400">Or add a manual deck entry.</span>
-            <button
-              type="button"
-              onClick={openManualModal}
-              className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
-            >
-              Add Deck Manually
-            </button>
-          </div>
-        </div>
-      </div>
-
       {deckError && <p className="text-red-400">{deckError}</p>}
-
-  <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
-    {loading && <p className="text-gray-400">Loading...</p>}
-    {!loading && decks.length === 0 && (
-      <p className="text-gray-400">No decks yet. Add your first deck above.</p>
-        )}
-        {decks.length > 0 && (
-          <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
-            <div className="flex flex-wrap items-center gap-2 border-b border-gray-800 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 sm:hidden">
-              <span className="mr-2">Sort by</span>
-              <button
-                type="button"
-                onClick={() => handleSort('name')}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  sortKey === 'name' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
-                }`}
-              >
-                Deck {sortIndicator('name') || ''}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSort('commander')}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  sortKey === 'commander' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
-                }`}
-              >
-                Commander {sortIndicator('commander') || ''}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSort('color')}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  sortKey === 'color' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
-                }`}
-              >
-                Colors {sortIndicator('color') || ''}
-              </button>
-            </div>
-            <div className="divide-y divide-gray-800 sm:hidden">
-              {sortedDecks.map((deck) => (
-                <div key={deck.id} className="flex flex-col gap-3 px-4 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      {deck.url ? (
-                        <a
-                          href={deck.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block truncate text-base font-semibold text-cyan-300 hover:text-cyan-200"
-                        >
-                          {deck.name}
-                        </a>
-                      ) : (
-                        <p className="truncate text-base font-semibold text-white">{deck.name}</p>
-                      )}
-                      {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {deck.url && onOpenInOracle && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenInOracle(deck.url!)}
+      <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Your Deck Collection</h3>
+            <p className="text-sm text-gray-400">
+              Save decks, track stats, and launch Oracle tools from a single list.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-500 px-5 py-2 text-sm font-semibold text-gray-900 shadow hover:bg-cyan-400"
+          >
+            <span className="text-lg leading-none">+</span>
+            Deck
+          </button>
+        </div>
+        <div className="mt-6">
+          {loading && <p className="text-gray-400">Loading...</p>}
+          {!loading && decks.length === 0 && (
+            <p className="text-gray-400">No decks yet. Use + Deck to add your first deck.</p>
+          )}
+          {decks.length > 0 && (
+            <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-800 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 sm:hidden">
+                <span className="mr-2">Sort by</span>
+                <button
+                  type="button"
+                  onClick={() => handleSort('name')}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    sortKey === 'name' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
+                  }`}
+                >
+                  Deck {sortIndicator('name') || ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSort('commander')}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    sortKey === 'commander' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
+                  }`}
+                >
+                  Commander {sortIndicator('commander') || ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSort('color')}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    sortKey === 'color' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
+                  }`}
+                >
+                  Colors {sortIndicator('color') || ''}
+                </button>
+              </div>
+              <div className="divide-y divide-gray-800 sm:hidden">
+                {sortedDecks.map((deck) => (
+                  <div key={deck.id} className="flex flex-col gap-3 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        {deck.url ? (
+                          <a
+                            href={deck.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate text-base font-semibold text-cyan-300 hover:text-cyan-200"
+                          >
+                            {deck.name}
+                          </a>
+                        ) : (
+                          <p className="truncate text-base font-semibold text-white">{deck.name}</p>
+                        )}
+                        {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenInOracle(deck.url!)}
                           className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
                           aria-label={`Open ${deck.name} in Oracle`}
                           title="Open in Oracle"
@@ -379,6 +440,27 @@ export function DeckCollection({
                           </svg>
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(deck)}
+                        className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                        aria-label={`Edit ${deck.name}`}
+                        title="Edit deck"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                      </button>
                       <button
                         type="button"
                         onClick={() => openLogModal(deck)}
@@ -560,7 +642,7 @@ export function DeckCollection({
                       <td className="whitespace-nowrap border-l border-gray-800 px-2 py-3">
                         <div className="flex justify-end">
                           <div className="h-8 w-8 flex items-center justify-center">
-                            {deck.url && onOpenInOracle && (
+                            {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
                               <button
                                 type="button"
                                 onClick={() => onOpenInOracle(deck.url!)}
@@ -588,6 +670,27 @@ export function DeckCollection({
                               </button>
                             )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(deck)}
+                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                            aria-label={`Edit ${deck.name}`}
+                            title="Edit deck"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                            </svg>
+                          </button>
                           <button
                             type="button"
                             onClick={() => openLogModal(deck)}
@@ -644,49 +747,92 @@ export function DeckCollection({
           </div>
         )}
       </div>
+    </div>
 
-      {manualModalOpen && (
+      {deckModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
           <div className="w-full max-w-xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div>
-                <h3 className="text-lg font-semibold">Add manual deck</h3>
-                <p className="text-sm text-gray-400">Enter deck details to save without Archidekt.</p>
+                <h3 className="text-lg font-semibold">{editTarget ? 'Edit deck' : 'Add deck'}</h3>
+                <p className="text-sm text-gray-400">
+                  Add a deck link to auto-fill details from Archidekt or enter them manually.
+                </p>
               </div>
-              <label className="text-sm text-gray-300" htmlFor="manual-deck-name">
+              <label className="text-sm text-gray-300" htmlFor="deck-link-input">
+                Deck link (optional)
+              </label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="deck-link-input"
+                  type="url"
+                  value={deckUrl}
+                  onChange={(event) => {
+                    setDeckUrl(event.target.value);
+                    setDeckPreviewError(null);
+                  }}
+                  placeholder="https://archidekt.com/decks/..."
+                  className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button
+                  type="button"
+                  onClick={handlePreviewDeck}
+                  disabled={!isArchidektUrl(deckUrl) || deckPreviewLoading}
+                  className="px-4 py-3 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                >
+                  {deckPreviewLoading ? 'Loading...' : 'Load deck'}
+                </button>
+              </div>
+              <label className="text-sm text-gray-300" htmlFor="deck-name-input">
                 Deck name (required)
               </label>
+                <input
+                  id="deck-name-input"
+                  type="text"
+                  value={deckName}
+                  onChange={(event) => {
+                    setDeckName(event.target.value);
+                    setDeckFormError(null);
+                  }}
+                  placeholder="My custom deck"
+                  className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              <label className="text-sm text-gray-300" htmlFor="deck-format-input">
+                Format (optional)
+              </label>
               <input
-                id="manual-deck-name"
+                id="deck-format-input"
                 type="text"
-                value={manualName}
-                onChange={(event) => setManualName(event.target.value)}
-                placeholder="My custom deck"
+                value={deckFormat}
+                onChange={(event) => setDeckFormat(event.target.value)}
+                placeholder="commander"
                 className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
-              <label className="text-sm text-gray-300" htmlFor="manual-deck-commander">
+              <label className="text-sm text-gray-300" htmlFor="deck-commander-input">
                 Commander name(s) (optional)
               </label>
               <input
-                id="manual-deck-commander"
+                id="deck-commander-input"
                 type="text"
-                value={manualCommander}
-                onChange={(event) => setManualCommander(event.target.value)}
+                value={deckCommander}
+                onChange={(event) => setDeckCommander(event.target.value)}
                 placeholder="Atraxa, Praetors' Voice"
                 className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
               <ColorIdentitySelect
                 label="Color identity (optional)"
-                value={manualColor}
-                onChange={setManualColor}
+                value={deckColor}
+                onChange={setDeckColor}
               />
-              {manualError && <p className="text-red-400">{manualError}</p>}
+              {(deckFormError || deckPreviewError) && (
+                <p className="text-red-400">{deckFormError || deckPreviewError}</p>
+              )}
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => {
-                    resetManualForm();
-                    closeManualModal();
+                    resetDeckForm();
+                    closeDeckModal();
                   }}
                   className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
                 >
@@ -694,11 +840,11 @@ export function DeckCollection({
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddManualDeck}
+                  onClick={handleSaveDeck}
                   disabled={loading}
                   className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
                 >
-                  {loading ? 'Saving...' : 'Add Deck'}
+                  {loading ? 'Saving...' : editTarget ? 'Save Deck' : 'Add Deck'}
                 </button>
               </div>
             </div>

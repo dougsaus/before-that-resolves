@@ -23,8 +23,9 @@ const defaultProps = {
   decks: [] as DeckEntry[],
   loading: false,
   deckError: null,
-  onAddArchidektDeck: vi.fn(),
-  onAddManualDeck: vi.fn().mockResolvedValue(true),
+  onCreateDeck: vi.fn().mockResolvedValue(true),
+  onUpdateDeck: vi.fn().mockResolvedValue(true),
+  onPreviewDeck: vi.fn().mockResolvedValue({ deck: undefined, error: 'Not found' }),
   onRemoveDeck: vi.fn()
 };
 
@@ -61,34 +62,119 @@ describe('DeckCollection', () => {
     expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
   });
 
-  it('opens manual deck modal and validates required fields', async () => {
+  it('opens the deck modal and validates required fields', async () => {
     const user = userEvent.setup();
-    const onAddManualDeck = vi.fn().mockResolvedValue(true);
+    const onCreateDeck = vi.fn().mockResolvedValue(true);
 
-    render(<DeckCollection {...defaultProps} onAddManualDeck={onAddManualDeck} />);
+    render(<DeckCollection {...defaultProps} onCreateDeck={onCreateDeck} />);
 
-    await user.click(screen.getByRole('button', { name: 'Add Deck Manually' }));
+    await user.click(screen.getByRole('button', { name: /\+\s*Deck/ }));
 
-    expect(screen.getByText('Add manual deck')).toBeInTheDocument();
+    expect(screen.getByText('Add deck')).toBeInTheDocument();
 
-    const addButtons = screen.getAllByRole('button', { name: 'Add Deck' });
-    const modalAddButton = addButtons[addButtons.length - 1];
-
-    await user.click(modalAddButton);
+    await user.click(screen.getByRole('button', { name: 'Add Deck' }));
     expect(screen.getByText('Deck name is required.')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Deck name (required)'), 'My Manual Deck');
-    await user.click(modalAddButton);
+    await user.click(screen.getByRole('button', { name: 'Add Deck' }));
 
     await waitFor(() => {
-      expect(onAddManualDeck).toHaveBeenCalledWith(
+      expect(onCreateDeck).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'My Manual Deck' })
       );
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Add manual deck')).not.toBeInTheDocument();
+      expect(screen.queryByText('Add deck')).not.toBeInTheDocument();
     });
+  });
+
+  it('loads deck details from an Archidekt link', async () => {
+    const user = userEvent.setup();
+    const onPreviewDeck = vi.fn().mockResolvedValue({
+      deck: {
+        id: 'deck-42',
+        name: 'Archidekt Preview',
+        url: 'https://archidekt.com/decks/42/preview',
+        format: 'commander',
+        commanderNames: ['Giada, Font of Hope'],
+        colorIdentity: ['W']
+      }
+    });
+
+    render(<DeckCollection {...defaultProps} onPreviewDeck={onPreviewDeck} />);
+
+    await user.click(screen.getByRole('button', { name: /\+\s*Deck/ }));
+
+    const loadButton = screen.getByRole('button', { name: 'Load deck' });
+    expect(loadButton).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText('Deck link (optional)'),
+      'https://archidekt.com/decks/42/preview'
+    );
+
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled();
+    });
+
+    await user.click(loadButton);
+
+    await waitFor(() => {
+      expect(onPreviewDeck).toHaveBeenCalledWith('https://archidekt.com/decks/42/preview');
+    });
+
+    expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Archidekt Preview');
+    expect(screen.getByLabelText('Format (optional)')).toHaveValue('commander');
+    expect(screen.getByLabelText('Commander name(s) (optional)')).toHaveValue('Giada, Font of Hope');
+  });
+
+  it('opens edit modal and saves updates', async () => {
+    const user = userEvent.setup();
+    const onUpdateDeck = vi.fn().mockResolvedValue(true);
+    const decks = [
+      baseDeck({
+        id: 'deck-1',
+        name: 'Alpha',
+        url: 'https://example.com/deck',
+        format: 'commander',
+        commanderNames: ['Niv-Mizzet'],
+        colorIdentity: ['U', 'R']
+      })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} onUpdateDeck={onUpdateDeck} />);
+
+    const table = screen.getByRole('table');
+    await user.click(within(table).getByRole('button', { name: 'Edit Alpha' }));
+
+    expect(screen.getByText('Edit deck')).toBeInTheDocument();
+    expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Alpha');
+
+    await user.clear(screen.getByLabelText('Deck name (required)'));
+    await user.type(screen.getByLabelText('Deck name (required)'), 'Alpha Updated');
+    await user.click(screen.getByRole('button', { name: 'Save Deck' }));
+
+    await waitFor(() => {
+      expect(onUpdateDeck).toHaveBeenCalledWith(
+        'deck-1',
+        expect.objectContaining({ name: 'Alpha Updated' })
+      );
+    });
+  });
+
+  it('only shows Oracle button for Archidekt links', () => {
+    const onOpenInOracle = vi.fn();
+    const decks = [
+      baseDeck({ id: 'deck-1', name: 'Manual Link', url: 'https://example.com/deck' }),
+      baseDeck({ id: 'deck-2', name: 'Archidekt Link', url: 'https://archidekt.com/decks/12/test' })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} onOpenInOracle={onOpenInOracle} />);
+
+    const table = screen.getByRole('table');
+    expect(within(table).queryByRole('button', { name: 'Open Manual Link in Oracle' })).toBeNull();
+    expect(within(table).getByRole('button', { name: 'Open Archidekt Link in Oracle' })).toBeInTheDocument();
   });
 
   it('confirms before removing a deck', async () => {

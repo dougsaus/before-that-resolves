@@ -307,8 +307,9 @@ function App() {
                   decks={deckCollection.decks}
                   loading={deckCollection.loading}
                   deckError={deckCollection.deckError}
-                  onAddArchidektDeck={deckCollection.addArchidektDeck}
-                  onAddManualDeck={deckCollection.addManualDeck}
+                  onCreateDeck={deckCollection.createDeck}
+                  onUpdateDeck={deckCollection.updateDeck}
+                  onPreviewDeck={deckCollection.previewDeck}
                   onRemoveDeck={deckCollection.removeDeck}
                   onOpenInOracle={(deckUrl) => {
                     setPendingDeckUrl(deckUrl);
