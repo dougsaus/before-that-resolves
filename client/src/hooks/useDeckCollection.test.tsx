@@ -6,6 +6,21 @@ import { useDeckCollection } from './useDeckCollection';
 
 const TOKEN_STORAGE_KEY = 'btr_google_id_token';
 
+type GoogleCredentialResponse = {
+  credential?: string;
+};
+
+type GoogleIdApi = {
+  initialize: (config: { callback?: (response: GoogleCredentialResponse) => void }) => void;
+  renderButton: (element: HTMLElement) => void;
+};
+
+type GoogleApi = {
+  accounts: {
+    id: GoogleIdApi;
+  };
+};
+
 function HookHarness() {
   const { idToken, user, buttonRef, signOut } = useDeckCollection();
   return (
@@ -35,10 +50,10 @@ describe('useDeckCollection', () => {
     document.head.appendChild(script);
 
     credentialCallback = null;
-    (window as typeof window & { google?: any }).google = {
+    (window as Window & { google?: GoogleApi }).google = {
       accounts: {
         id: {
-          initialize: vi.fn((config: { callback?: (response: { credential?: string }) => void }) => {
+          initialize: vi.fn((config: { callback?: (response: GoogleCredentialResponse) => void }) => {
             credentialCallback = config.callback ?? null;
           }),
           renderButton: vi.fn()
@@ -52,7 +67,7 @@ describe('useDeckCollection', () => {
     vi.unstubAllEnvs();
     window.localStorage.clear();
     document.getElementById('google-identity-service')?.remove();
-    delete (window as typeof window & { google?: any }).google;
+    delete (window as Window & { google?: GoogleApi }).google;
   });
 
   it('restores a stored token and loads decks', async () => {

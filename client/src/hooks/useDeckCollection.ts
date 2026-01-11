@@ -9,6 +9,21 @@ type GoogleUser = {
   picture?: string;
 };
 
+type GoogleCredentialResponse = {
+  credential?: string;
+};
+
+type GoogleIdApi = {
+  initialize: (config: { client_id: string; callback: (response: GoogleCredentialResponse) => void }) => void;
+  renderButton: (element: HTMLDivElement, options: { theme: string; size: string; text: string; width: number }) => void;
+};
+
+type GoogleApi = {
+  accounts?: {
+    id?: GoogleIdApi;
+  };
+};
+
 const GOOGLE_SCRIPT_ID = 'google-identity-service';
 const TOKEN_STORAGE_KEY = 'btr_google_id_token';
 
@@ -66,7 +81,7 @@ export function useDeckCollection() {
     setStatusMessage(null);
   };
 
-  const loadDecks = async (token: string): Promise<boolean> => {
+  const loadDecks = useCallback(async (token: string): Promise<boolean> => {
     setLoading(true);
     setAuthError(null);
     try {
@@ -89,12 +104,12 @@ export function useDeckCollection() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const googleApiRef = useRef<any>(null);
+  const googleApiRef = useRef<GoogleApi | null>(null);
   const hasInitRef = useRef(false);
 
-  const renderGoogleButton = (element: HTMLDivElement | null) => {
+  const renderGoogleButton = useCallback((element: HTMLDivElement | null) => {
     const googleApi = googleApiRef.current;
     if (!element || !googleApi?.accounts?.id) {
       return;
@@ -106,9 +121,9 @@ export function useDeckCollection() {
       text: 'continue_with',
       width: 280
     });
-  };
+  }, []);
 
-  const handleCredentialResponse = (credential?: string) => {
+  const handleCredentialResponse = useCallback((credential?: string) => {
     if (!credential) {
       setAuthError('Google login failed. Please try again.');
       return;
@@ -129,7 +144,7 @@ export function useDeckCollection() {
         }
       }
     });
-  };
+  }, [loadDecks]);
 
   useEffect(() => {
     if (!googleClientId || idToken) {
@@ -155,7 +170,7 @@ export function useDeckCollection() {
         }
       }
     });
-  }, [googleClientId, idToken]);
+  }, [googleClientId, idToken, loadDecks]);
 
   useEffect(() => {
     if (!googleClientId || idToken) {
@@ -167,7 +182,7 @@ export function useDeckCollection() {
     loadGoogleScript()
       .then(() => {
         if (cancelled) return;
-        const googleApi = (window as { google?: any }).google;
+        const googleApi = (window as Window & { google?: GoogleApi }).google;
         if (!googleApi?.accounts?.id) {
           setAuthError('Google sign-in is unavailable.');
           return;
@@ -176,7 +191,7 @@ export function useDeckCollection() {
         if (!hasInitRef.current) {
           googleApi.accounts.id.initialize({
             client_id: googleClientId,
-            callback: (response: { credential?: string }) => {
+            callback: (response: GoogleCredentialResponse) => {
               handleCredentialResponse(response.credential);
             }
           });
@@ -193,7 +208,7 @@ export function useDeckCollection() {
     return () => {
       cancelled = true;
     };
-  }, [googleClientId, idToken, buttonEl]);
+  }, [googleClientId, idToken, buttonEl, handleCredentialResponse, renderGoogleButton]);
 
   const addArchidektDeck = async (deckUrl: string) => {
     if (!headers) {
