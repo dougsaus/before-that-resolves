@@ -35,8 +35,8 @@ type ColorOption = {
   colors: string[] | null;
 };
 
-const WUBRG_ORDER = ['W', 'U', 'B', 'R', 'G'] as const;
-const WUBRG_INDEX: Record<(typeof WUBRG_ORDER)[number], number> = {
+type WubrgColor = 'W' | 'U' | 'B' | 'R' | 'G';
+const WUBRG_INDEX: Record<WubrgColor, number> = {
   W: 0,
   U: 1,
   B: 2,
