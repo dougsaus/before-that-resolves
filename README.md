@@ -58,10 +58,17 @@ The key is sent with each request to the local server and is never stored server
 
 ```bash
 npm install
+docker compose -f deploy/docker-compose.yml up -d
 npm run dev
 ```
 
 Then open http://localhost:5173 in your browser.
+
+Required env (example):
+
+```bash
+export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
+```
 
 PDF export (optional):
 
@@ -96,6 +103,12 @@ Backend unit tests:
 
 ```bash
 npm run test --workspace=server
+```
+
+Backend integration tests (requires Docker, uses Testcontainers):
+
+```bash
+npm run test:integration --workspace=server
 ```
 
 Live integration tests (calls the OpenAI API; uses a key only for these tests):

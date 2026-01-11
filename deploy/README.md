@@ -7,6 +7,20 @@ This repo is set up for a single-service container that serves both the API and 
 Prereqs:
 - Docker
 
+### Local Postgres (for deck persistence)
+
+Start Postgres:
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Set your DB env (example):
+
+```bash
+export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
+```
+
 Build the image:
 
 ```bash
@@ -25,6 +39,7 @@ Then open http://localhost:3001.
 
 Notes:
 - The build runs `npm run build`, which produces `client/dist` and `server/dist`.
+- Set `DATABASE_URL` when running the container (e.g. `docker run -e DATABASE_URL=postgresql://btr:btr@host.docker.internal:5432/btr ...`).
 - PDF export is disabled by default. To include Playwright + Chromium, build with `ENABLE_PDF=1` (e.g. `npm run container:build:pdf`), which switches the runtime base image to `mcr.microsoft.com/playwright:v1.57.0-jammy`.
 
 ## GCP / Cloud Run
@@ -32,6 +47,7 @@ Notes:
 Prereqs:
 - gcloud CLI
 - Access to the GCP project
+- Cloud SQL Postgres instance (see below)
 
 One-time setup:
 
@@ -41,11 +57,27 @@ gcloud config set project before-that-resolves
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 ```
 
+Cloud SQL (one-time):
+
+```bash
+gcloud services enable sqladmin.googleapis.com
+gcloud sql instances create btr-postgres \
+  --database-version=POSTGRES_16 \
+  --region=us-central1 \
+  --tier=db-f1-micro \
+  --storage-size=10 \
+  --storage-type=HDD
+
+gcloud sql databases create btr --instance btr-postgres
+gcloud sql users create btr --instance btr-postgres --password YOUR_STRONG_PASSWORD
+```
+
 IAM roles (minimums):
 - `roles/run.admin`
 - `roles/iam.serviceAccountUser`
 - `roles/artifactregistry.writer`
 - `roles/cloudbuild.builds.editor`
+- `roles/cloudsql.client`
 
 Note: the Cloud Build service account (`PROJECT_NUMBER@cloudbuild.gserviceaccount.com`) must have `roles/artifactregistry.writer` to push images.
 
@@ -69,9 +101,14 @@ Common options (environment variables):
 - `IMAGE_NAME` (default: `before-that-resolves`)
 - `ENABLE_PDF` (default: `1`)
 - `VITE_GOOGLE_CLIENT_ID` (Google login client ID baked into the build)
-
-App env vars (Cloud Run):
 - `GOOGLE_CLIENT_ID` (required for Google login / deck collections)
+- `CLOUD_SQL_INSTANCE` (e.g. `before-that-resolves:us-central1:btr-postgres`)
+- `DB_NAME` (default: `btr`)
+- `DB_USER` (default: `btr`)
+- `DB_PASSWORD` (required)
+- `DB_SSL` (default: `false`)
+
+Cloud Run expects a Cloud SQL connection when `CLOUD_SQL_INSTANCE` is set; the deploy script attaches the instance and uses a Unix socket (`/cloudsql/...`) for `DB_HOST`.
 
 The service expects the OpenAI API key to be supplied by the client (via the UI or the request headers).
 
