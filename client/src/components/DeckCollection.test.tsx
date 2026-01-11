@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DeckCollection, type DeckEntry } from './DeckCollection';
+import { buildApiUrl } from '../utils/api';
 
 const baseDeck = (overrides: Partial<DeckEntry> = {}): DeckEntry => ({
   id: 'deck-1',
@@ -27,6 +28,10 @@ const defaultProps = {
 };
 
 describe('DeckCollection', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders sortable headers and sorts rows', async () => {
     const user = userEvent.setup();
     const decks = [
@@ -105,6 +110,32 @@ describe('DeckCollection', () => {
 
     await waitFor(() => {
       expect(onRemoveDeck).toHaveBeenCalledWith('deck-1');
+    });
+  });
+
+  it('opens the log modal and saves a game log', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, logs: [] })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const decks = [baseDeck({ id: 'deck-1', name: 'Alpha' })];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    const table = screen.getByRole('table');
+    await user.click(within(table).getByRole('button', { name: 'Log game for Alpha' }));
+
+    expect(screen.getByText('Log a game')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save log' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        buildApiUrl('/api/game-logs'),
+        expect.objectContaining({ method: 'POST' })
+      );
     });
   });
 });

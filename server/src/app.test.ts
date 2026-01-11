@@ -335,4 +335,161 @@ describe('app routes', () => {
       source: 'manual'
     }));
   });
+
+  it('requires a Google token to access game logs', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .get('/api/game-logs')
+      .expect(401);
+
+    expect(response.body.error).toBe('Google ID token is required.');
+  });
+
+  it('lists game logs for a user', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-777' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const listGameLogs = vi.fn().mockResolvedValue([
+      {
+        id: 'log-1',
+        deckId: 'deck-1',
+        deckName: 'Esper Knights',
+        playedAt: '2025-02-14',
+        opponentsCount: 2,
+        opponents: [],
+        result: null,
+        goodGame: true,
+        createdAt: '2025-02-14T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({ verifyGoogleIdToken, upsertUser, listGameLogs });
+
+    const response = await request(app)
+      .get('/api/game-logs')
+      .set('authorization', 'Bearer token-777')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(listGameLogs).toHaveBeenCalledWith('user-777');
+    expect(response.body.logs).toHaveLength(1);
+  });
+
+  it('creates a game log for a deck in the collection', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-888' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const listDeckCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-1',
+        name: 'Esper Knights',
+        url: 'https://archidekt.com/decks/1/test',
+        format: 'commander',
+        commanderNames: ['Sidar Jabari'],
+        colorIdentity: ['W', 'U', 'B'],
+        source: 'archidekt',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const createGameLog = vi.fn().mockResolvedValue([
+      {
+        id: 'log-1',
+        deckId: 'deck-1',
+        deckName: 'Esper Knights',
+        playedAt: '2025-02-14',
+        opponentsCount: 2,
+        opponents: [
+          {
+            commander: 'Ghave, Guru of Spores',
+            colorIdentity: ['W', 'B', 'G']
+          }
+        ],
+        result: null,
+        goodGame: true,
+        createdAt: '2025-02-14T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertUser,
+      listDeckCollection,
+      createGameLog
+    });
+
+    const response = await request(app)
+      .post('/api/game-logs')
+      .set('authorization', 'Bearer token-888')
+      .send({
+        deckId: 'deck-1',
+        datePlayed: '2025-02-14',
+        opponentsCount: 2,
+        opponents: [
+          {
+            commander: 'Ghave, Guru of Spores',
+            colorIdentity: 'WBG'
+          }
+        ],
+        result: null,
+        goodGame: true
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(createGameLog).toHaveBeenCalledWith('user-888', expect.objectContaining({
+      deckId: 'deck-1',
+      deckName: 'Esper Knights',
+      playedAt: '2025-02-14',
+      opponentsCount: 2,
+      opponents: [
+        {
+          name: null,
+          commander: 'Ghave, Guru of Spores',
+          colorIdentity: ['W', 'B', 'G']
+        }
+      ],
+      result: null,
+      goodGame: true
+    }));
+  });
+
+  it('updates a game log', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-999' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const updateGameLog = vi.fn().mockResolvedValue([
+      {
+        id: 'log-5',
+        deckId: 'deck-1',
+        deckName: 'Esper Knights',
+        playedAt: '2025-02-15',
+        opponentsCount: 3,
+        opponents: [],
+        result: 'win',
+        goodGame: false,
+        createdAt: '2025-02-14T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertUser,
+      updateGameLog
+    });
+
+    const response = await request(app)
+      .patch('/api/game-logs/log-5')
+      .set('authorization', 'Bearer token-999')
+      .send({
+        datePlayed: '2025-02-15',
+        opponentsCount: 3,
+        opponents: [],
+        result: 'win',
+        goodGame: false
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(updateGameLog).toHaveBeenCalledWith('user-999', 'log-5', expect.objectContaining({
+      playedAt: '2025-02-15',
+      opponentsCount: 3,
+      result: 'win',
+      goodGame: false
+    }));
+  });
 });

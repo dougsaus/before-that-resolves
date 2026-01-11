@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ManaSymbol } from './ManaSymbol';
+import { useMemo, useState } from 'react';
+import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
+import { sortColorsForDisplay } from '../utils/color-identity';
+import { useGameLogs } from '../hooks/useGameLogs';
 
 export type DeckEntry = {
   id: string;
@@ -18,6 +20,12 @@ export type ManualDeckInput = {
   colorIdentity?: string[];
 };
 
+type OpponentForm = {
+  name: string;
+  commander: string;
+  colorIdentity: string;
+};
+
 type DeckCollectionProps = {
   enabled: boolean;
   idToken: string | null;
@@ -28,95 +36,6 @@ type DeckCollectionProps = {
   onAddManualDeck: (input: ManualDeckInput) => Promise<boolean>;
   onRemoveDeck: (deckId: string) => Promise<void>;
 };
-
-type ColorOption = {
-  value: string;
-  label: string;
-  colors: string[] | null;
-};
-
-type WubrgColor = 'W' | 'U' | 'B' | 'R' | 'G';
-const WUBRG_INDEX: Record<WubrgColor, number> = {
-  W: 0,
-  U: 1,
-  B: 2,
-  R: 3,
-  G: 4
-};
-
-const COLOR_OPTIONS: ColorOption[] = [
-  { value: '', label: 'No color identity', colors: null },
-  { value: 'C', label: 'Colorless', colors: [] },
-  { value: 'W', label: 'White', colors: ['W'] },
-  { value: 'U', label: 'Blue', colors: ['U'] },
-  { value: 'B', label: 'Black', colors: ['B'] },
-  { value: 'R', label: 'Red', colors: ['R'] },
-  { value: 'G', label: 'Green', colors: ['G'] },
-  { value: 'WU', label: 'Azorius', colors: ['W', 'U'] },
-  { value: 'UB', label: 'Dimir', colors: ['U', 'B'] },
-  { value: 'BR', label: 'Rakdos', colors: ['B', 'R'] },
-  { value: 'RG', label: 'Gruul', colors: ['R', 'G'] },
-  { value: 'GW', label: 'Selesnya', colors: ['G', 'W'] },
-  { value: 'WB', label: 'Orzhov', colors: ['W', 'B'] },
-  { value: 'UR', label: 'Izzet', colors: ['U', 'R'] },
-  { value: 'BG', label: 'Golgari', colors: ['B', 'G'] },
-  { value: 'RW', label: 'Boros', colors: ['R', 'W'] },
-  { value: 'GU', label: 'Simic', colors: ['G', 'U'] },
-  { value: 'WUB', label: 'Esper', colors: ['W', 'U', 'B'] },
-  { value: 'UBR', label: 'Grixis', colors: ['U', 'B', 'R'] },
-  { value: 'BRG', label: 'Jund', colors: ['B', 'R', 'G'] },
-  { value: 'RGW', label: 'Naya', colors: ['R', 'G', 'W'] },
-  { value: 'GWU', label: 'Bant', colors: ['G', 'W', 'U'] },
-  { value: 'WBG', label: 'Abzan', colors: ['W', 'B', 'G'] },
-  { value: 'URW', label: 'Jeskai', colors: ['U', 'R', 'W'] },
-  { value: 'BGU', label: 'Sultai', colors: ['B', 'G', 'U'] },
-  { value: 'RWB', label: 'Mardu', colors: ['R', 'W', 'B'] },
-  { value: 'GRU', label: 'Temur', colors: ['G', 'R', 'U'] },
-  { value: 'UBRG', label: 'Glint-Eye', colors: ['U', 'B', 'R', 'G'] },
-  { value: 'BRGW', label: 'Dune-Brood', colors: ['B', 'R', 'G', 'W'] },
-  { value: 'RGWU', label: 'Ink-Treader', colors: ['R', 'G', 'W', 'U'] },
-  { value: 'GWUB', label: 'Witch-Maw', colors: ['G', 'W', 'U', 'B'] },
-  { value: 'WUBR', label: 'Yore-Tiller', colors: ['W', 'U', 'B', 'R'] },
-  { value: 'WUBRG', label: 'Maelstrom', colors: ['W', 'U', 'B', 'R', 'G'] }
-];
-
-const COLOR_IDENTITY_DISPLAY_MAP: Record<string, string[]> = COLOR_OPTIONS.reduce((map, option) => {
-  if (!option.colors) {
-    return map;
-  }
-  const key =
-    option.colors.length === 0
-      ? 'C'
-      : [...option.colors]
-          .sort((a, b) => WUBRG_INDEX[a as keyof typeof WUBRG_INDEX] - WUBRG_INDEX[b as keyof typeof WUBRG_INDEX])
-          .join('');
-  map[key] = option.colors;
-  return map;
-}, {} as Record<string, string[]>);
-
-function buildColorOptions(): ColorOption[] {
-  return COLOR_OPTIONS;
-}
-
-function sortColorsForDisplay(colors: string[]): string[] {
-  if (colors.length === 0) return ['C'];
-  const key = [...colors]
-    .filter((color) => color !== 'C')
-    .sort((a, b) => WUBRG_INDEX[a as keyof typeof WUBRG_INDEX] - WUBRG_INDEX[b as keyof typeof WUBRG_INDEX])
-    .join('');
-  return COLOR_IDENTITY_DISPLAY_MAP[key] ?? colors;
-}
-
-function ColorIdentityIcons({ colors }: { colors: string[] }) {
-  const displayColors = sortColorsForDisplay(colors);
-  return (
-    <span className="inline-flex items-center gap-1">
-      {displayColors.map((color) => (
-        <ManaSymbol key={color} symbol={`{${color}}`} size="small" />
-      ))}
-    </span>
-  );
-}
 
 export function DeckCollection({
   enabled,
@@ -135,12 +54,21 @@ export function DeckCollection({
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeckEntry | null>(null);
-  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [logTarget, setLogTarget] = useState<DeckEntry | null>(null);
+  const [logDate, setLogDate] = useState('');
+  const [logOpponents, setLogOpponents] = useState<OpponentForm[]>([]);
+  const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
+  const [logGoodGame, setLogGoodGame] = useState(true);
+  const [logFormError, setLogFormError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<'name' | 'commander' | 'color'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const colorMenuRef = useRef<HTMLDivElement | null>(null);
-  const colorOptions = useMemo(() => buildColorOptions(), []);
-  const selectedColor = colorOptions.find((option) => option.value === manualColor) || colorOptions[0];
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const {
+    addLog,
+    error: logError,
+    loading: logLoading,
+    statusMessage: logStatusMessage
+  } = useGameLogs(idToken, { autoLoad: false });
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
@@ -168,20 +96,6 @@ export function DeckCollection({
     return sorted;
   }, [decks, sortDir, sortKey]);
 
-  useEffect(() => {
-    if (!colorMenuOpen) return;
-    const handleClick = (event: MouseEvent) => {
-      if (!colorMenuRef.current) return;
-      if (!colorMenuRef.current.contains(event.target as Node)) {
-        setColorMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-    };
-  }, [colorMenuOpen]);
-
   const handleAddArchidektDeck = async () => {
     if (!deckUrl.trim()) return;
     await onAddArchidektDeck(deckUrl.trim());
@@ -205,7 +119,6 @@ export function DeckCollection({
     setManualCommander('');
     setManualColor('');
     setManualError(null);
-    setColorMenuOpen(false);
   };
 
   const openManualModal = () => {
@@ -215,7 +128,27 @@ export function DeckCollection({
 
   const closeManualModal = () => {
     setManualModalOpen(false);
-    setColorMenuOpen(false);
+  };
+
+  const resetLogForm = () => {
+    setLogDate(today);
+    setLogOpponents([]);
+    setLogResult('pending');
+    setLogGoodGame(true);
+    setLogFormError(null);
+  };
+
+  const addLogOpponent = () => {
+    setLogOpponents((current) => [...current, { name: '', commander: '', colorIdentity: '' }]);
+  };
+
+  const removeLogOpponent = (index: number) => {
+    setLogOpponents((current) => current.filter((_, i) => i !== index));
+  };
+
+  const openLogModal = (deck: DeckEntry) => {
+    resetLogForm();
+    setLogTarget(deck);
   };
 
   const handleAddManualDeck = async () => {
@@ -237,6 +170,39 @@ export function DeckCollection({
     if (!saved) return;
     resetManualForm();
     closeManualModal();
+  };
+
+  const updateLogOpponent = (index: number, field: keyof OpponentForm, value: string) => {
+    setLogOpponents((current) => {
+      const next = [...current];
+      const target = next[index] ?? { name: '', commander: '', colorIdentity: '' };
+      next[index] = { ...target, [field]: value };
+      return next;
+    });
+  };
+
+  const handleSaveLog = async () => {
+    if (!logTarget) {
+      setLogFormError('Choose a deck to log.');
+      return;
+    }
+    setLogFormError(null);
+    const success = await addLog({
+      deckId: logTarget.id,
+      datePlayed: logDate || today,
+      opponentsCount: logOpponents.length,
+      opponents: logOpponents.map((opponent) => ({
+        name: opponent.name.trim(),
+        commander: opponent.commander.trim(),
+        colorIdentity: opponent.colorIdentity.trim()
+      })),
+      result: logResult === 'pending' ? null : logResult,
+      goodGame: logGoodGame
+    });
+    if (success) {
+      setLogTarget(null);
+      resetLogForm();
+    }
   };
 
   if (!enabled) {
@@ -358,29 +324,52 @@ export function DeckCollection({
                       )}
                       {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(deck)}
-                      className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
-                      aria-label={`Remove ${deck.name}`}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openLogModal(deck)}
+                        className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-emerald-300"
+                        aria-label={`Log game for ${deck.name}`}
                       >
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v6" />
-                        <path d="M14 11v6" />
-                      </svg>
-                    </button>
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 8v8" />
+                          <path d="M8 12h8" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(deck)}
+                        className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                        aria-label={`Remove ${deck.name}`}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-gray-500">Commander</p>
@@ -403,9 +392,9 @@ export function DeckCollection({
               <table className="w-full table-fixed text-left text-sm text-gray-200">
                 <colgroup>
                   <col className="w-[40%]" />
-                  <col className="w-[35%]" />
+                  <col className="w-[33%]" />
                   <col className="w-[20%]" />
-                  <col className="w-[5%]" />
+                  <col className="w-[7%]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-gray-950">
                   <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
@@ -481,7 +470,28 @@ export function DeckCollection({
                         )}
                       </td>
                       <td className="border-l border-gray-800 px-4 py-3">
-                        <div className="flex justify-center">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openLogModal(deck)}
+                            className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-emerald-300"
+                            aria-label={`Log game for ${deck.name}`}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <circle cx="12" cy="12" r="9" />
+                              <path d="M12 8v8" />
+                              <path d="M8 12h8" />
+                            </svg>
+                          </button>
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(deck)}
@@ -546,42 +556,11 @@ export function DeckCollection({
                 placeholder="Atraxa, Praetors' Voice"
                 className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
-              <div className="flex flex-col gap-2">
-                <span className="text-sm text-gray-300">Color identity (optional)</span>
-                <div ref={colorMenuRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setColorMenuOpen((prev) => !prev)}
-                    className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left text-sm text-gray-200 hover:border-gray-600"
-                  >
-                    <span className="flex items-center gap-2">
-                      {selectedColor.colors && <ColorIdentityIcons colors={selectedColor.colors} />}
-                      <span className="text-gray-300">{selectedColor.label}</span>
-                    </span>
-                    <span className="text-xs text-gray-400">{colorMenuOpen ? 'Close' : 'Select'}</span>
-                  </button>
-                  {colorMenuOpen && (
-                    <div className="absolute z-10 mt-2 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-700 bg-gray-950/95 p-2 shadow-lg">
-                      {colorOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setManualColor(option.value);
-                            setColorMenuOpen(false);
-                          }}
-                          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-800 ${
-                            option.value === selectedColor.value ? 'bg-gray-800 text-white' : 'text-gray-200'
-                          }`}
-                        >
-                          {option.colors && <ColorIdentityIcons colors={option.colors} />}
-                          <span className="text-gray-300">{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ColorIdentitySelect
+                label="Color identity (optional)"
+                value={manualColor}
+                onChange={setManualColor}
+              />
               {manualError && <p className="text-red-400">{manualError}</p>}
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
@@ -601,6 +580,174 @@ export function DeckCollection({
                   className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
                 >
                   {loading ? 'Saving...' : 'Add Deck'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {logTarget && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
+          <div className="w-full max-w-3xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">Log a game</h3>
+                  <p className="text-sm text-gray-400">{logTarget.name}</p>
+                </div>
+                {logStatusMessage && (
+                  <span className="text-xs text-emerald-300">{logStatusMessage}</span>
+                )}
+              </div>
+              <label className="flex flex-col gap-2 text-sm text-gray-300">
+                Date played
+                <input
+                  type="date"
+                  value={logDate}
+                  onChange={(event) => setLogDate(event.target.value)}
+                  className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </label>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-300">Opponents</p>
+                  {logOpponents.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={addLogOpponent}
+                      className="flex items-center gap-1 text-sm text-cyan-400 hover:text-cyan-300"
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                        <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+                      </svg>
+                      Add opponent
+                    </button>
+                  )}
+                </div>
+                {logOpponents.length === 0 && (
+                  <p className="text-xs text-gray-500">No opponents added yet.</p>
+                )}
+                {logOpponents.map((opponent, index) => (
+                  <div
+                    key={`${logTarget.id}-opponent-${index}`}
+                    className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={opponent.name}
+                        onChange={(event) => updateLogOpponent(index, 'name', event.target.value)}
+                        placeholder="Name"
+                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                      <input
+                        type="text"
+                        value={opponent.commander}
+                        onChange={(event) => updateLogOpponent(index, 'commander', event.target.value)}
+                        placeholder="Commander"
+                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <ColorIdentitySelect
+                          label=""
+                          value={opponent.colorIdentity}
+                          onChange={(value) => updateLogOpponent(index, 'colorIdentity', value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeLogOpponent(index)}
+                        className="text-gray-500 hover:text-red-400 p-1"
+                        aria-label={`Remove opponent ${index + 1}`}
+                      >
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {logOpponents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={addLogOpponent}
+                    className="flex items-center justify-center gap-1 rounded-lg border border-dashed border-gray-600 py-2 text-sm text-gray-400 hover:border-gray-500 hover:text-gray-300"
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                      <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+                    </svg>
+                    Add another opponent
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLogResult('win')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                      logResult === 'win'
+                        ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
+                        : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                    }`}
+                  >
+                    Win
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogResult('loss')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                      logResult === 'loss'
+                        ? 'border-rose-400 bg-rose-500/20 text-rose-100'
+                        : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                    }`}
+                  >
+                    Loss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogResult('pending')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                      logResult === 'pending'
+                        ? 'border-gray-400 bg-gray-700/40 text-gray-100'
+                        : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                    }`}
+                  >
+                    Later
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={logGoodGame}
+                    onChange={(event) => setLogGoodGame(event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Good game?
+                </label>
+              </div>
+              {(logFormError || logError) && (
+                <p className="text-xs text-red-400">{logFormError || logError}</p>
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogTarget(null);
+                    resetLogForm();
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLog}
+                  disabled={logLoading}
+                  className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
+                >
+                  {logLoading ? 'Saving...' : 'Save log'}
                 </button>
               </div>
             </div>

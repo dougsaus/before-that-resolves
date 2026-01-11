@@ -23,7 +23,30 @@ const schemaQueries = [
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, deck_id)
   );`,
-  `CREATE INDEX IF NOT EXISTS decks_user_added_at_idx ON decks (user_id, added_at DESC);`
+  `CREATE INDEX IF NOT EXISTS decks_user_added_at_idx ON decks (user_id, added_at DESC);`,
+  `CREATE TABLE IF NOT EXISTS game_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    deck_id TEXT NOT NULL,
+    deck_name TEXT NOT NULL,
+    played_at DATE NOT NULL,
+    opponents_count INTEGER NOT NULL DEFAULT 0,
+    opponents JSONB NOT NULL DEFAULT '[]'::jsonb,
+    result TEXT CHECK (result IN ('win', 'loss')),
+    good_game BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (user_id, deck_id) REFERENCES decks(user_id, deck_id) ON DELETE CASCADE
+  );`,
+  `DO $$
+   BEGIN
+     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'game_logs') THEN
+       ALTER TABLE game_logs ALTER COLUMN result DROP NOT NULL;
+       ALTER TABLE game_logs DROP CONSTRAINT IF EXISTS game_logs_result_check;
+       ALTER TABLE game_logs ADD CONSTRAINT game_logs_result_check CHECK (result IN ('win', 'loss'));
+     END IF;
+   END $$;`,
+  `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx
+    ON game_logs (user_id, played_at DESC, created_at DESC);`
 ];
 
 function getPoolConfig(): PoolConfig {
