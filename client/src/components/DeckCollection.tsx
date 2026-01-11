@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ColorIdentityIcons, ColorIdentitySelect, sortColorsForDisplay } from './ColorIdentitySelect';
+import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
+import { sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
 
 export type DeckEntry = {
