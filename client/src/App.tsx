@@ -50,6 +50,7 @@ function App() {
   const [view, setView] = useState<AppView>('oracle');
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [pendingDeckUrl, setPendingDeckUrl] = useState<string | undefined>(undefined);
   const deckCollection = useDeckCollection();
   const mainRef = useRef<HTMLElement | null>(null);
   const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
@@ -295,6 +296,8 @@ function App() {
                   reasoningEffort={supportsReasoning ? reasoningEffort : undefined}
                   verbosity={supportsVerbosity ? verbosity : undefined}
                   modelControls={modelControls}
+                  initialDeckUrl={pendingDeckUrl}
+                  onInitialDeckUrlConsumed={() => setPendingDeckUrl(undefined)}
                 />
               )}
               {view === 'decks' && (
@@ -307,6 +310,10 @@ function App() {
                   onAddArchidektDeck={deckCollection.addArchidektDeck}
                   onAddManualDeck={deckCollection.addManualDeck}
                   onRemoveDeck={deckCollection.removeDeck}
+                  onOpenInOracle={(deckUrl) => {
+                    setPendingDeckUrl(deckUrl);
+                    setView('oracle');
+                  }}
                 />
               )}
               {view === 'logs' && (

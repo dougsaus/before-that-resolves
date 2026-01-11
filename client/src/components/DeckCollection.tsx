@@ -35,6 +35,7 @@ type DeckCollectionProps = {
   onAddArchidektDeck: (deckUrl: string) => Promise<void>;
   onAddManualDeck: (input: ManualDeckInput) => Promise<boolean>;
   onRemoveDeck: (deckId: string) => Promise<void>;
+  onOpenInOracle?: (deckUrl: string) => void;
 };
 
 export function DeckCollection({
@@ -45,7 +46,8 @@ export function DeckCollection({
   deckError,
   onAddArchidektDeck,
   onAddManualDeck,
-  onRemoveDeck
+  onRemoveDeck,
+  onOpenInOracle
 }: DeckCollectionProps) {
   const [deckUrl, setDeckUrl] = useState('');
   const [manualName, setManualName] = useState('');
@@ -324,12 +326,40 @@ export function DeckCollection({
                       )}
                       {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      {deck.url && onOpenInOracle && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenInOracle(deck.url!)}
+                          className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                          aria-label={`Open ${deck.name} in Oracle`}
+                          title="Open in Oracle"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="4" />
+                            <path d="M12 2v4" />
+                            <path d="M12 18v4" />
+                            <path d="M2 12h4" />
+                            <path d="M18 12h4" />
+                          </svg>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openLogModal(deck)}
-                        className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-emerald-300"
+                        className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-emerald-300"
                         aria-label={`Log game for ${deck.name}`}
+                        title="Log game"
                       >
                         <svg
                           viewBox="0 0 24 24"
@@ -349,8 +379,9 @@ export function DeckCollection({
                       <button
                         type="button"
                         onClick={() => setDeleteTarget(deck)}
-                        className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                        className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-red-300"
                         aria-label={`Remove ${deck.name}`}
+                        title="Delete"
                       >
                         <svg
                           viewBox="0 0 24 24"
@@ -391,10 +422,10 @@ export function DeckCollection({
             <div className="hidden sm:block">
               <table className="w-full table-fixed text-left text-sm text-gray-200">
                 <colgroup>
-                  <col className="w-[40%]" />
-                  <col className="w-[33%]" />
-                  <col className="w-[20%]" />
-                  <col className="w-[7%]" />
+                  <col className="w-[38%]" />
+                  <col className="w-[32%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[12%]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-gray-950">
                   <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
@@ -434,7 +465,7 @@ export function DeckCollection({
                         )}
                       </button>
                     </th>
-                    <th className="border-l border-gray-800 px-4 py-3 text-center font-semibold">
+                    <th className="border-l border-gray-800 px-4 py-3 text-right font-semibold">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>
@@ -469,13 +500,43 @@ export function DeckCollection({
                           <span className="text-sm text-gray-500">—</span>
                         )}
                       </td>
-                      <td className="border-l border-gray-800 px-4 py-3">
-                        <div className="flex justify-center gap-2">
+                      <td className="border-l border-gray-800 px-2 py-3">
+                        <div className="flex justify-center">
+                          <div className="h-8 w-8 flex items-center justify-center">
+                            {deck.url && onOpenInOracle && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenInOracle(deck.url!)}
+                                className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                                aria-label={`Open ${deck.name} in Oracle`}
+                                title="Open in Oracle"
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  className="h-5 w-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <circle cx="12" cy="12" r="10" />
+                                  <circle cx="12" cy="12" r="4" />
+                                  <path d="M12 2v4" />
+                                  <path d="M12 18v4" />
+                                  <path d="M2 12h4" />
+                                  <path d="M18 12h4" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => openLogModal(deck)}
-                            className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-emerald-300"
+                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-emerald-300"
                             aria-label={`Log game for ${deck.name}`}
+                            title="Log game"
                           >
                             <svg
                               viewBox="0 0 24 24"
@@ -495,8 +556,9 @@ export function DeckCollection({
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(deck)}
-                            className="inline-flex h-10 w-10 items-center justify-center text-gray-300 hover:text-red-300"
+                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-red-300"
                             aria-label={`Remove ${deck.name}`}
+                            title="Delete"
                           >
                             <svg
                               viewBox="0 0 24 24"
