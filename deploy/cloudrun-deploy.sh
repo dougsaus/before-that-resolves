@@ -35,6 +35,7 @@ fi
 gcloud builds submit \
   --config deploy/cloudbuild.yaml \
   --substitutions=_IMAGE="${IMAGE}",_ENABLE_PDF="${ENABLE_PDF}",_VITE_GOOGLE_CLIENT_ID="${VITE_GOOGLE_CLIENT_ID}" \
+  --suppress-logs \
   .
 
 DEPLOY_FLAGS=(
