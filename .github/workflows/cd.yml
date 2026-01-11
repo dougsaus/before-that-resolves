@@ -1,0 +1,45 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: cloudrun-deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy-cloud-run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ vars.GCP_PROJECT_ID || 'before-that-resolves' }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'before-that-resolves' }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+          SERVICE_NAME: ${{ vars.GCP_SERVICE_NAME || 'before-that-resolves' }}
+          REPO: ${{ vars.GCP_ARTIFACT_REPO || 'before-that-resolves' }}
+          IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME || 'before-that-resolves' }}
+          ENABLE_PDF: ${{ vars.ENABLE_PDF || '1' }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CLOUD_SQL_INSTANCE: ${{ secrets.CLOUD_SQL_INSTANCE }}
+          DB_NAME: ${{ vars.DB_NAME || 'btr' }}
+          DB_USER: ${{ vars.DB_USER || 'btr' }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_SSL: ${{ vars.DB_SSL || 'false' }}
+        run: ./deploy/cloudrun-deploy.sh

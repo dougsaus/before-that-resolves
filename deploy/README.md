@@ -119,3 +119,27 @@ curl -s https://YOUR_SERVICE_URL/health
 ```
 
 Cloud Run sets `PORT=8080` at runtime. The container starts with `npm start` from the repo root, which launches `server/dist/index.js` and serves the built UI.
+
+## Continuous Deployment (GitHub Actions)
+
+The workflow in `.github/workflows/cd.yml` deploys on every merge to `main`.
+
+Required GitHub secrets:
+- `GCP_SA_KEY` (service account JSON for deploying to Cloud Run)
+- `GOOGLE_CLIENT_ID`
+- `VITE_GOOGLE_CLIENT_ID`
+- `CLOUD_SQL_INSTANCE` (e.g. `before-that-resolves:us-central1:btr-postgres`)
+- `DB_PASSWORD`
+
+Optional GitHub variables:
+- `GCP_PROJECT_ID` (default: `before-that-resolves`)
+- `GCP_REGION` (default: `us-central1`)
+- `GCP_SERVICE_NAME` (default: `before-that-resolves`)
+- `GCP_ARTIFACT_REPO` (default: `before-that-resolves`)
+- `GCP_IMAGE_NAME` (default: `before-that-resolves`)
+- `ENABLE_PDF` (default: `1`)
+- `DB_NAME` (default: `btr`)
+- `DB_USER` (default: `btr`)
+- `DB_SSL` (default: `false`)
+
+Version bumping is still manual. If you want versioned releases, bump `package.json` before merging to `main` (for example: `npm version patch`).
