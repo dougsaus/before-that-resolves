@@ -4,11 +4,30 @@
 export interface Card {
   id: string;
   name: string;
+  layout?: string;
   mana_cost?: string;
   type_line: string;
   oracle_text?: string;
   colors?: string[];
   color_identity: string[];
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  image_uris?: {
+    normal?: string;
+    large?: string;
+    small?: string;
+    art_crop?: string;
+  };
+  card_faces?: CardFace[];
+}
+
+export interface CardFace {
+  name?: string;
+  mana_cost?: string;
+  type_line?: string;
+  oracle_text?: string;
+  colors?: string[];
   power?: string;
   toughness?: string;
   loyalty?: string;
