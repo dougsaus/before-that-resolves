@@ -331,14 +331,48 @@ describe('app routes', () => {
     });
   });
 
+  it('previews an archidekt deck before saving', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-321' });
+    const fetchArchidektDeckSummary = vi.fn().mockResolvedValue({
+      id: '42',
+      name: 'Preview Deck',
+      url: 'https://archidekt.com/decks/42/preview',
+      format: 'commander',
+      commanderNames: ['Teysa Karlov'],
+      colorIdentity: ['W', 'B']
+    });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({
+      verifyGoogleIdToken,
+      fetchArchidektDeckSummary,
+      upsertUser
+    });
+
+    const response = await request(app)
+      .post('/api/decks/preview')
+      .set('authorization', 'Bearer token-321')
+      .send({ deckUrl: 'https://archidekt.com/decks/42/preview' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(fetchArchidektDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/42/preview');
+    expect(response.body.deck).toEqual({
+      id: '42',
+      name: 'Preview Deck',
+      url: 'https://archidekt.com/decks/42/preview',
+      format: 'commander',
+      commanderNames: ['Teysa Karlov'],
+      colorIdentity: ['W', 'B']
+    });
+  });
+
   it('adds a manual deck to the collection', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-789' });
     const upsertDeckInCollection = vi.fn().mockResolvedValue([
       {
         id: 'manual-abc',
         name: 'Manual Deck',
-        url: null,
-        format: null,
+        url: 'https://example.com/decklist',
         commanderNames: ['Commander One'],
         colorIdentity: ['G'],
         source: 'manual',
@@ -355,16 +389,66 @@ describe('app routes', () => {
     const response = await request(app)
       .post('/api/decks/manual')
       .set('authorization', 'Bearer token-789')
-      .send({ name: 'Manual Deck', commanderNames: 'Commander One', colorIdentity: 'G' })
+      .send({
+        name: 'Manual Deck',
+        commanderNames: 'Commander One',
+        colorIdentity: 'G',
+        url: 'https://example.com/decklist'
+      })
       .expect(200);
 
     expect(response.body.success).toBe(true);
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-789', expect.objectContaining({
       name: 'Manual Deck',
+      url: 'https://example.com/decklist',
+      format: null,
       commanderNames: ['Commander One'],
       colorIdentity: ['G'],
       source: 'manual'
     }));
+  });
+
+  it('updates a deck in the collection', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-202' });
+    const upsertDeckInCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-202',
+        name: 'Updated Deck',
+        url: 'https://archidekt.com/decks/202/updated',
+        commanderNames: ['Tymna the Weaver', 'Kraum'],
+        colorIdentity: ['W', 'U', 'B', 'R'],
+        source: 'archidekt',
+        addedAt: '2025-01-05T00:00:00.000Z'
+      }
+    ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertDeckInCollection,
+      upsertUser
+    });
+
+    const response = await request(app)
+      .put('/api/decks/deck-202')
+      .set('authorization', 'Bearer token-202')
+      .send({
+        name: 'Updated Deck',
+        url: 'https://archidekt.com/decks/202/updated',
+        commanderNames: 'Tymna the Weaver, Kraum',
+        colorIdentity: 'WUBR'
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(upsertDeckInCollection).toHaveBeenCalledWith('user-202', {
+      id: 'deck-202',
+      name: 'Updated Deck',
+      url: 'https://archidekt.com/decks/202/updated',
+      format: null,
+      commanderNames: ['Tymna the Weaver', 'Kraum'],
+      colorIdentity: ['W', 'U', 'B', 'R'],
+      source: 'archidekt'
+    });
   });
 
   it('allows manual decks without a color identity', async () => {

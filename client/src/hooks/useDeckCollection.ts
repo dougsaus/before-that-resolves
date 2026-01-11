@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
-import type { DeckEntry, ManualDeckInput } from '../components/DeckCollection';
+import type { DeckEntry, DeckFormInput, DeckPreviewResult } from '../components/DeckCollection';
 
 type GoogleUser = {
   id: string;
@@ -210,34 +210,30 @@ export function useDeckCollection() {
     };
   }, [googleClientId, idToken, buttonEl, handleCredentialResponse, renderGoogleButton]);
 
-  const addArchidektDeck = async (deckUrl: string) => {
+  const previewDeck = async (deckUrl: string): Promise<DeckPreviewResult> => {
     if (!headers) {
-      setDeckError('Sign in with Google to add decks.');
-      return;
+      const message = 'Sign in with Google to load decks.';
+      setDeckError(message);
+      return { error: message };
     }
-    setLoading(true);
-    resetDeckMessages();
     try {
-      const response = await fetch(buildApiUrl('/api/decks'), {
+      const response = await fetch(buildApiUrl('/api/decks/preview'), {
         method: 'POST',
         headers,
         body: JSON.stringify({ deckUrl })
       });
       const payload = await response.json();
       if (!response.ok || !payload.success) {
-        throw new Error(payload.error || 'Unable to add deck.');
+        throw new Error(payload.error || 'Unable to load deck.');
       }
-      setDecks(Array.isArray(payload.decks) ? payload.decks : []);
-      setStatusMessage('Deck added.');
+      return { deck: payload.deck };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to add deck.';
-      setDeckError(message);
-    } finally {
-      setLoading(false);
+      const message = error instanceof Error ? error.message : 'Unable to load deck.';
+      return { error: message };
     }
   };
 
-  const addManualDeck = async (input: ManualDeckInput): Promise<boolean> => {
+  const createDeck = async (input: DeckFormInput): Promise<boolean> => {
     if (!headers) {
       setDeckError('Sign in with Google to add decks.');
       return false;
@@ -255,10 +251,39 @@ export function useDeckCollection() {
         throw new Error(payload.error || 'Unable to add deck.');
       }
       setDecks(Array.isArray(payload.decks) ? payload.decks : []);
-      setStatusMessage('Deck added.');
+      setStatusMessage('Deck saved.');
       return true;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to add deck.';
+      setDeckError(message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateDeck = async (deckId: string, input: DeckFormInput): Promise<boolean> => {
+    if (!headers) {
+      setDeckError('Sign in with Google to manage decks.');
+      return false;
+    }
+    setLoading(true);
+    resetDeckMessages();
+    try {
+      const response = await fetch(buildApiUrl(`/api/decks/${deckId}`), {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(input)
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to update deck.');
+      }
+      setDecks(Array.isArray(payload.decks) ? payload.decks : []);
+      setStatusMessage('Deck updated.');
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to update deck.';
       setDeckError(message);
       return false;
     } finally {
@@ -320,8 +345,9 @@ export function useDeckCollection() {
     deckError,
     statusMessage,
     buttonRef,
-    addArchidektDeck,
-    addManualDeck,
+    previewDeck,
+    createDeck,
+    updateDeck,
     removeDeck,
     signOut,
     refreshDecks

@@ -74,7 +74,11 @@ export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
 
 ## Workflow Rules
 
+- **Always work in a new branch from main:** Ensure `main` is up to date before starting work
+- **Add tests for new functionality:** Ensure new features or behaviors include appropriate test coverage
 - **Never commit/push code that doesn't pass:** Always run `npm test`, `npm run build`, and `npm run lint` before committing
 - **Stop at PR creation:** Create the PR and wait for user approval before merging
 - **Ask before merging:** Always get explicit permission before merging a PR
+- **Rebase before merging:** Ensure your branch is up to date with `main` before merging a PR; rebase if needed
+- **Delete branches on merge:** When merging a PR, choose to delete the branch afterward
 - **Close related issues:** When merging a PR that fixes an issue, close the issue with a comment mentioning the PR/commit that resolved it

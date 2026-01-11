@@ -95,6 +95,20 @@ export function createApp(deps: AppDeps = {}) {
     }
     return fallback;
   };
+  const normalizeDeckUrl = (input: unknown): string | null => {
+    if (typeof input !== 'string') return null;
+    const trimmed = input.trim();
+    return trimmed ? trimmed : null;
+  };
+  const isArchidektUrl = (input: string | null): boolean => {
+    if (!input) return false;
+    try {
+      const parsed = new URL(input);
+      return parsed.host.includes('archidekt.com') && parsed.pathname.includes('/decks/');
+    } catch {
+      return false;
+    }
+  };
   const parseCommanderNames = (input: unknown): string[] => {
     if (Array.isArray(input)) {
       return input
@@ -427,11 +441,35 @@ export function createApp(deps: AppDeps = {}) {
     }
   });
 
+  app.post('/api/decks/preview', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { deckUrl } = req.body;
+    if (!deckUrl) {
+      res.status(400).json({
+        success: false,
+        error: 'deckUrl is required'
+      });
+      return;
+    }
+
+    try {
+      const summary = await fetchDeckSummary(deckUrl);
+      res.json({ success: true, deck: summary });
+    } catch (error: unknown) {
+      res.status(400).json({
+        success: false,
+        error: getErrorMessage(error, 'Failed to load deck')
+      });
+    }
+  });
+
   app.post('/api/decks/manual', async (req, res) => {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
 
-    const { name, commanderNames, colorIdentity } = req.body;
+    const { deckId, name, commanderNames, colorIdentity, url } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
       res.status(400).json({
         success: false,
@@ -440,14 +478,52 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
+    const normalizedUrl = normalizeDeckUrl(url);
     const deck: DeckCollectionInput = {
-      id: `manual-${crypto.randomUUID()}`,
+      id: typeof deckId === 'string' && deckId.trim() ? deckId.trim() : `manual-${crypto.randomUUID()}`,
       name: name.trim(),
-      url: null,
+      url: normalizedUrl,
       format: null,
       commanderNames: parseCommanderNames(commanderNames),
       colorIdentity: parseColorIdentityInput(colorIdentity),
-      source: 'manual'
+      source: isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual'
+    };
+
+    const decks = await addDeckToCollection(user.id, deck);
+    res.json({ success: true, user, decks });
+  });
+
+  app.put('/api/decks/:deckId', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { deckId } = req.params;
+    if (!deckId) {
+      res.status(400).json({
+        success: false,
+        error: 'deckId is required'
+      });
+      return;
+    }
+
+    const { name, commanderNames, colorIdentity, url } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'name is required'
+      });
+      return;
+    }
+
+    const normalizedUrl = normalizeDeckUrl(url);
+    const deck: DeckCollectionInput = {
+      id: deckId,
+      name: name.trim(),
+      url: normalizedUrl,
+      format: null,
+      commanderNames: parseCommanderNames(commanderNames),
+      colorIdentity: parseColorIdentityInput(colorIdentity),
+      source: isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual'
     };
 
     const decks = await addDeckToCollection(user.id, deck);
