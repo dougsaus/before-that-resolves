@@ -181,3 +181,61 @@ export async function removeGameLog(userId: string, logId: string): Promise<Game
   );
   return listGameLogs(userId);
 }
+
+export type DeckStats = {
+  deckId: string;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  lastPlayed: string | null;
+};
+
+type DeckStatsRow = {
+  deck_id: string;
+  total_games: string;
+  wins: string;
+  losses: string;
+  last_played: string | Date | null;
+};
+
+export async function getDeckStats(userId: string): Promise<Map<string, DeckStats>> {
+  const db = getPool();
+  const result = await db.query<DeckStatsRow>(
+    `SELECT
+       deck_id,
+       COUNT(*) AS total_games,
+       COUNT(*) FILTER (WHERE result = 'win') AS wins,
+       COUNT(*) FILTER (WHERE result = 'loss') AS losses,
+       MAX(played_at) AS last_played
+     FROM game_logs
+     WHERE user_id = $1
+     GROUP BY deck_id`,
+    [userId]
+  );
+
+  const statsMap = new Map<string, DeckStats>();
+  for (const row of result.rows) {
+    const totalGames = Number.parseInt(row.total_games, 10);
+    const wins = Number.parseInt(row.wins, 10);
+    const losses = Number.parseInt(row.losses, 10);
+    const gamesWithResult = wins + losses;
+    const winRate = gamesWithResult > 0 ? wins / gamesWithResult : null;
+    const lastPlayed = row.last_played
+      ? (row.last_played instanceof Date
+          ? row.last_played.toISOString().slice(0, 10)
+          : new Date(row.last_played).toISOString().slice(0, 10))
+      : null;
+
+    statsMap.set(row.deck_id, {
+      deckId: row.deck_id,
+      totalGames,
+      wins,
+      losses,
+      winRate,
+      lastPlayed
+    });
+  }
+
+  return statsMap;
+}

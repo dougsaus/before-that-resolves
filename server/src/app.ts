@@ -13,8 +13,8 @@ import {
   upsertDeckInCollection,
   upsertUser
 } from './services/deck-collection';
-import type { GameLogEntry, GameLogInput, GameLogUpdate } from './services/game-logs';
-import { createGameLog, listGameLogs, removeGameLog, updateGameLog } from './services/game-logs';
+import type { DeckStats, GameLogEntry, GameLogInput, GameLogUpdate } from './services/game-logs';
+import { createGameLog, getDeckStats, listGameLogs, removeGameLog, updateGameLog } from './services/game-logs';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
@@ -66,6 +66,7 @@ type AppDeps = {
   createGameLog?: (userId: string, log: GameLogInput) => Promise<GameLogEntry[]>;
   updateGameLog?: (userId: string, logId: string, log: GameLogUpdate) => Promise<GameLogEntry[]>;
   removeGameLog?: (userId: string, logId: string) => Promise<GameLogEntry[]>;
+  getDeckStats?: (userId: string) => Promise<Map<string, DeckStats>>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -87,6 +88,7 @@ export function createApp(deps: AppDeps = {}) {
   const createLog = deps.createGameLog ?? createGameLog;
   const updateLog = deps.updateGameLog ?? updateGameLog;
   const deleteLog = deps.removeGameLog ?? removeGameLog;
+  const fetchDeckStats = deps.getDeckStats ?? getDeckStats;
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
       return error.message;
@@ -369,8 +371,28 @@ export function createApp(deps: AppDeps = {}) {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
 
-    const decks = await listUserDecks(user.id);
-    res.json({ success: true, user, decks });
+    const [decks, statsMap] = await Promise.all([
+      listUserDecks(user.id),
+      fetchDeckStats(user.id)
+    ]);
+
+    const decksWithStats = decks.map((deck) => {
+      const stats = statsMap.get(deck.id);
+      return {
+        ...deck,
+        stats: stats
+          ? {
+              totalGames: stats.totalGames,
+              wins: stats.wins,
+              losses: stats.losses,
+              winRate: stats.winRate,
+              lastPlayed: stats.lastPlayed
+            }
+          : null
+      };
+    });
+
+    res.json({ success: true, user, decks: decksWithStats });
   });
 
   app.post('/api/decks', async (req, res) => {

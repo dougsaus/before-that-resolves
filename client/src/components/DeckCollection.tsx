@@ -3,6 +3,25 @@ import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
 
+function formatWinRate(winRate: number | null): string {
+  if (winRate === null) return '—';
+  return `${Math.round(winRate * 100)}%`;
+}
+
+function formatLastPlayed(lastPlayed: string | null): string {
+  if (!lastPlayed) return '—';
+  const date = new Date(lastPlayed);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export type DeckStats = {
+  totalGames: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  lastPlayed: string | null;
+};
+
 export type DeckEntry = {
   id: string;
   name: string;
@@ -12,6 +31,7 @@ export type DeckEntry = {
   colorIdentity: string[] | null;
   source: 'archidekt' | 'manual';
   addedAt: string;
+  stats: DeckStats | null;
 };
 
 export type ManualDeckInput = {
@@ -36,6 +56,7 @@ type DeckCollectionProps = {
   onAddManualDeck: (input: ManualDeckInput) => Promise<boolean>;
   onRemoveDeck: (deckId: string) => Promise<void>;
   onOpenInOracle?: (deckUrl: string) => void;
+  onRefreshDecks?: () => Promise<void>;
 };
 
 export function DeckCollection({
@@ -47,7 +68,8 @@ export function DeckCollection({
   onAddArchidektDeck,
   onAddManualDeck,
   onRemoveDeck,
-  onOpenInOracle
+  onOpenInOracle,
+  onRefreshDecks
 }: DeckCollectionProps) {
   const [deckUrl, setDeckUrl] = useState('');
   const [manualName, setManualName] = useState('');
@@ -204,6 +226,9 @@ export function DeckCollection({
     if (success) {
       setLogTarget(null);
       resetLogForm();
+      if (onRefreshDecks) {
+        await onRefreshDecks();
+      }
     }
   };
 
@@ -416,17 +441,27 @@ export function DeckCollection({
                       <span className="text-sm text-gray-500">—</span>
                     )}
                   </div>
+                  {deck.stats && deck.stats.totalGames > 0 && (
+                    <div className="flex gap-4 text-sm">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Games</p>
+                        <p className="text-gray-200">{deck.stats.totalGames}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Win %</p>
+                        <p className="text-gray-200">{formatWinRate(deck.stats.winRate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Last played</p>
+                        <p className="text-gray-200">{formatLastPlayed(deck.stats.lastPlayed)}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
             <div className="hidden sm:block">
-              <table className="w-full table-fixed text-left text-sm text-gray-200">
-                <colgroup>
-                  <col className="w-[38%]" />
-                  <col className="w-[32%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[12%]" />
-                </colgroup>
+              <table className="w-full text-left text-sm text-gray-200">
                 <thead className="sticky top-0 z-10 bg-gray-950">
                   <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
                     <th className="px-4 py-3 font-semibold">
@@ -465,6 +500,15 @@ export function DeckCollection({
                         )}
                       </button>
                     </th>
+                    <th className="border-l border-gray-800 px-4 py-3 font-semibold text-center">
+                      Games
+                    </th>
+                    <th className="border-l border-gray-800 px-4 py-3 font-semibold text-center">
+                      Win %
+                    </th>
+                    <th className="border-l border-gray-800 px-4 py-3 font-semibold">
+                      Last played
+                    </th>
                     <th className="border-l border-gray-800 px-4 py-3 text-right font-semibold">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -473,35 +517,48 @@ export function DeckCollection({
                 <tbody className="divide-y divide-gray-800">
                   {sortedDecks.map((deck) => (
                     <tr key={deck.id} className="align-middle">
-                      <td className="px-4 py-3">
+                      <td className="max-w-48 px-4 py-3">
                         {deck.url ? (
                           <a
                             href={deck.url}
                             target="_blank"
                             rel="noreferrer"
+                            title={deck.name}
                             className="block truncate font-semibold text-cyan-300 hover:text-cyan-200"
                           >
                             {deck.name}
                           </a>
                         ) : (
-                          <p className="truncate font-semibold text-white">{deck.name}</p>
+                          <p className="truncate font-semibold text-white" title={deck.name}>{deck.name}</p>
                         )}
                         {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
                       </td>
-                      <td className="border-l border-gray-800 px-4 py-3">
-                        <p className="truncate text-sm text-gray-200">
+                      <td className="max-w-64 border-l border-gray-800 px-4 py-3">
+                        <p
+                          className="truncate text-sm text-gray-200"
+                          title={deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : undefined}
+                        >
                           {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
                         </p>
                       </td>
-                      <td className="border-l border-gray-800 px-4 py-3">
+                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3">
                         {deck.colorIdentity ? (
                           <ColorIdentityIcons colors={deck.colorIdentity} />
                         ) : (
                           <span className="text-sm text-gray-500">—</span>
                         )}
                       </td>
-                      <td className="border-l border-gray-800 px-2 py-3">
-                        <div className="flex justify-center">
+                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3 text-center text-gray-300">
+                        {deck.stats?.totalGames ?? '—'}
+                      </td>
+                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3 text-center text-gray-300">
+                        {deck.stats ? formatWinRate(deck.stats.winRate) : '—'}
+                      </td>
+                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3 text-gray-300">
+                        {deck.stats ? formatLastPlayed(deck.stats.lastPlayed) : '—'}
+                      </td>
+                      <td className="whitespace-nowrap border-l border-gray-800 px-2 py-3">
+                        <div className="flex justify-end">
                           <div className="h-8 w-8 flex items-center justify-center">
                             {deck.url && onOpenInOracle && (
                               <button

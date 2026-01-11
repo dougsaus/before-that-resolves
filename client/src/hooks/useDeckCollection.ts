@@ -305,6 +305,11 @@ export function useDeckCollection() {
     }
   };
 
+  const refreshDecks = useCallback(async () => {
+    if (!idToken) return;
+    await loadDecks(idToken);
+  }, [idToken, loadDecks]);
+
   return {
     googleClientId,
     idToken,
@@ -318,6 +323,7 @@ export function useDeckCollection() {
     addArchidektDeck,
     addManualDeck,
     removeDeck,
-    signOut
+    signOut,
+    refreshDecks
   };
 }
