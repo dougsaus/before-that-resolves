@@ -7,6 +7,8 @@ SERVICE_NAME=${SERVICE_NAME:-before-that-resolves}
 REPO=${REPO:-before-that-resolves}
 IMAGE_NAME=${IMAGE_NAME:-before-that-resolves}
 ENABLE_PDF=${ENABLE_PDF:-1}
+SKIP_SERVICE_ENABLE=${SKIP_SERVICE_ENABLE:-0}
+SKIP_ARTIFACT_REPO_CREATE=${SKIP_ARTIFACT_REPO_CREATE:-0}
 VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
 GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
 CLOUD_SQL_INSTANCE=${CLOUD_SQL_INSTANCE:-}
@@ -21,15 +23,19 @@ printf 'Using project %s in %s\n' "$PROJECT_ID" "$REGION"
 
 gcloud config set project "$PROJECT_ID" > /dev/null
 
-gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com
+if [[ "$SKIP_SERVICE_ENABLE" != "1" ]]; then
+  gcloud services enable \
+    run.googleapis.com \
+    cloudbuild.googleapis.com \
+    artifactregistry.googleapis.com
+fi
 
-if ! gcloud artifacts repositories describe "$REPO" --location "$REGION" > /dev/null 2>&1; then
-  gcloud artifacts repositories create "$REPO" \
-    --location "$REGION" \
-    --repository-format docker
+if [[ "$SKIP_ARTIFACT_REPO_CREATE" != "1" ]]; then
+  if ! gcloud artifacts repositories describe "$REPO" --location "$REGION" > /dev/null 2>&1; then
+    gcloud artifacts repositories create "$REPO" \
+      --location "$REGION" \
+      --repository-format docker
+  fi
 fi
 
 gcloud builds submit \
