@@ -42,7 +42,6 @@ export type DeckEntry = {
   id: string;
   name: string;
   url: string | null;
-  format: string | null;
   commanderNames: string[];
   colorIdentity: string[] | null;
   source: 'archidekt' | 'manual';
@@ -54,7 +53,6 @@ export type DeckFormInput = {
   deckId?: string;
   name: string;
   url?: string | null;
-  format?: string | null;
   commanderNames?: string;
   colorIdentity?: string[];
 };
@@ -63,7 +61,6 @@ export type DeckPreview = {
   id: string;
   name: string;
   url: string;
-  format: string | null;
   commanderNames: string[];
   colorIdentity: string[];
 };
@@ -111,7 +108,6 @@ export function DeckCollection({
   const [deckName, setDeckName] = useState('');
   const [deckCommander, setDeckCommander] = useState('');
   const [deckColor, setDeckColor] = useState('');
-  const [deckFormat, setDeckFormat] = useState('');
   const [deckFormError, setDeckFormError] = useState<string | null>(null);
   const [deckPreviewError, setDeckPreviewError] = useState<string | null>(null);
   const [deckModalOpen, setDeckModalOpen] = useState(false);
@@ -178,7 +174,6 @@ export function DeckCollection({
     setDeckName('');
     setDeckCommander('');
     setDeckColor('');
-    setDeckFormat('');
     setDeckFormError(null);
     setDeckPreviewError(null);
     setDeckPreviewLoading(false);
@@ -197,7 +192,6 @@ export function DeckCollection({
     setDeckName(deck.name);
     setDeckCommander(deck.commanderNames.join(', '));
     setDeckColor(formatColorValue(deck.colorIdentity));
-    setDeckFormat(deck.format ?? '');
     setDeckFormError(null);
     setDeckPreviewError(null);
     setDeckPreviewLoading(false);
@@ -244,7 +238,6 @@ export function DeckCollection({
     }
     const { deck } = result;
     setDeckName(deck.name);
-    setDeckFormat(deck.format ?? '');
     setDeckCommander(deck.commanderNames.join(', '));
     setDeckColor(formatColorValue(deck.colorIdentity));
     setDeckUrl(deck.url);
@@ -262,7 +255,6 @@ export function DeckCollection({
     const input: DeckFormInput = {
       name: deckName.trim(),
       url: deckUrl.trim() ? deckUrl.trim() : null,
-      format: deckFormat.trim() ? deckFormat.trim() : null,
       commanderNames: deckCommander.trim() || undefined
     };
     if (deckColor === 'C') {
@@ -410,8 +402,7 @@ export function DeckCollection({
                         ) : (
                           <p className="truncate text-base font-semibold text-white">{deck.name}</p>
                         )}
-                        {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
-                      </div>
+                    </div>
                       <div className="flex items-center gap-1">
                         {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
                           <button
@@ -613,7 +604,6 @@ export function DeckCollection({
                         ) : (
                           <p className="truncate font-semibold text-white" title={deck.name}>{deck.name}</p>
                         )}
-                        {deck.format && <p className="text-xs text-gray-400">{deck.format}</p>}
                       </td>
                       <td className="max-w-64 border-l border-gray-800 px-4 py-3">
                         <p
@@ -797,17 +787,6 @@ export function DeckCollection({
                   placeholder="My custom deck"
                   className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-              <label className="text-sm text-gray-300" htmlFor="deck-format-input">
-                Format (optional)
-              </label>
-              <input
-                id="deck-format-input"
-                type="text"
-                value={deckFormat}
-                onChange={(event) => setDeckFormat(event.target.value)}
-                placeholder="commander"
-                className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
               <label className="text-sm text-gray-300" htmlFor="deck-commander-input">
                 Commander name(s) (optional)
               </label>

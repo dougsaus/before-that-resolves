@@ -469,7 +469,7 @@ export function createApp(deps: AppDeps = {}) {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
 
-    const { deckId, name, commanderNames, colorIdentity, url, format } = req.body;
+    const { deckId, name, commanderNames, colorIdentity, url } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
       res.status(400).json({
         success: false,
@@ -479,12 +479,11 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const normalizedUrl = normalizeDeckUrl(url);
-    const normalizedFormat = typeof format === 'string' && format.trim() ? format.trim() : null;
     const deck: DeckCollectionInput = {
       id: typeof deckId === 'string' && deckId.trim() ? deckId.trim() : `manual-${crypto.randomUUID()}`,
       name: name.trim(),
       url: normalizedUrl,
-      format: normalizedFormat,
+      format: null,
       commanderNames: parseCommanderNames(commanderNames),
       colorIdentity: parseColorIdentityInput(colorIdentity),
       source: isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual'
@@ -507,7 +506,7 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
-    const { name, commanderNames, colorIdentity, url, format } = req.body;
+    const { name, commanderNames, colorIdentity, url } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
       res.status(400).json({
         success: false,
@@ -517,12 +516,11 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const normalizedUrl = normalizeDeckUrl(url);
-    const normalizedFormat = typeof format === 'string' && format.trim() ? format.trim() : null;
     const deck: DeckCollectionInput = {
       id: deckId,
       name: name.trim(),
       url: normalizedUrl,
-      format: normalizedFormat,
+      format: null,
       commanderNames: parseCommanderNames(commanderNames),
       colorIdentity: parseColorIdentityInput(colorIdentity),
       source: isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual'

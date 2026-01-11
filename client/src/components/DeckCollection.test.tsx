@@ -8,7 +8,6 @@ const baseDeck = (overrides: Partial<DeckEntry> = {}): DeckEntry => ({
   id: 'deck-1',
   name: 'Alpha',
   url: null,
-  format: null,
   commanderNames: [],
   colorIdentity: null,
   source: 'manual',
@@ -96,7 +95,6 @@ describe('DeckCollection', () => {
         id: 'deck-42',
         name: 'Archidekt Preview',
         url: 'https://archidekt.com/decks/42/preview',
-        format: 'commander',
         commanderNames: ['Giada, Font of Hope'],
         colorIdentity: ['W']
       }
@@ -125,7 +123,6 @@ describe('DeckCollection', () => {
     });
 
     expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Archidekt Preview');
-    expect(screen.getByLabelText('Format (optional)')).toHaveValue('commander');
     expect(screen.getByLabelText('Commander name(s) (optional)')).toHaveValue('Giada, Font of Hope');
   });
 
@@ -137,7 +134,6 @@ describe('DeckCollection', () => {
         id: 'deck-1',
         name: 'Alpha',
         url: 'https://example.com/deck',
-        format: 'commander',
         commanderNames: ['Niv-Mizzet'],
         colorIdentity: ['U', 'R']
       })

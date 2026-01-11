@@ -373,7 +373,6 @@ describe('app routes', () => {
         id: 'manual-abc',
         name: 'Manual Deck',
         url: 'https://example.com/decklist',
-        format: 'commander',
         commanderNames: ['Commander One'],
         colorIdentity: ['G'],
         source: 'manual',
@@ -394,8 +393,7 @@ describe('app routes', () => {
         name: 'Manual Deck',
         commanderNames: 'Commander One',
         colorIdentity: 'G',
-        url: 'https://example.com/decklist',
-        format: 'commander'
+        url: 'https://example.com/decklist'
       })
       .expect(200);
 
@@ -403,7 +401,7 @@ describe('app routes', () => {
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-789', expect.objectContaining({
       name: 'Manual Deck',
       url: 'https://example.com/decklist',
-      format: 'commander',
+      format: null,
       commanderNames: ['Commander One'],
       colorIdentity: ['G'],
       source: 'manual'
@@ -417,7 +415,6 @@ describe('app routes', () => {
         id: 'deck-202',
         name: 'Updated Deck',
         url: 'https://archidekt.com/decks/202/updated',
-        format: 'commander',
         commanderNames: ['Tymna the Weaver', 'Kraum'],
         colorIdentity: ['W', 'U', 'B', 'R'],
         source: 'archidekt',
@@ -437,7 +434,6 @@ describe('app routes', () => {
       .send({
         name: 'Updated Deck',
         url: 'https://archidekt.com/decks/202/updated',
-        format: 'commander',
         commanderNames: 'Tymna the Weaver, Kraum',
         colorIdentity: 'WUBR'
       })
@@ -448,7 +444,7 @@ describe('app routes', () => {
       id: 'deck-202',
       name: 'Updated Deck',
       url: 'https://archidekt.com/decks/202/updated',
-      format: 'commander',
+      format: null,
       commanderNames: ['Tymna the Weaver', 'Kraum'],
       colorIdentity: ['W', 'U', 'B', 'R'],
       source: 'archidekt'
