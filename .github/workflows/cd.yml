@@ -36,6 +36,8 @@ jobs:
           REPO: ${{ vars.GCP_ARTIFACT_REPO || 'before-that-resolves' }}
           IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME || 'before-that-resolves' }}
           ENABLE_PDF: ${{ vars.ENABLE_PDF || '1' }}
+          SKIP_SERVICE_ENABLE: '1'
+          SKIP_ARTIFACT_REPO_CREATE: '1'
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           CLOUD_SQL_INSTANCE: ${{ secrets.CLOUD_SQL_INSTANCE }}

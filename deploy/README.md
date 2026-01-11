@@ -100,6 +100,8 @@ Common options (environment variables):
 - `REPO` (default: `before-that-resolves`)
 - `IMAGE_NAME` (default: `before-that-resolves`)
 - `ENABLE_PDF` (default: `1`)
+- `SKIP_SERVICE_ENABLE` (default: `0`, set to `1` to skip enabling APIs)
+- `SKIP_ARTIFACT_REPO_CREATE` (default: `0`, set to `1` to skip repository creation)
 - `VITE_GOOGLE_CLIENT_ID` (Google login client ID baked into the build)
 - `GOOGLE_CLIENT_ID` (required for Google login / deck collections)
 - `CLOUD_SQL_INSTANCE` (e.g. `before-that-resolves:us-central1:btr-postgres`)
@@ -171,3 +173,5 @@ gh variable set DB_SSL -b "false"
 ```
 
 After this, merges to `main` will trigger a Cloud Build + Cloud Run deploy using the same script as local deploys (`deploy/cloudrun-deploy.sh`).
+
+The CD workflow sets `SKIP_SERVICE_ENABLE=1` and `SKIP_ARTIFACT_REPO_CREATE=1` to avoid requiring elevated permissions at deploy time.
