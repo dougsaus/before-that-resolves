@@ -18,6 +18,8 @@ import { createGameLog, getDeckStats, listGameLogs, removeGameLog, updateGameLog
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { generateChatPdf } from './services/pdf';
+import { scryfallService } from './services/scryfall';
+import type { Card } from './types/shared';
 
 dotenv.config();
 
@@ -31,12 +33,14 @@ type AppDeps = {
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
   verifyGoogleIdToken?: (token: string) => Promise<GoogleUser>;
   fetchArchidektDeckSummary?: (deckUrl: string) => Promise<{ id: string; name: string; format: string | null; url: string; commanderNames: string[]; colorIdentity: string[] }>;
+  searchScryfallCardByName?: (name: string) => Promise<Card | null>;
   listDeckCollection?: (userId: string) => Promise<Array<{
     id: string;
     name: string;
     format: string | null;
     url: string | null;
     commanderNames: string[];
+    commanderLinks: Array<string | null>;
     colorIdentity: string[] | null;
     source: 'archidekt' | 'manual';
     addedAt: string;
@@ -47,6 +51,7 @@ type AppDeps = {
     format: string | null;
     url: string | null;
     commanderNames: string[];
+    commanderLinks: Array<string | null>;
     colorIdentity: string[] | null;
     source: 'archidekt' | 'manual';
     addedAt: string;
@@ -57,6 +62,7 @@ type AppDeps = {
     format: string | null;
     url: string | null;
     commanderNames: string[];
+    commanderLinks: Array<string | null>;
     colorIdentity: string[] | null;
     source: 'archidekt' | 'manual';
     addedAt: string;
@@ -89,6 +95,8 @@ export function createApp(deps: AppDeps = {}) {
   const updateLog = deps.updateGameLog ?? updateGameLog;
   const deleteLog = deps.removeGameLog ?? removeGameLog;
   const fetchDeckStats = deps.getDeckStats ?? getDeckStats;
+  const searchScryfallCardByName =
+    deps.searchScryfallCardByName ?? ((name: string) => scryfallService.searchCardByName(name));
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
       return error.message;
@@ -122,6 +130,32 @@ export function createApp(deps: AppDeps = {}) {
         .filter(Boolean);
     }
     return [];
+  };
+  const resolveCommanderEntries = async (
+    input: unknown,
+    shouldLookup: boolean
+  ): Promise<{ commanderNames: string[]; commanderLinks: Array<string | null> }> => {
+    const names = parseCommanderNames(input).slice(0, 2);
+    if (!shouldLookup || names.length === 0) {
+      return { commanderNames: names, commanderLinks: [] };
+    }
+    const resolved = await Promise.all(
+      names.map(async (name) => {
+        try {
+          const card = await searchScryfallCardByName(name);
+          if (card) {
+            return { name: card.name || name, link: card.scryfall_uri ?? null };
+          }
+        } catch (error) {
+          console.warn('Scryfall lookup failed for commander:', name, error);
+        }
+        return { name, link: null };
+      })
+    );
+    return {
+      commanderNames: resolved.map((entry) => entry.name),
+      commanderLinks: resolved.map((entry) => entry.link)
+    };
   };
   const parseColorIdentityInput = (input: unknown): string[] | null => {
     const order = ['W', 'U', 'B', 'R', 'G'];
@@ -424,11 +458,16 @@ export function createApp(deps: AppDeps = {}) {
 
     try {
       const summary = await fetchDeckSummary(deckUrl);
+      const { commanderNames: resolvedCommanderNames, commanderLinks } = await resolveCommanderEntries(
+        summary.commanderNames,
+        true
+      );
       const decks = await addDeckToCollection(user.id, {
         ...summary,
         url: summary.url,
         format: summary.format,
-        commanderNames: summary.commanderNames,
+        commanderNames: resolvedCommanderNames,
+        commanderLinks,
         colorIdentity: summary.colorIdentity,
         source: 'archidekt'
       });
@@ -465,6 +504,38 @@ export function createApp(deps: AppDeps = {}) {
     }
   });
 
+  app.post('/api/scryfall/lookup', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { name } = req.body ?? {};
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'name is required'
+      });
+      return;
+    }
+
+    try {
+      const card = await searchScryfallCardByName(name.trim());
+      res.json({
+        success: true,
+        card: card
+          ? {
+              name: card.name,
+              scryfallUrl: card.scryfall_uri ?? null
+            }
+          : null
+      });
+    } catch (error: unknown) {
+      res.status(500).json({
+        success: false,
+        error: getErrorMessage(error, 'Failed to lookup card')
+      });
+    }
+  });
+
   app.post('/api/decks/manual', async (req, res) => {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
@@ -479,14 +550,20 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const normalizedUrl = normalizeDeckUrl(url);
+    const source = isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual';
+    const { commanderNames: resolvedCommanderNames, commanderLinks } = await resolveCommanderEntries(
+      commanderNames,
+      true
+    );
     const deck: DeckCollectionInput = {
       id: typeof deckId === 'string' && deckId.trim() ? deckId.trim() : `manual-${crypto.randomUUID()}`,
       name: name.trim(),
       url: normalizedUrl,
       format: null,
-      commanderNames: parseCommanderNames(commanderNames),
+      commanderNames: resolvedCommanderNames,
+      commanderLinks,
       colorIdentity: parseColorIdentityInput(colorIdentity),
-      source: isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual'
+      source
     };
 
     const decks = await addDeckToCollection(user.id, deck);
@@ -516,14 +593,20 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const normalizedUrl = normalizeDeckUrl(url);
+    const source = isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual';
+    const { commanderNames: resolvedCommanderNames, commanderLinks } = await resolveCommanderEntries(
+      commanderNames,
+      true
+    );
     const deck: DeckCollectionInput = {
       id: deckId,
       name: name.trim(),
       url: normalizedUrl,
       format: null,
-      commanderNames: parseCommanderNames(commanderNames),
+      commanderNames: resolvedCommanderNames,
+      commanderLinks,
       colorIdentity: parseColorIdentityInput(colorIdentity),
-      source: isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual'
+      source
     };
 
     const decks = await addDeckToCollection(user.id, deck);

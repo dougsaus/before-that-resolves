@@ -35,6 +35,11 @@ function HookHarness() {
   );
 }
 
+const mockJsonResponse = (payload: unknown, ok: boolean = true) => ({
+  ok,
+  text: async () => JSON.stringify(payload)
+});
+
 describe('useDeckCollection', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let credentialCallback: ((response: { credential?: string }) => void) | null = null;
@@ -72,10 +77,7 @@ describe('useDeckCollection', () => {
 
   it('restores a stored token and loads decks', async () => {
     window.localStorage.setItem(TOKEN_STORAGE_KEY, 'token-123');
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, user: { id: 'user-1' }, decks: [] })
-    });
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-1' }, decks: [] }));
 
     render(<HookHarness />);
 
@@ -93,10 +95,7 @@ describe('useDeckCollection', () => {
   });
 
   it('persists token after Google login callback', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, user: { id: 'user-2' }, decks: [] })
-    });
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-2' }, decks: [] }));
 
     render(<HookHarness />);
 
@@ -123,10 +122,7 @@ describe('useDeckCollection', () => {
 
   it('clears a stored token if loading decks fails', async () => {
     window.localStorage.setItem(TOKEN_STORAGE_KEY, 'token-bad');
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ success: false, error: 'Invalid token' })
-    });
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: false, error: 'Invalid token' }, false));
 
     render(<HookHarness />);
 
@@ -140,10 +136,7 @@ describe('useDeckCollection', () => {
   it('clears token on sign out', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(TOKEN_STORAGE_KEY, 'token-321');
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, user: { id: 'user-3' }, decks: [] })
-    });
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-3' }, decks: [] }));
 
     render(<HookHarness />);
 

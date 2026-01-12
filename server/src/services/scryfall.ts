@@ -196,6 +196,7 @@ export class ScryfallService {
     return {
       id: scryfallCard.id,
       name: scryfallCard.name,
+      scryfall_uri: scryfallCard.scryfall_uri,
       layout: scryfallCard.layout,
       mana_cost: scryfallCard.mana_cost,
       type_line: scryfallCard.type_line,
@@ -214,6 +215,7 @@ export class ScryfallService {
 type ScryfallCard = {
   id: string;
   name: string;
+  scryfall_uri?: string;
   layout?: string;
   mana_cost?: string;
   type_line: string;

@@ -197,6 +197,7 @@ describe('app routes', () => {
         url: 'https://archidekt.com/decks/999/test',
         format: 'commander',
         commanderNames: ['Test Commander'],
+        commanderLinks: [],
         colorIdentity: ['W', 'B'],
         source: 'archidekt',
         addedAt: '2025-01-01T00:00:00.000Z'
@@ -228,6 +229,7 @@ describe('app routes', () => {
         url: null,
         format: 'commander',
         commanderNames: ['Test Commander'],
+        commanderLinks: [],
         colorIdentity: ['U', 'R'],
         source: 'manual',
         addedAt: '2025-01-01T00:00:00.000Z'
@@ -238,6 +240,7 @@ describe('app routes', () => {
         url: null,
         format: null,
         commanderNames: [],
+        commanderLinks: [],
         colorIdentity: null,
         source: 'manual',
         addedAt: '2025-01-02T00:00:00.000Z'
@@ -299,15 +302,24 @@ describe('app routes', () => {
         url: 'https://archidekt.com/decks/123/added',
         format: 'commander',
         commanderNames: ['Edgar Markov'],
+        commanderLinks: [],
         colorIdentity: ['W', 'B', 'R'],
         source: 'archidekt',
         addedAt: '2025-01-02T00:00:00.000Z'
       }
     ]);
+    const searchScryfallCardByName = vi.fn().mockResolvedValue({
+      id: 'markov',
+      name: 'Edgar Markov',
+      type_line: 'Legendary Creature',
+      color_identity: ['W', 'B', 'R'],
+      scryfall_uri: 'https://scryfall.com/card/markov/edgar-markov'
+    });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
       fetchArchidektDeckSummary,
+      searchScryfallCardByName,
       upsertDeckInCollection,
       upsertUser
     });
@@ -320,12 +332,14 @@ describe('app routes', () => {
 
     expect(response.body.success).toBe(true);
     expect(fetchArchidektDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/123/added');
+    expect(searchScryfallCardByName).toHaveBeenCalledWith('Edgar Markov');
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-456', {
       id: '123',
       name: 'Added Deck',
       url: 'https://archidekt.com/decks/123/added',
       format: 'commander',
       commanderNames: ['Edgar Markov'],
+      commanderLinks: ['https://scryfall.com/card/markov/edgar-markov'],
       colorIdentity: ['W', 'B', 'R'],
       source: 'archidekt'
     });
@@ -366,6 +380,32 @@ describe('app routes', () => {
     });
   });
 
+  it('looks up a commander card by name', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-555' });
+    const searchScryfallCardByName = vi.fn().mockResolvedValue({
+      id: 'kiora',
+      name: 'Kiora, Sovereign of the Deep',
+      type_line: 'Legendary Creature',
+      color_identity: ['U', 'G'],
+      scryfall_uri: 'https://scryfall.com/card/kiora/kiora-sovereign-of-the-deep'
+    });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({ verifyGoogleIdToken, searchScryfallCardByName, upsertUser });
+
+    const response = await request(app)
+      .post('/api/scryfall/lookup')
+      .set('authorization', 'Bearer token-555')
+      .send({ name: 'Kiora' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(searchScryfallCardByName).toHaveBeenCalledWith('Kiora');
+    expect(response.body.card).toEqual({
+      name: 'Kiora, Sovereign of the Deep',
+      scryfallUrl: 'https://scryfall.com/card/kiora/kiora-sovereign-of-the-deep'
+    });
+  });
+
   it('adds a manual deck to the collection', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-789' });
     const upsertDeckInCollection = vi.fn().mockResolvedValue([
@@ -374,14 +414,23 @@ describe('app routes', () => {
         name: 'Manual Deck',
         url: 'https://example.com/decklist',
         commanderNames: ['Commander One'],
+        commanderLinks: ['https://scryfall.com/card/abc/commander-one'],
         colorIdentity: ['G'],
         source: 'manual',
         addedAt: '2025-01-03T00:00:00.000Z'
       }
     ]);
+    const searchScryfallCardByName = vi.fn().mockResolvedValue({
+      id: 'abc',
+      name: 'Commander One',
+      type_line: 'Legendary Creature',
+      color_identity: ['G'],
+      scryfall_uri: 'https://scryfall.com/card/abc/commander-one'
+    });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
+      searchScryfallCardByName,
       upsertDeckInCollection,
       upsertUser
     });
@@ -398,11 +447,13 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
+    expect(searchScryfallCardByName).toHaveBeenCalledWith('Commander One');
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-789', expect.objectContaining({
       name: 'Manual Deck',
       url: 'https://example.com/decklist',
       format: null,
       commanderNames: ['Commander One'],
+      commanderLinks: ['https://scryfall.com/card/abc/commander-one'],
       colorIdentity: ['G'],
       source: 'manual'
     }));
@@ -416,14 +467,31 @@ describe('app routes', () => {
         name: 'Updated Deck',
         url: 'https://archidekt.com/decks/202/updated',
         commanderNames: ['Tymna the Weaver', 'Kraum'],
+        commanderLinks: [],
         colorIdentity: ['W', 'U', 'B', 'R'],
         source: 'archidekt',
         addedAt: '2025-01-05T00:00:00.000Z'
       }
     ]);
+    const searchScryfallCardByName = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'tymna',
+        name: 'Tymna the Weaver',
+        type_line: 'Legendary Creature',
+        color_identity: ['W', 'B'],
+        scryfall_uri: 'https://scryfall.com/card/tymna/tymna-the-weaver'
+      })
+      .mockResolvedValueOnce({
+        id: 'kraum',
+        name: 'Kraum',
+        type_line: 'Legendary Creature',
+        color_identity: ['U', 'R'],
+        scryfall_uri: 'https://scryfall.com/card/kraum/kraum'
+      });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
+      searchScryfallCardByName,
       upsertDeckInCollection,
       upsertUser
     });
@@ -440,12 +508,18 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
+    expect(searchScryfallCardByName).toHaveBeenCalledWith('Tymna the Weaver');
+    expect(searchScryfallCardByName).toHaveBeenCalledWith('Kraum');
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-202', {
       id: 'deck-202',
       name: 'Updated Deck',
       url: 'https://archidekt.com/decks/202/updated',
       format: null,
       commanderNames: ['Tymna the Weaver', 'Kraum'],
+      commanderLinks: [
+        'https://scryfall.com/card/tymna/tymna-the-weaver',
+        'https://scryfall.com/card/kraum/kraum'
+      ],
       colorIdentity: ['W', 'U', 'B', 'R'],
       source: 'archidekt'
     });
@@ -460,6 +534,7 @@ describe('app routes', () => {
         url: null,
         format: null,
         commanderNames: [],
+        commanderLinks: [],
         colorIdentity: null,
         source: 'manual',
         addedAt: '2025-01-04T00:00:00.000Z'
@@ -534,6 +609,7 @@ describe('app routes', () => {
         url: 'https://archidekt.com/decks/1/test',
         format: 'commander',
         commanderNames: ['Sidar Jabari'],
+        commanderLinks: [],
         colorIdentity: ['W', 'U', 'B'],
         source: 'archidekt',
         addedAt: '2025-01-01T00:00:00.000Z'

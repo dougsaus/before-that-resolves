@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
+import { buildApiUrl } from '../utils/api';
 
 function formatWinRate(winRate: number | null): string {
   if (winRate === null) return '—';
@@ -38,6 +40,11 @@ function formatColorValue(colors: string[] | null): string {
   return sortColorsForDisplay(colors).join('');
 }
 
+function getScryfallImageUrl(cardName: string) {
+  const encoded = encodeURIComponent(cardName.trim());
+  return `https://api.scryfall.com/cards/named?exact=${encoded}&format=image&version=normal`;
+}
+
 export type DeckStats = {
   totalGames: number;
   wins: number;
@@ -51,6 +58,7 @@ export type DeckEntry = {
   name: string;
   url: string | null;
   commanderNames: string[];
+  commanderLinks: Array<string | null>;
   colorIdentity: string[] | null;
   source: 'archidekt' | 'manual';
   addedAt: string;
@@ -61,7 +69,7 @@ export type DeckFormInput = {
   deckId?: string;
   name: string;
   url?: string | null;
-  commanderNames?: string;
+  commanderNames?: string[];
   colorIdentity?: string[];
 };
 
@@ -131,7 +139,9 @@ export function DeckCollection({
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckUrl, setDeckUrl] = useState('');
   const [deckName, setDeckName] = useState('');
-  const [deckCommander, setDeckCommander] = useState('');
+  const [commanderInputs, setCommanderInputs] = useState<string[]>(['']);
+  const [commanderLookupLinks, setCommanderLookupLinks] = useState<Array<string | null>>([]);
+  const [commanderLookupStatus, setCommanderLookupStatus] = useState<Array<'idle' | 'loading' | 'found' | 'not-found' | 'error'>>([]);
   const [deckColor, setDeckColor] = useState('');
   const [deckFormError, setDeckFormError] = useState<string | null>(null);
   const [deckPreviewError, setDeckPreviewError] = useState<string | null>(null);
@@ -149,9 +159,14 @@ export function DeckCollection({
   const [showScrollHint, setShowScrollHint] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'asc');
+  const [hoverCard, setHoverCard] = useState<{ label: string; rect: DOMRect } | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const anchorRef = useRef<HTMLAnchorElement | null>(null);
+  const imageUrl = useMemo(() => (hoverCard ? getScryfallImageUrl(hoverCard.label) : null), [hoverCard]);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const sortLabels: Record<SortKey, string> = {
     name: 'Deck name',
-    commander: 'Commander',
+    commander: 'Commander(s)',
     color: 'Color identity',
     games: 'Games played',
     wins: 'Wins',
@@ -164,6 +179,49 @@ export function DeckCollection({
     loading: logLoading,
     statusMessage: logStatusMessage
   } = useGameLogs(idToken, { autoLoad: false });
+  useEffect(() => {
+    const update = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  const hoverPosition = useMemo(() => {
+    if (!hoverCard) return null;
+    const margin = 12;
+    const popupWidth = 272;
+    const popupHeight = 360;
+
+    let left = hoverCard.rect.left + hoverCard.rect.width / 2 - popupWidth / 2;
+    left = Math.max(margin, Math.min(left, viewport.width - popupWidth - margin));
+
+    const aboveTop = hoverCard.rect.top - popupHeight - margin;
+    if (aboveTop >= margin) {
+      const bottom = viewport.height - hoverCard.rect.top + margin;
+      return { left, bottom, placement: 'above' as const };
+    }
+
+    const top = hoverCard.rect.bottom + margin;
+    return { left, top, placement: 'below' as const };
+  }, [hoverCard, viewport.height, viewport.width]);
+
+  useEffect(() => {
+    if (!hoverCard) return;
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      const overAnchor = anchorRef.current?.contains(target || null);
+      const overPopup = popupRef.current?.contains(target || null);
+      if (!overAnchor && !overPopup) {
+        setHoverCard(null);
+      }
+    };
+
+    document.addEventListener('click', handleDocumentClick);
+    return () => document.removeEventListener('click', handleDocumentClick);
+  }, [hoverCard]);
   useEffect(() => {
     localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: sortDir }));
   }, [sortKey, sortDir]);
@@ -234,15 +292,62 @@ export function DeckCollection({
     setSortDir(defaultDir);
   };
 
+  const applyCommanderInputs = (names: string[], links: Array<string | null> = []) => {
+    const normalized = names.slice(0, 2);
+    if (normalized.length > 1) {
+      setCommanderInputs(normalized);
+    } else {
+      setCommanderInputs([normalized[0] ?? '']);
+    }
+    setCommanderLookupLinks([links[0] ?? null, links[1] ?? null].slice(0, normalized.length || 1));
+    setCommanderLookupStatus(
+      normalized.length > 0
+        ? normalized.map((_, index) => (links[index] ? 'found' : 'idle'))
+        : ['idle']
+    );
+  };
+
   const resetDeckForm = () => {
     setDeckId(null);
     setDeckUrl('');
     setDeckName('');
-    setDeckCommander('');
+    setCommanderInputs(['']);
+    setCommanderLookupLinks([]);
+    setCommanderLookupStatus([]);
     setDeckColor('');
     setDeckFormError(null);
     setDeckPreviewError(null);
     setDeckPreviewLoading(false);
+  };
+
+  const addCommanderInput = () => {
+    setCommanderInputs((current) => (current.length >= 2 ? current : [...current, '']));
+    setCommanderLookupLinks((current) => (current.length >= 2 ? current : [...current, null]));
+    setCommanderLookupStatus((current) => (current.length >= 2 ? current : [...current, 'idle']));
+  };
+
+  const removeSecondCommander = () => {
+    setCommanderInputs((current) => (current.length > 1 ? [current[0] ?? ''] : current));
+    setCommanderLookupLinks((current) => (current.length > 1 ? [current[0] ?? null] : current));
+    setCommanderLookupStatus((current) => (current.length > 1 ? [current[0] ?? 'idle'] : current));
+  };
+
+  const updateCommanderInput = (index: number, value: string) => {
+    setCommanderInputs((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+    setCommanderLookupLinks((current) => {
+      const next = [...current];
+      next[index] = null;
+      return next;
+    });
+    setCommanderLookupStatus((current) => {
+      const next = [...current];
+      next[index] = 'idle';
+      return next;
+    });
   };
 
   const openAddModal = () => {
@@ -256,7 +361,7 @@ export function DeckCollection({
     setDeckId(deck.id);
     setDeckUrl(deck.url ?? '');
     setDeckName(deck.name);
-    setDeckCommander(deck.commanderNames.join(', '));
+    applyCommanderInputs(deck.commanderNames, deck.commanderLinks);
     setDeckColor(formatColorValue(deck.colorIdentity));
     setDeckFormError(null);
     setDeckPreviewError(null);
@@ -304,7 +409,7 @@ export function DeckCollection({
     }
     const { deck } = result;
     setDeckName(deck.name);
-    setDeckCommander(deck.commanderNames.join(', '));
+    applyCommanderInputs(deck.commanderNames);
     setDeckColor(formatColorValue(deck.colorIdentity));
     setDeckUrl(deck.url);
     if (!editTarget) {
@@ -318,10 +423,14 @@ export function DeckCollection({
       return;
     }
     setDeckFormError(null);
+    const commanderNames = commanderInputs
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, 2);
     const input: DeckFormInput = {
       name: deckName.trim(),
       url: deckUrl.trim() ? deckUrl.trim() : null,
-      commanderNames: deckCommander.trim() || undefined
+      commanderNames: commanderNames.length > 0 ? commanderNames : undefined
     };
     if (deckColor === 'C') {
       input.colorIdentity = [];
@@ -334,6 +443,79 @@ export function DeckCollection({
     if (!saved) return;
     resetDeckForm();
     closeDeckModal();
+  };
+
+  const lookupCommander = async (index: number) => {
+    if (!idToken) {
+      setDeckFormError('Sign in with Google to search commanders.');
+      return;
+    }
+    const name = commanderInputs[index]?.trim();
+    if (!name) {
+      return;
+    }
+    setCommanderLookupStatus((current) => {
+      const next = [...current];
+      next[index] = 'loading';
+      return next;
+    });
+    setDeckFormError(null);
+    try {
+      const response = await fetch(buildApiUrl('/api/scryfall/lookup'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name })
+      });
+      const text = await response.text();
+      let payload: { success?: boolean; card?: { name: string; scryfallUrl: string | null }; error?: string };
+      try {
+        payload = JSON.parse(text) as { success?: boolean; card?: { name: string; scryfallUrl: string | null }; error?: string };
+      } catch {
+        throw new Error('Unexpected response from server.');
+      }
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to lookup commander.');
+      }
+      if (!payload.card) {
+        setCommanderLookupLinks((current) => {
+          const next = [...current];
+          next[index] = null;
+          return next;
+        });
+        setCommanderLookupStatus((current) => {
+          const next = [...current];
+          next[index] = 'not-found';
+          return next;
+        });
+        return;
+      }
+      setCommanderInputs((current) => {
+        const next = [...current];
+        next[index] = payload.card?.name || name;
+        return next;
+      });
+      setCommanderLookupLinks((current) => {
+        const next = [...current];
+        next[index] = payload.card?.scryfallUrl ?? null;
+        return next;
+      });
+      setCommanderLookupStatus((current) => {
+        const next = [...current];
+        next[index] = payload.card?.scryfallUrl ? 'found' : 'idle';
+        return next;
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to lookup commander.';
+      setCommanderLookupStatus((current) => {
+        const next = [...current];
+        next[index] = 'error';
+        return next;
+      });
+      setDeckFormError(message);
+    }
   };
 
   const updateLogOpponent = (index: number, field: keyof OpponentForm, value: string) => {
@@ -370,6 +552,38 @@ export function DeckCollection({
         await onRefreshDecks();
       }
     }
+  };
+
+  const renderCommanderList = (deck: DeckEntry) => {
+    if (deck.commanderNames.length === 0) {
+      return '—';
+    }
+    return deck.commanderNames.map((name, index) => {
+      const link = deck.commanderLinks?.[index] ?? null;
+      const key = `${deck.id}-commander-${index}`;
+      return (
+        <span key={key} className="inline-flex items-center">
+          {link ? (
+            <a
+              href={link}
+              target="_blank"
+              rel="noreferrer"
+              className="text-cyan-200 hover:text-cyan-100"
+              onMouseEnter={(event) => {
+                anchorRef.current = event.currentTarget;
+                const rect = event.currentTarget.getBoundingClientRect();
+                setHoverCard({ label: name, rect });
+              }}
+            >
+              {name}
+            </a>
+          ) : (
+            <span>{name}</span>
+          )}
+          {index < deck.commanderNames.length - 1 && <span className="text-gray-500">, </span>}
+        </span>
+      );
+    });
   };
 
   if (!enabled) {
@@ -475,7 +689,7 @@ export function DeckCollection({
                           )}
                           {deck.commanderNames.length > 0 && (
                             <span className="truncate text-xs text-gray-400 sm:text-sm">
-                              {deck.commanderNames.join(', ')}
+                              {renderCommanderList(deck)}
                             </span>
                           )}
                         </div>
@@ -677,17 +891,83 @@ export function DeckCollection({
                   placeholder="My custom deck"
                   className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-              <label className="text-sm text-gray-300" htmlFor="deck-commander-input">
-                Commander name(s) (optional)
-              </label>
-              <input
-                id="deck-commander-input"
-                type="text"
-                value={deckCommander}
-                onChange={(event) => setDeckCommander(event.target.value)}
-                placeholder="Atraxa, Praetors' Voice"
-                className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-gray-300" htmlFor="deck-commander-input-0">
+                  Commander(s) (optional)
+                </label>
+                {commanderInputs.length < 2 && (
+                  <button
+                    type="button"
+                    onClick={addCommanderInput}
+                    className="text-xs font-semibold text-cyan-400 hover:text-cyan-300"
+                  >
+                    + Commander
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col gap-3">
+                {commanderInputs.map((value, index) => (
+                  <div key={`commander-input-${index}`} className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        id={`deck-commander-input-${index}`}
+                        type="text"
+                        value={value}
+                        onChange={(event) => updateCommanderInput(index, event.target.value)}
+                        placeholder="Commander name"
+                        aria-label="Commander name"
+                        className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => lookupCommander(index)}
+                        disabled={!value.trim() || commanderLookupStatus[index] === 'loading'}
+                        className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                        aria-label="Lookup commander"
+                        title="Lookup commander"
+                      >
+                        Scryfall
+                      </button>
+                      {index === 1 && (
+                        <button
+                          type="button"
+                          onClick={removeSecondCommander}
+                          className="text-gray-400 hover:text-red-300"
+                          aria-label="Remove commander"
+                          title="Remove commander"
+                        >
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                            <path
+                              fillRule="evenodd"
+                              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {commanderLookupStatus[index] === 'loading' && (
+                      <p className="text-xs text-gray-400">Searching Scryfall...</p>
+                    )}
+                    {commanderLookupStatus[index] === 'not-found' && (
+                      <p className="text-xs text-amber-300">No card found in Scryfall.</p>
+                    )}
+                    {commanderLookupStatus[index] === 'error' && (
+                      <p className="text-xs text-red-400">Lookup failed.</p>
+                    )}
+                    {commanderLookupLinks[index] && (
+                      <a
+                      href={commanderLookupLinks[index] ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-cyan-300 hover:text-cyan-200"
+                      >
+                        View on Scryfall
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
               <ColorIdentitySelect
                 label="Color identity (optional)"
                 value={deckColor}
@@ -922,6 +1202,27 @@ export function DeckCollection({
             </div>
           </div>
         </div>
+      )}
+      {hoverCard && imageUrl && hoverPosition && createPortal(
+        <div
+          className="fixed z-50"
+          style={
+            hoverPosition.placement === 'above'
+              ? { left: hoverPosition.left, bottom: hoverPosition.bottom }
+              : { left: hoverPosition.left, top: hoverPosition.top }
+          }
+          ref={popupRef}
+        >
+          <div className="rounded-lg border border-gray-700 bg-gray-900 p-2 shadow-2xl">
+            <img
+              src={imageUrl}
+              alt={hoverCard.label}
+              className="h-auto w-auto max-h-96 max-w-72 rounded object-contain"
+              loading="lazy"
+            />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
