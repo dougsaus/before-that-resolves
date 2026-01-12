@@ -152,16 +152,19 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
             <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
                 <span className="text-xs uppercase tracking-wide text-gray-500">Logs</span>
+                <span className="text-xs text-gray-500">Recent activity</span>
               </div>
               <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
                 {logs.map((log) => (
-                  <div key={log.id} className="flex flex-col gap-2 px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
+                  <div key={log.id} className="flex flex-col gap-1 px-4 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
                         <p className="text-xs text-gray-500">{formatDate(log.playedAt)}</p>
-                        <h4 className="text-base font-semibold text-white">{log.deckName}</h4>
+                        <h4 className="truncate text-sm font-semibold text-white sm:text-base">
+                          {log.deckName}
+                        </h4>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <span
                           className={`text-xs font-semibold uppercase tracking-wide ${
                             log.result === 'win'
@@ -181,16 +184,47 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         <button
                           type="button"
                           onClick={() => openEditModal(log)}
-                          className="text-xs text-gray-400 hover:text-white"
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-cyan-300"
+                          aria-label={`Edit ${log.deckName}`}
+                          title="Edit log"
                         >
-                          Edit
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                          </svg>
                         </button>
                         <button
                           type="button"
                           onClick={() => removeLog(log.id)}
-                          className="text-xs text-gray-400 hover:text-white"
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-red-300"
+                          aria-label={`Delete ${log.deckName} log`}
+                          title="Delete log"
                         >
-                          Delete
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
                         </button>
                       </div>
                     </div>
