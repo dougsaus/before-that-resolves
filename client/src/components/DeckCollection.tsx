@@ -155,7 +155,6 @@ export function DeckCollection({
   const [logDurationMinutes, setLogDurationMinutes] = useState('');
   const [logOpponents, setLogOpponents] = useState<OpponentForm[]>([]);
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
-  const [logGoodGame, setLogGoodGame] = useState(true);
   const [logFormError, setLogFormError] = useState<string | null>(null);
   const deckListRef = useRef<HTMLDivElement | null>(null);
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -383,7 +382,6 @@ export function DeckCollection({
     setLogDurationMinutes('');
     setLogOpponents([]);
     setLogResult('pending');
-    setLogGoodGame(true);
     setLogFormError(null);
   };
 
@@ -555,8 +553,7 @@ export function DeckCollection({
         commander: opponent.commander.trim(),
         colorIdentity: opponent.colorIdentity.trim()
       })),
-      result: logResult === 'pending' ? null : logResult,
-      goodGame: logGoodGame
+      result: logResult === 'pending' ? null : logResult
     });
     if (success) {
       setLogTarget(null);
@@ -1168,15 +1165,6 @@ export function DeckCollection({
                     Later
                   </button>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={logGoodGame}
-                    onChange={(event) => setLogGoodGame(event.target.checked)}
-                    className="h-4 w-4 rounded border-gray-600 text-cyan-500 focus:ring-cyan-500"
-                  />
-                  Good game?
-                </label>
               </div>
               {(logFormError || logError) && (
                 <p className="text-xs text-red-400">{logFormError || logError}</p>

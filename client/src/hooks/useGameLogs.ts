@@ -17,7 +17,6 @@ export type GameLogEntry = {
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
-  goodGame: boolean;
   createdAt: string;
 };
 
@@ -29,7 +28,6 @@ export type GameLogInput = {
   opponentsCount: number;
   opponents: Array<{ name: string; commander: string; colorIdentity: string }>;
   result: 'win' | 'loss' | null;
-  goodGame: boolean;
 };
 
 export type GameLogUpdate = Omit<GameLogInput, 'deckId'>;

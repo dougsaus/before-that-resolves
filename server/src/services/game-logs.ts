@@ -17,7 +17,6 @@ export type GameLogEntry = {
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
-  goodGame: boolean;
   createdAt: string;
 };
 
@@ -30,7 +29,6 @@ export type GameLogInput = {
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
-  goodGame: boolean;
 };
 
 export type GameLogUpdate = Omit<GameLogInput, 'deckId' | 'deckName'>;
@@ -45,7 +43,6 @@ type GameLogRow = {
   opponents_count: number;
   opponents: unknown;
   result: 'win' | 'loss' | null;
-  good_game: boolean;
   created_at: string | Date;
 };
 
@@ -104,7 +101,6 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
     opponentsCount: row.opponents_count,
     opponents: normalizeOpponents(row.opponents),
     result: row.result,
-    goodGame: row.good_game,
     createdAt
   };
 }
@@ -112,7 +108,7 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
 export async function listGameLogs(userId: string): Promise<GameLogEntry[]> {
   const db = getPool();
   const result = await db.query<GameLogRow>(
-    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, good_game, created_at
+    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, created_at
      FROM game_logs
      WHERE user_id = $1
      ORDER BY played_at DESC, created_at DESC`,
@@ -136,10 +132,9 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       opponents_count,
       opponents,
       result,
-      good_game,
       created_at
     )
-    VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb, $10, $11, NOW())`,
+    VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb, $10, NOW())`,
     [
       id,
       userId,
@@ -150,8 +145,7 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       input.durationMinutes,
       input.opponentsCount,
       JSON.stringify(input.opponents ?? []),
-      input.result,
-      input.goodGame
+      input.result
     ]
   );
   return listGameLogs(userId);
@@ -170,9 +164,8 @@ export async function updateGameLog(
          duration_minutes = $3,
          opponents_count = $4,
          opponents = $5::jsonb,
-         result = $6,
-         good_game = $7
-     WHERE user_id = $8 AND id = $9`,
+         result = $6
+     WHERE user_id = $7 AND id = $8`,
     [
       input.playedAt,
       input.turns,
@@ -180,7 +173,6 @@ export async function updateGameLog(
       input.opponentsCount,
       JSON.stringify(input.opponents ?? []),
       input.result,
-      input.goodGame,
       userId,
       logId
     ]

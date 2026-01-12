@@ -195,13 +195,6 @@ export function createApp(deps: AppDeps = {}) {
     }
     return new Date().toISOString().slice(0, 10);
   };
-  const parseBooleanInput = (input: unknown, fallback = false): boolean => {
-    if (typeof input === 'boolean') return input;
-    if (typeof input === 'string') {
-      return input.trim().toLowerCase() === 'true';
-    }
-    return fallback;
-  };
   const parseResultInput = (input: unknown): 'win' | 'loss' | null => {
     if (input === undefined || input === null || input === '') {
       return null;
@@ -667,7 +660,6 @@ export function createApp(deps: AppDeps = {}) {
       opponentsCount,
       opponents,
       result,
-      goodGame,
       turns,
       durationMinutes
     } = req.body ?? {};
@@ -699,8 +691,7 @@ export function createApp(deps: AppDeps = {}) {
       durationMinutes: parseOptionalNumber(durationMinutes),
       opponentsCount: normalizedOpponentsCount,
       opponents: parsedOpponents,
-      result: parseResultInput(result),
-      goodGame: parseBooleanInput(goodGame)
+      result: parseResultInput(result)
     };
 
     const logs = await createLog(user.id, logInput);
@@ -720,7 +711,7 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
-    const { datePlayed, opponentsCount, opponents, result, goodGame, turns, durationMinutes } =
+    const { datePlayed, opponentsCount, opponents, result, turns, durationMinutes } =
       req.body ?? {};
     const parsedOpponents = parseOpponentEntries(opponents);
     const normalizedOpponentsCount = parseOpponentsCount(opponentsCount, parsedOpponents);
@@ -730,8 +721,7 @@ export function createApp(deps: AppDeps = {}) {
       durationMinutes: parseOptionalNumber(durationMinutes),
       opponentsCount: normalizedOpponentsCount,
       opponents: parsedOpponents,
-      result: parseResultInput(result),
-      goodGame: parseBooleanInput(goodGame)
+      result: parseResultInput(result)
     };
 
     const logs = await updateLog(user.id, logId, logUpdate);
