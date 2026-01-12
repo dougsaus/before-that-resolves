@@ -238,34 +238,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
               Review recent Commander games logged from your deck list.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <label className="text-xs uppercase tracking-wide text-gray-500" htmlFor="game-log-sort">
-                Sort
-              </label>
-              <select
-                id="game-log-sort"
-                value={sortKey}
-                onChange={(event) => handleSortChange(event.target.value as SortKey)}
-                className="rounded-md border border-gray-700 bg-gray-900/80 px-2 py-1 text-xs text-gray-200"
-              >
-                {Object.entries(sortLabels).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleSortDirToggle}
-                className="rounded-md border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:border-cyan-400 hover:text-cyan-200"
-                aria-label={`Sort ${sortDir === 'asc' ? 'descending' : 'ascending'}`}
-              >
-                {sortDir === 'asc' ? '^' : 'v'}
-              </button>
-            </div>
-          </div>
+          {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
         </div>
 
         <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
@@ -278,7 +251,31 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
             <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
                 <span className="text-xs uppercase tracking-wide text-gray-500">Logs</span>
-                <span className="text-xs text-gray-500">Recent activity</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <label className="text-xs uppercase tracking-wide text-gray-500" htmlFor="game-log-sort">
+                    Sort
+                  </label>
+                  <select
+                    id="game-log-sort"
+                    value={sortKey}
+                    onChange={(event) => handleSortChange(event.target.value as SortKey)}
+                    className="rounded-md border border-gray-700 bg-gray-900/80 px-2 py-1 text-xs text-gray-200"
+                  >
+                    {Object.entries(sortLabels).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleSortDirToggle}
+                    className="rounded-md border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:border-cyan-400 hover:text-cyan-200"
+                    aria-label={`Sort ${sortDir === 'asc' ? 'descending' : 'ascending'}`}
+                  >
+                    {sortDir === 'asc' ? '^' : 'v'}
+                  </button>
+                </div>
               </div>
               <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
                 {sortedLogs.map((log) => (
