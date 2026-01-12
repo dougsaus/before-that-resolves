@@ -12,6 +12,8 @@ export type GameLogEntry = {
   deckId: string;
   deckName: string;
   playedAt: string;
+  turns: number | null;
+  durationMinutes: number | null;
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
@@ -22,6 +24,8 @@ export type GameLogEntry = {
 export type GameLogInput = {
   deckId: string;
   datePlayed: string;
+  turns: number | null;
+  durationMinutes: number | null;
   opponentsCount: number;
   opponents: Array<{ name: string; commander: string; colorIdentity: string }>;
   result: 'win' | 'loss' | null;

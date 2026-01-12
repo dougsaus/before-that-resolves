@@ -33,6 +33,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     deckName: string;
   } | null>(null);
   const [editDate, setEditDate] = useState('');
+  const [editTurns, setEditTurns] = useState('');
+  const [editDurationMinutes, setEditDurationMinutes] = useState('');
   const [editOpponents, setEditOpponents] = useState<OpponentForm[]>([]);
   const [editResult, setEditResult] = useState<'win' | 'loss' | 'pending'>('pending');
   const [editGoodGame, setEditGoodGame] = useState(false);
@@ -41,6 +43,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const openEditModal = (log: (typeof logs)[number]) => {
     setEditTarget({ id: log.id, deckName: log.deckName });
     setEditDate(log.playedAt);
+    setEditTurns(log.turns ? String(log.turns) : '');
+    setEditDurationMinutes(log.durationMinutes ? String(log.durationMinutes) : '');
     setEditOpponents(
       log.opponents.map((opponent) => ({
         name: opponent.name ?? '',
@@ -51,6 +55,14 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setEditResult(log.result ?? 'pending');
     setEditGoodGame(Boolean(log.goodGame));
     setEditFormError(null);
+  };
+
+  const parseOptionalNumberInput = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
   };
 
   const addEditOpponent = () => {
@@ -78,6 +90,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setEditFormError(null);
     const success = await updateLog(editTarget.id, {
       datePlayed: editDate,
+      turns: parseOptionalNumberInput(editTurns),
+      durationMinutes: parseOptionalNumberInput(editDurationMinutes),
       opponentsCount: editOpponents.length,
       opponents: editOpponents.map((opponent) => ({
         name: opponent.name.trim(),
@@ -115,108 +129,117 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto flex flex-col gap-6">
-      <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
-        <h2 className="text-2xl font-semibold mb-2">Game Logs</h2>
-        <p className="text-gray-300">
-          Review recent Commander games logged from your deck list.
-        </p>
-      </div>
-
-      <section className="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div className="w-full max-w-6xl mx-auto flex h-full min-h-0 flex-col gap-6">
+      {error && <p className="text-red-400">{error}</p>}
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Recent logs</h3>
-            <p className="text-sm text-gray-400">Your latest Commander games.</p>
+            <h3 className="text-lg font-semibold text-white">Game Logs</h3>
+            <p className="text-sm text-gray-400">
+              Review recent Commander games logged from your deck list.
+            </p>
           </div>
-          {logs.length > 0 && (
-            <span className="text-xs text-gray-500">{logs.length} total</span>
-          )}
+          {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
         </div>
 
-        {loading && <p className="mt-4 text-sm text-gray-400">Loading game logs...</p>}
-        {!loading && error && <p className="mt-4 text-sm text-red-400">{error}</p>}
-        {!loading && !error && logs.length === 0 && (
-          <p className="mt-4 text-sm text-gray-300">No games logged yet.</p>
-        )}
+        <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
+          {loading && <p className="text-gray-400">Loading game logs...</p>}
+          {!loading && !error && logs.length === 0 && (
+            <p className="text-gray-400">No games logged yet.</p>
+          )}
 
-        {!loading && logs.length > 0 && (
-          <div className="mt-4 flex flex-col gap-4">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className="rounded-xl border border-gray-800 bg-gray-950/60 p-4 flex flex-col gap-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm text-gray-400">{formatDate(log.playedAt)}</p>
-                    <h4 className="text-base font-semibold text-white">{log.deckName}</h4>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`text-xs font-semibold uppercase tracking-wide ${
-                        log.result === 'win'
-                          ? 'text-emerald-300'
-                          : log.result === 'loss'
-                            ? 'text-rose-300'
-                            : 'text-gray-300'
-                      }`}
-                    >
-                      {log.result ?? 'pending'}
-                    </span>
-                    {log.goodGame && (
-                      <span className="rounded-full border border-emerald-500/50 px-2 py-1 text-xs text-emerald-200">
-                        Good game
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(log)}
-                      className="text-xs text-gray-400 hover:text-white"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeLog(log.id)}
-                      className="text-xs text-gray-400 hover:text-white"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-sm text-gray-300">
-                  Opponents: <span className="text-white">{log.opponentsCount}</span>
-                </div>
-
-                {log.opponents.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    {log.opponents.map((opponent, index) => (
-                      <div
-                        key={`${log.id}-opponent-${index}`}
-                        className="flex flex-wrap items-center gap-2 text-sm text-gray-200"
-                      >
-                        <span className="font-medium">
-                          {opponent.name || `Opponent ${index + 1}`}
-                        </span>
-                        {opponent.commander && (
-                          <span className="text-gray-400">({opponent.commander})</span>
-                        )}
-                        {opponent.colorIdentity ? (
-                          <ColorIdentityIcons colors={opponent.colorIdentity} />
-                        ) : (
-                          <span className="text-xs text-gray-500">Unknown colors</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+          {!loading && logs.length > 0 && (
+            <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
+                <span className="text-xs uppercase tracking-wide text-gray-500">Logs</span>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+              <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
+                {logs.map((log) => (
+                  <div key={log.id} className="flex flex-col gap-2 px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500">{formatDate(log.playedAt)}</p>
+                        <h4 className="text-base font-semibold text-white">{log.deckName}</h4>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`text-xs font-semibold uppercase tracking-wide ${
+                            log.result === 'win'
+                              ? 'text-emerald-300'
+                              : log.result === 'loss'
+                                ? 'text-rose-300'
+                                : 'text-gray-300'
+                          }`}
+                        >
+                          {log.result ?? 'pending'}
+                        </span>
+                        {log.goodGame && (
+                          <span className="rounded-full border border-emerald-500/50 px-2 py-1 text-xs text-emerald-200">
+                            Good game
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(log)}
+                          className="text-xs text-gray-400 hover:text-white"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLog(log.id)}
+                          className="text-xs text-gray-400 hover:text-white"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 text-xs text-gray-400">
+                      <span>
+                        Opponents <span className="text-gray-200">{log.opponentsCount}</span>
+                      </span>
+                      {log.turns ? (
+                        <span>
+                          Turns <span className="text-gray-200">{log.turns}</span>
+                        </span>
+                      ) : null}
+                      {log.durationMinutes ? (
+                        <span>
+                          Length <span className="text-gray-200">{log.durationMinutes}m</span>
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {log.opponents.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {log.opponents.map((opponent, index) => (
+                          <div
+                            key={`${log.id}-opponent-${index}`}
+                            className="flex flex-wrap items-center gap-2 text-sm text-gray-200"
+                          >
+                            <span className="font-medium">
+                              {opponent.name || `Opponent ${index + 1}`}
+                            </span>
+                            {opponent.commander && (
+                              <span className="text-gray-400">({opponent.commander})</span>
+                            )}
+                            {opponent.colorIdentity ? (
+                              <ColorIdentityIcons colors={opponent.colorIdentity} />
+                            ) : (
+                              <span className="text-xs text-gray-500">Unknown colors</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {editTarget && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
@@ -235,6 +258,30 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                   className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm text-gray-300">
+                  Number of turns (optional)
+                  <input
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    value={editTurns}
+                    onChange={(event) => setEditTurns(event.target.value)}
+                    className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm text-gray-300">
+                  Length (minutes, optional)
+                  <input
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    value={editDurationMinutes}
+                    onChange={(event) => setEditDurationMinutes(event.target.value)}
+                    className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+              </div>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-300">Opponents</p>
