@@ -371,9 +371,9 @@ export function DeckCollection({
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
+    <div className="w-full max-w-6xl mx-auto flex flex-1 min-h-0 flex-col gap-6">
       {deckError && <p className="text-red-400">{deckError}</p>}
-      <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+      <div className="flex flex-1 min-h-0 flex-col bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">Your Deck Collection</h3>
@@ -390,13 +390,13 @@ export function DeckCollection({
             Deck
           </button>
         </div>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-1 min-h-0 flex-col">
           {loading && <p className="text-gray-400">Loading...</p>}
           {!loading && decks.length === 0 && (
             <p className="text-gray-400">No decks yet. Use + Deck to add your first deck.</p>
           )}
           {decks.length > 0 && (
-            <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
+            <div className="flex-1 min-h-0 overflow-y-scroll rounded-xl border border-gray-800 bg-gray-950/60">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
                 <span className="text-xs uppercase tracking-wide text-gray-500">Decks</span>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
