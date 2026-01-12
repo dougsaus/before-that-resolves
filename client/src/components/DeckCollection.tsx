@@ -165,6 +165,7 @@ export function DeckCollection({
   useEffect(() => {
     localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: sortDir }));
   }, [sortKey, sortDir]);
+
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
@@ -203,6 +204,7 @@ export function DeckCollection({
     });
     return sorted;
   }, [decks, sortDir, sortKey]);
+  const showScrollHint = sortedDecks.length > 6;
 
   const handleSortChange = (key: SortKey) => {
     setSortKey(key);
@@ -371,9 +373,9 @@ export function DeckCollection({
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-1 min-h-0 flex-col gap-6">
+    <div className="w-full max-w-6xl mx-auto flex h-full min-h-0 flex-col gap-6">
       {deckError && <p className="text-red-400">{deckError}</p>}
-      <div className="flex flex-1 min-h-0 flex-col bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">Your Deck Collection</h3>
@@ -390,13 +392,13 @@ export function DeckCollection({
             Deck
           </button>
         </div>
-        <div className="mt-6 flex flex-1 min-h-0 flex-col">
+        <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
           {loading && <p className="text-gray-400">Loading...</p>}
           {!loading && decks.length === 0 && (
             <p className="text-gray-400">No decks yet. Use + Deck to add your first deck.</p>
           )}
           {decks.length > 0 && (
-            <div className="flex-1 min-h-0 overflow-y-scroll rounded-xl border border-gray-800 bg-gray-950/60">
+            <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
                 <span className="text-xs uppercase tracking-wide text-gray-500">Decks</span>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -425,10 +427,11 @@ export function DeckCollection({
                   </button>
                 </div>
               </div>
-              <div className="divide-y divide-gray-800">
-                {sortedDecks.map((deck) => (
-                  <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] grid-rows-[auto_auto] items-center gap-x-3 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_8rem_8rem] sm:gap-x-4">
+              <div className="relative flex-1 min-h-0 overflow-y-scroll">
+                <div className="divide-y divide-gray-800">
+                  {sortedDecks.map((deck) => (
+                    <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
+                      <div className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] grid-rows-[auto_auto] items-center gap-x-3 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_8rem_8rem] sm:gap-x-4">
                       <div className="min-w-0 row-start-1 col-start-1">
                         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                           {deck.url ? (
@@ -585,8 +588,12 @@ export function DeckCollection({
                       </div>
                       <div className="row-start-2 col-start-3" aria-hidden="true" />
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  ))}
+                </div>
+                {showScrollHint && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-b from-transparent to-gray-950/80" />
+                )}
               </div>
             </div>
           )}
