@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DeckCollection, type DeckEntry } from './DeckCollection';
 import { buildApiUrl } from '../utils/api';
@@ -33,32 +33,59 @@ describe('DeckCollection', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders sortable headers and sorts rows', async () => {
+  it('renders sort controls and sorts cards', async () => {
     const user = userEvent.setup();
     const decks = [
-      baseDeck({ id: 'deck-1', name: 'Beta', commanderNames: ['Zed'], colorIdentity: ['R'] }),
-      baseDeck({ id: 'deck-2', name: 'Alpha', commanderNames: ['Abe'], colorIdentity: ['G'] })
+      baseDeck({ id: 'deck-1', name: 'Beta', commanderNames: ['Abe'], colorIdentity: ['R'] }),
+      baseDeck({ id: 'deck-2', name: 'Alpha', commanderNames: ['Zed'], colorIdentity: ['G'] })
     ];
 
     render(<DeckCollection {...defaultProps} decks={decks} />);
 
-    const table = screen.getByRole('table');
-    expect(within(table).getByRole('button', { name: /^Deck/ })).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: /^Commander/ })).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: /^Color identity/ })).toBeInTheDocument();
+    const sortSelect = screen.getByLabelText('Sort');
+    expect(sortSelect).toBeInTheDocument();
 
-    let rows = within(table).getAllByRole('row');
-    expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
+    let deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    expect(deckNames[0]).toBe('Alpha');
 
-    await user.click(within(table).getByRole('button', { name: /^Deck/ }));
+    await user.selectOptions(sortSelect, 'commander');
 
-    rows = within(table).getAllByRole('row');
-    expect(within(rows[1]).getByText('Beta')).toBeInTheDocument();
+    deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    expect(deckNames[0]).toBe('Beta');
 
-    await user.click(within(table).getByRole('button', { name: /^Commander/ }));
+    await user.click(screen.getByRole('button', { name: /Sort descending/ }));
 
-    rows = within(table).getAllByRole('row');
-    expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
+    deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    expect(deckNames[0]).toBe('Alpha');
+  });
+
+  it('sorts by game stats', async () => {
+    const user = userEvent.setup();
+    const decks = [
+      baseDeck({
+        id: 'deck-1',
+        name: 'Low Stats',
+        stats: { totalGames: 2, wins: 1, losses: 1, winRate: 0.5, lastPlayed: '2024-01-10' }
+      }),
+      baseDeck({
+        id: 'deck-2',
+        name: 'High Stats',
+        stats: { totalGames: 9, wins: 7, losses: 2, winRate: 0.78, lastPlayed: '2024-02-20' }
+      })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    const sortSelect = screen.getByLabelText('Sort');
+    await user.selectOptions(sortSelect, 'games');
+
+    let deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    expect(deckNames[0]).toBe('High Stats');
+
+    await user.selectOptions(sortSelect, 'lastPlayed');
+
+    deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    expect(deckNames[0]).toBe('High Stats');
   });
 
   it('opens the deck modal and validates required fields', async () => {
@@ -141,8 +168,7 @@ describe('DeckCollection', () => {
 
     render(<DeckCollection {...defaultProps} decks={decks} onUpdateDeck={onUpdateDeck} />);
 
-    const table = screen.getByRole('table');
-    await user.click(within(table).getByRole('button', { name: 'Edit Alpha' }));
+    await user.click(screen.getByRole('button', { name: 'Edit Alpha' }));
 
     expect(screen.getByText('Edit deck')).toBeInTheDocument();
     expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Alpha');
@@ -168,9 +194,8 @@ describe('DeckCollection', () => {
 
     render(<DeckCollection {...defaultProps} decks={decks} onOpenInOracle={onOpenInOracle} />);
 
-    const table = screen.getByRole('table');
-    expect(within(table).queryByRole('button', { name: 'Open Manual Link in Oracle' })).toBeNull();
-    expect(within(table).getByRole('button', { name: 'Open Archidekt Link in Oracle' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open Manual Link in Oracle' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open Archidekt Link in Oracle' })).toBeInTheDocument();
   });
 
   it('confirms before removing a deck', async () => {
@@ -180,15 +205,14 @@ describe('DeckCollection', () => {
 
     render(<DeckCollection {...defaultProps} decks={decks} onRemoveDeck={onRemoveDeck} />);
 
-    const table = screen.getByRole('table');
-    await user.click(within(table).getByRole('button', { name: 'Remove Delete Me' }));
+    await user.click(screen.getByRole('button', { name: 'Remove Delete Me' }));
     expect(screen.getByText('Remove deck?')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onRemoveDeck).not.toHaveBeenCalled();
     expect(screen.queryByText('Remove deck?')).not.toBeInTheDocument();
 
-    await user.click(within(table).getByRole('button', { name: 'Remove Delete Me' }));
+    await user.click(screen.getByRole('button', { name: 'Remove Delete Me' }));
     await user.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() => {
@@ -207,8 +231,7 @@ describe('DeckCollection', () => {
 
     render(<DeckCollection {...defaultProps} decks={decks} />);
 
-    const table = screen.getByRole('table');
-    await user.click(within(table).getByRole('button', { name: 'Log game for Alpha' }));
+    await user.click(screen.getByRole('button', { name: 'Log game for Alpha' }));
 
     expect(screen.getByText('Log a game')).toBeInTheDocument();
 

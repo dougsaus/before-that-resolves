@@ -8,9 +8,17 @@ function formatWinRate(winRate: number | null): string {
   return `${Math.round(winRate * 100)}%`;
 }
 
+function parseLocalDate(input: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  return new Date(input);
+}
+
 function formatLastPlayed(lastPlayed: string | null): string {
   if (!lastPlayed) return '—';
-  const date = new Date(lastPlayed);
+  const date = parseLocalDate(lastPlayed);
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -103,6 +111,7 @@ export function DeckCollection({
   onOpenInOracle,
   onRefreshDecks
 }: DeckCollectionProps) {
+  type SortKey = 'name' | 'commander' | 'color' | 'games' | 'wins' | 'lastPlayed';
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckUrl, setDeckUrl] = useState('');
   const [deckName, setDeckName] = useState('');
@@ -120,8 +129,16 @@ export function DeckCollection({
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
   const [logGoodGame, setLogGoodGame] = useState(true);
   const [logFormError, setLogFormError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<'name' | 'commander' | 'color'>('name');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const sortLabels: Record<SortKey, string> = {
+    name: 'Deck name',
+    commander: 'Commander',
+    color: 'Color identity',
+    games: 'Games played',
+    wins: 'Wins',
+    lastPlayed: 'Last played'
+  };
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const {
     addLog,
@@ -132,13 +149,25 @@ export function DeckCollection({
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
-    const getCommanderValue = (deck: DeckEntry) =>
-      deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '';
+    const getCommanderValue = (deck: DeckEntry) => deck.commanderNames[0] ?? '';
     const getColorValue = (deck: DeckEntry) => {
       if (!deck.colorIdentity) return '';
       return sortColorsForDisplay(deck.colorIdentity).join('');
     };
+    const getGamesValue = (deck: DeckEntry) => deck.stats?.totalGames ?? 0;
+    const getWinsValue = (deck: DeckEntry) => deck.stats?.wins ?? 0;
+    const getLastPlayedValue = (deck: DeckEntry) =>
+      deck.stats?.lastPlayed ? parseLocalDate(deck.stats.lastPlayed).getTime() : 0;
     sorted.sort((a, b) => {
+      if (sortKey === 'games') {
+        return (getGamesValue(a) - getGamesValue(b)) * direction;
+      }
+      if (sortKey === 'wins') {
+        return (getWinsValue(a) - getWinsValue(b)) * direction;
+      }
+      if (sortKey === 'lastPlayed') {
+        return (getLastPlayedValue(a) - getLastPlayedValue(b)) * direction;
+      }
       let left = '';
       let right = '';
       if (sortKey === 'name') {
@@ -156,17 +185,11 @@ export function DeckCollection({
     return sorted;
   }, [decks, sortDir, sortKey]);
 
-  const handleSort = (key: 'name' | 'commander' | 'color') => {
-    if (sortKey === key) {
-      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
+  const handleSortChange = (key: SortKey) => {
     setSortKey(key);
-    setSortDir('asc');
+    const defaultDir = key === 'games' || key === 'wins' || key === 'lastPlayed' ? 'desc' : 'asc';
+    setSortDir(defaultDir);
   };
-
-  const sortIndicator = (key: 'name' | 'commander' | 'color') =>
-    sortKey === key ? (sortDir === 'asc' ? '^' : 'v') : null;
 
   const resetDeckForm = () => {
     setDeckId(null);
@@ -355,62 +378,98 @@ export function DeckCollection({
           )}
           {decks.length > 0 && (
             <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
-              <div className="flex flex-wrap items-center gap-2 border-b border-gray-800 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 sm:hidden">
-                <span className="mr-2">Sort by</span>
-                <button
-                  type="button"
-                  onClick={() => handleSort('name')}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                    sortKey === 'name' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
-                  }`}
-                >
-                  Deck {sortIndicator('name') || ''}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSort('commander')}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                    sortKey === 'commander' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
-                  }`}
-                >
-                  Commander {sortIndicator('commander') || ''}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSort('color')}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                    sortKey === 'color' ? 'border-cyan-400 text-cyan-200' : 'border-gray-700 text-gray-300'
-                  }`}
-                >
-                  Colors {sortIndicator('color') || ''}
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
+                <span className="text-xs uppercase tracking-wide text-gray-500">Decks</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <label className="text-xs uppercase tracking-wide text-gray-500" htmlFor="deck-sort">
+                    Sort
+                  </label>
+                  <select
+                    id="deck-sort"
+                    value={sortKey}
+                    onChange={(event) => handleSortChange(event.target.value as SortKey)}
+                    className="rounded-md border border-gray-700 bg-gray-900/80 px-2 py-1 text-xs text-gray-200"
+                  >
+                    {Object.entries(sortLabels).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    className="rounded-md border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:border-cyan-400 hover:text-cyan-200"
+                    aria-label={`Sort ${sortDir === 'asc' ? 'descending' : 'ascending'}`}
+                  >
+                    {sortDir === 'asc' ? '^' : 'v'}
+                  </button>
+                </div>
               </div>
-              <div className="divide-y divide-gray-800 sm:hidden">
+              <div className="divide-y divide-gray-800">
                 {sortedDecks.map((deck) => (
-                  <div key={deck.id} className="flex flex-col gap-3 px-4 py-4">
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={deck.id} className="flex flex-col gap-2 px-4 py-3">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
                       <div className="min-w-0">
-                        {deck.url ? (
-                          <a
-                            href={deck.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block truncate text-base font-semibold text-cyan-300 hover:text-cyan-200"
-                          >
-                            {deck.name}
-                          </a>
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                          {deck.url ? (
+                            <a
+                              href={deck.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="truncate text-base font-semibold text-cyan-300 hover:text-cyan-200"
+                            >
+                              {deck.name}
+                            </a>
+                          ) : (
+                            <p className="truncate text-base font-semibold text-white">{deck.name}</p>
+                          )}
+                          <span className="truncate text-sm text-gray-400">
+                            {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex w-24 items-center justify-start">
+                        {deck.colorIdentity ? (
+                          <ColorIdentityIcons colors={deck.colorIdentity} />
                         ) : (
-                          <p className="truncate text-base font-semibold text-white">{deck.name}</p>
+                          <span className="text-sm text-gray-500">—</span>
                         )}
-                    </div>
-                      <div className="flex items-center gap-1">
+                      </div>
+                      <div className="flex items-center justify-end gap-1">
                         {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
                           <button
                             type="button"
                             onClick={() => onOpenInOracle(deck.url!)}
+                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                            aria-label={`Open ${deck.name} in Oracle`}
+                            title="Open in Oracle"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <circle cx="12" cy="12" r="10" />
+                              <circle cx="12" cy="12" r="4" />
+                              <path d="M12 2v4" />
+                              <path d="M12 18v4" />
+                              <path d="M2 12h4" />
+                              <path d="M18 12h4" />
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(deck)}
                           className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
-                          aria-label={`Open ${deck.name} in Oracle`}
-                          title="Open in Oracle"
+                          aria-label={`Edit ${deck.name}`}
+                          title="Edit deck"
                         >
                           <svg
                             viewBox="0 0 24 24"
@@ -422,320 +481,80 @@ export function DeckCollection({
                             strokeLinejoin="round"
                             aria-hidden="true"
                           >
-                            <circle cx="12" cy="12" r="10" />
-                            <circle cx="12" cy="12" r="4" />
-                            <path d="M12 2v4" />
-                            <path d="M12 18v4" />
-                            <path d="M2 12h4" />
-                            <path d="M18 12h4" />
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
                           </svg>
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(deck)}
-                        className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
-                        aria-label={`Edit ${deck.name}`}
-                        title="Edit deck"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                        <button
+                          type="button"
+                          onClick={() => openLogModal(deck)}
+                          className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-emerald-300"
+                          aria-label={`Log game for ${deck.name}`}
+                          title="Log game"
                         >
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openLogModal(deck)}
-                        className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-emerald-300"
-                        aria-label={`Log game for ${deck.name}`}
-                        title="Log game"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 8v8" />
+                            <path d="M8 12h8" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(deck)}
+                          className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-red-300"
+                          aria-label={`Remove ${deck.name}`}
+                          title="Delete"
                         >
-                          <circle cx="12" cy="12" r="9" />
-                          <path d="M12 8v8" />
-                          <path d="M8 12h8" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(deck)}
-                        className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-red-300"
-                        aria-label={`Remove ${deck.name}`}
-                        title="Delete"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v6" />
-                          <path d="M14 11v6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Commander</p>
-                    <p className="text-sm text-gray-200">
-                      {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Color identity</p>
-                    {deck.colorIdentity ? (
-                      <ColorIdentityIcons colors={deck.colorIdentity} />
-                    ) : (
-                      <span className="text-sm text-gray-500">—</span>
-                    )}
-                  </div>
-                  {deck.stats && deck.stats.totalGames > 0 && (
-                    <div className="flex gap-4 text-sm">
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Games</p>
-                        <p className="text-gray-200">{deck.stats.totalGames}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Win %</p>
-                        <p className="text-gray-200">{formatWinRate(deck.stats.winRate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Last played</p>
-                        <p className="text-gray-200">{formatLastPlayed(deck.stats.lastPlayed)}</p>
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                    <div className="flex flex-wrap gap-4 text-xs text-gray-400">
+                      <span>
+                        Games <span className="text-gray-200">{deck.stats?.totalGames ?? '—'}</span>
+                      </span>
+                      <span>
+                        Win %{' '}
+                        <span className="text-gray-200">
+                          {deck.stats ? formatWinRate(deck.stats.winRate) : '—'}
+                        </span>
+                      </span>
+                      <span>
+                        Last played{' '}
+                        <span className="text-gray-200">
+                          {deck.stats ? formatLastPlayed(deck.stats.lastPlayed) : '—'}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="hidden sm:block">
-              <table className="w-full text-left text-sm text-gray-200">
-                <thead className="sticky top-0 z-10 bg-gray-950">
-                  <tr className="border-b border-gray-800 text-xs uppercase tracking-wide text-gray-400">
-                    <th className="px-4 py-3 font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => handleSort('name')}
-                        className="inline-flex items-center gap-2 hover:text-gray-200"
-                      >
-                        Deck
-                        {sortIndicator('name') && (
-                          <span aria-hidden="true">{sortIndicator('name')}</span>
-                        )}
-                      </button>
-                    </th>
-                    <th className="border-l border-gray-800 px-4 py-3 font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => handleSort('commander')}
-                        className="inline-flex items-center gap-2 hover:text-gray-200"
-                      >
-                        Commander
-                        {sortIndicator('commander') && (
-                          <span aria-hidden="true">{sortIndicator('commander')}</span>
-                        )}
-                      </button>
-                    </th>
-                    <th className="border-l border-gray-800 px-4 py-3 font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => handleSort('color')}
-                        className="inline-flex items-center gap-2 hover:text-gray-200"
-                      >
-                        Color identity
-                        {sortIndicator('color') && (
-                          <span aria-hidden="true">{sortIndicator('color')}</span>
-                        )}
-                      </button>
-                    </th>
-                    <th className="border-l border-gray-800 px-4 py-3 font-semibold text-center">
-                      Games
-                    </th>
-                    <th className="border-l border-gray-800 px-4 py-3 font-semibold text-center">
-                      Win %
-                    </th>
-                    <th className="border-l border-gray-800 px-4 py-3 font-semibold">
-                      Last played
-                    </th>
-                    <th className="border-l border-gray-800 px-4 py-3 text-right font-semibold">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800">
-                  {sortedDecks.map((deck) => (
-                    <tr key={deck.id} className="align-middle">
-                      <td className="max-w-48 px-4 py-3">
-                        {deck.url ? (
-                          <a
-                            href={deck.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={deck.name}
-                            className="block truncate font-semibold text-cyan-300 hover:text-cyan-200"
-                          >
-                            {deck.name}
-                          </a>
-                        ) : (
-                          <p className="truncate font-semibold text-white" title={deck.name}>{deck.name}</p>
-                        )}
-                      </td>
-                      <td className="max-w-64 border-l border-gray-800 px-4 py-3">
-                        <p
-                          className="truncate text-sm text-gray-200"
-                          title={deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : undefined}
-                        >
-                          {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
-                        </p>
-                      </td>
-                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3">
-                        {deck.colorIdentity ? (
-                          <ColorIdentityIcons colors={deck.colorIdentity} />
-                        ) : (
-                          <span className="text-sm text-gray-500">—</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3 text-center text-gray-300">
-                        {deck.stats?.totalGames ?? '—'}
-                      </td>
-                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3 text-center text-gray-300">
-                        {deck.stats ? formatWinRate(deck.stats.winRate) : '—'}
-                      </td>
-                      <td className="whitespace-nowrap border-l border-gray-800 px-4 py-3 text-gray-300">
-                        {deck.stats ? formatLastPlayed(deck.stats.lastPlayed) : '—'}
-                      </td>
-                      <td className="whitespace-nowrap border-l border-gray-800 px-2 py-3">
-                        <div className="flex justify-end">
-                          <div className="h-8 w-8 flex items-center justify-center">
-                            {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
-                              <button
-                                type="button"
-                                onClick={() => onOpenInOracle(deck.url!)}
-                                className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
-                                aria-label={`Open ${deck.name} in Oracle`}
-                                title="Open in Oracle"
-                              >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  className="h-5 w-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  aria-hidden="true"
-                                >
-                                  <circle cx="12" cy="12" r="10" />
-                                  <circle cx="12" cy="12" r="4" />
-                                  <path d="M12 2v4" />
-                                  <path d="M12 18v4" />
-                                  <path d="M2 12h4" />
-                                  <path d="M18 12h4" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(deck)}
-                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
-                            aria-label={`Edit ${deck.name}`}
-                            title="Edit deck"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-5 w-5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M12 20h9" />
-                              <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openLogModal(deck)}
-                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-emerald-300"
-                            aria-label={`Log game for ${deck.name}`}
-                            title="Log game"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-5 w-5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <circle cx="12" cy="12" r="9" />
-                              <path d="M12 8v8" />
-                              <path d="M8 12h8" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(deck)}
-                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-red-300"
-                            aria-label={`Remove ${deck.name}`}
-                            title="Delete"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-5 w-5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+          )}
       </div>
     </div>
 
