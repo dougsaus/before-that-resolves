@@ -9,6 +9,7 @@ const baseDeck = (overrides: Partial<DeckEntry> = {}): DeckEntry => ({
   name: 'Alpha',
   url: null,
   commanderNames: [],
+  commanderLinks: [],
   colorIdentity: null,
   source: 'manual',
   addedAt: '2025-01-01T00:00:00.000Z',
@@ -140,6 +141,32 @@ describe('DeckCollection', () => {
     });
   });
 
+  it('allows adding a second commander name', async () => {
+    const user = userEvent.setup();
+    const onCreateDeck = vi.fn().mockResolvedValue(true);
+
+    render(<DeckCollection {...defaultProps} onCreateDeck={onCreateDeck} />);
+
+    await user.click(screen.getByRole('button', { name: /\+\s*Deck/ }));
+    await user.type(screen.getByLabelText('Deck name (required)'), 'Two Commanders');
+
+    await user.click(screen.getByRole('button', { name: '+ Commander' }));
+
+    const commanderInputs = screen.getAllByLabelText('Commander name');
+    expect(commanderInputs).toHaveLength(2);
+
+    await user.type(commanderInputs[0], 'Tymna the Weaver');
+    await user.type(commanderInputs[1], 'Kraum');
+
+    await user.click(screen.getByRole('button', { name: 'Add Deck' }));
+
+    await waitFor(() => {
+      expect(onCreateDeck).toHaveBeenCalledWith(
+        expect.objectContaining({ commanderNames: ['Tymna the Weaver', 'Kraum'] })
+      );
+    });
+  });
+
   it('loads deck details from an Archidekt link', async () => {
     const user = userEvent.setup();
     const onPreviewDeck = vi.fn().mockResolvedValue({
@@ -175,7 +202,7 @@ describe('DeckCollection', () => {
     });
 
     expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Archidekt Preview');
-    expect(screen.getByLabelText('Commander name(s) (optional)')).toHaveValue('Giada, Font of Hope');
+    expect(screen.getByLabelText('Commander(s) (optional)')).toHaveValue('Giada, Font of Hope');
   });
 
   it('opens edit modal and saves updates', async () => {

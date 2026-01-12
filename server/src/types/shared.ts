@@ -4,6 +4,7 @@
 export interface Card {
   id: string;
   name: string;
+  scryfall_uri?: string;
   layout?: string;
   mana_cost?: string;
   type_line: string;

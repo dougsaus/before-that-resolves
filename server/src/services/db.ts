@@ -17,12 +17,34 @@ const schemaQueries = [
     name TEXT NOT NULL,
     url TEXT,
     format TEXT,
-    commander_names TEXT[] NOT NULL DEFAULT '{}',
+    commander_name_primary TEXT,
+    commander_name_secondary TEXT,
+    commander_scryfall_url_primary TEXT,
+    commander_scryfall_url_secondary TEXT,
     color_identity TEXT[],
     source TEXT NOT NULL CHECK (source IN ('archidekt', 'manual')),
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, deck_id)
   );`,
+  `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_name_primary TEXT;`,
+  `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_name_secondary TEXT;`,
+  `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_scryfall_url_primary TEXT;`,
+  `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_scryfall_url_secondary TEXT;`,
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_name = 'decks' AND column_name = 'commander_names'
+     ) THEN
+       UPDATE decks
+       SET commander_name_primary = COALESCE(commander_name_primary, commander_names[1]),
+           commander_name_secondary = COALESCE(commander_name_secondary, commander_names[2])
+       WHERE (commander_name_primary IS NULL AND commander_name_secondary IS NULL)
+         AND commander_names IS NOT NULL
+         AND array_length(commander_names, 1) > 0;
+     END IF;
+   END $$;`,
   `CREATE INDEX IF NOT EXISTS decks_user_added_at_idx ON decks (user_id, added_at DESC);`,
   `CREATE TABLE IF NOT EXISTS game_logs (
     id TEXT PRIMARY KEY,

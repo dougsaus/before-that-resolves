@@ -7,6 +7,7 @@ export type DeckCollectionEntry = {
   url: string | null;
   format: string | null;
   commanderNames: string[];
+  commanderLinks: Array<string | null>;
   colorIdentity: string[] | null;
   source: 'archidekt' | 'manual';
   addedAt: string;
@@ -19,7 +20,10 @@ type DeckRow = {
   name: string;
   url: string | null;
   format: string | null;
-  commander_names: string[] | null;
+  commander_name_primary: string | null;
+  commander_name_secondary: string | null;
+  commander_scryfall_url_primary: string | null;
+  commander_scryfall_url_secondary: string | null;
   color_identity: string[] | null;
   source: 'archidekt' | 'manual';
   added_at: string | Date;
@@ -27,12 +31,23 @@ type DeckRow = {
 
 function mapDeckRow(row: DeckRow): DeckCollectionEntry {
   const addedAt = row.added_at instanceof Date ? row.added_at.toISOString() : row.added_at;
+  const commanderNames: string[] = [];
+  const commanderLinks: Array<string | null> = [];
+  if (row.commander_name_primary) {
+    commanderNames.push(row.commander_name_primary);
+    commanderLinks.push(row.commander_scryfall_url_primary ?? null);
+  }
+  if (row.commander_name_secondary) {
+    commanderNames.push(row.commander_name_secondary);
+    commanderLinks.push(row.commander_scryfall_url_secondary ?? null);
+  }
   return {
     id: row.deck_id,
     name: row.name,
     url: row.url,
     format: row.format,
-    commanderNames: row.commander_names ?? [],
+    commanderNames,
+    commanderLinks,
     colorIdentity: row.color_identity ?? null,
     source: row.source,
     addedAt
@@ -53,7 +68,17 @@ export async function upsertUser(user: GoogleUser): Promise<void> {
 export async function listDeckCollection(userId: string): Promise<DeckCollectionEntry[]> {
   const db = getPool();
   const result = await db.query<DeckRow>(
-    `SELECT deck_id, name, url, format, commander_names, color_identity, source, added_at
+    `SELECT deck_id,
+            name,
+            url,
+            format,
+            commander_name_primary,
+            commander_name_secondary,
+            commander_scryfall_url_primary,
+            commander_scryfall_url_secondary,
+            color_identity,
+            source,
+            added_at
      FROM decks
      WHERE user_id = $1
      ORDER BY added_at DESC`,
@@ -67,6 +92,8 @@ export async function upsertDeckInCollection(
   deck: DeckCollectionInput
 ): Promise<DeckCollectionEntry[]> {
   const db = getPool();
+  const commanderNames = deck.commanderNames ?? [];
+  const commanderLinks = deck.commanderLinks ?? [];
   await db.query(
     `INSERT INTO decks (
       user_id,
@@ -74,18 +101,24 @@ export async function upsertDeckInCollection(
       name,
       url,
       format,
-      commander_names,
+      commander_name_primary,
+      commander_name_secondary,
+      commander_scryfall_url_primary,
+      commander_scryfall_url_secondary,
       color_identity,
       source,
       added_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
     ON CONFLICT (user_id, deck_id)
     DO UPDATE SET
       name = EXCLUDED.name,
       url = EXCLUDED.url,
       format = EXCLUDED.format,
-      commander_names = EXCLUDED.commander_names,
+      commander_name_primary = EXCLUDED.commander_name_primary,
+      commander_name_secondary = EXCLUDED.commander_name_secondary,
+      commander_scryfall_url_primary = EXCLUDED.commander_scryfall_url_primary,
+      commander_scryfall_url_secondary = EXCLUDED.commander_scryfall_url_secondary,
       color_identity = EXCLUDED.color_identity,
       source = EXCLUDED.source`,
     [
@@ -94,7 +127,10 @@ export async function upsertDeckInCollection(
       deck.name,
       deck.url,
       deck.format,
-      deck.commanderNames ?? [],
+      commanderNames[0] ?? null,
+      commanderNames[1] ?? null,
+      commanderLinks[0] ?? null,
+      commanderLinks[1] ?? null,
       deck.colorIdentity ?? null,
       deck.source
     ]

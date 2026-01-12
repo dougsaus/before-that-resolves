@@ -31,6 +31,7 @@ integration('deck collection persistence (integration)', () => {
       url: 'https://archidekt.com/decks/1/test',
       format: 'commander',
       commanderNames: ['Commander One'],
+      commanderLinks: [],
       colorIdentity: ['G'],
       source: 'archidekt'
     });
@@ -41,6 +42,7 @@ integration('deck collection persistence (integration)', () => {
       url: null,
       format: null,
       commanderNames: [],
+      commanderLinks: [],
       colorIdentity: null,
       source: 'manual'
     });

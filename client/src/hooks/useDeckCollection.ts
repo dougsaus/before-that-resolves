@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
-import type { DeckEntry, DeckFormInput, DeckPreviewResult } from '../components/DeckCollection';
+import type { DeckEntry, DeckFormInput, DeckPreview, DeckPreviewResult } from '../components/DeckCollection';
 
 type GoogleUser = {
   id: string;
@@ -81,6 +81,17 @@ export function useDeckCollection() {
     setStatusMessage(null);
   };
 
+  const readPayload = async <T extends { success?: boolean; error?: string }>(
+    response: Response
+  ): Promise<T> => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error('Unexpected response from server.');
+    }
+  };
+
   const loadDecks = useCallback(async (token: string): Promise<boolean> => {
     setLoading(true);
     setAuthError(null);
@@ -90,11 +101,11 @@ export function useDeckCollection() {
           Authorization: `Bearer ${token}`
         }
       });
-      const payload = await response.json();
+      const payload = await readPayload<{ success?: boolean; error?: string; user?: GoogleUser; decks?: DeckEntry[] }>(response);
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load your decks.');
       }
-      setUser(payload.user || null);
+      setUser(payload.user ?? null);
       setDecks(Array.isArray(payload.decks) ? payload.decks : []);
       return true;
     } catch (error: unknown) {
@@ -222,7 +233,7 @@ export function useDeckCollection() {
         headers,
         body: JSON.stringify({ deckUrl })
       });
-      const payload = await response.json();
+      const payload = await readPayload<{ success?: boolean; error?: string; deck?: DeckPreview }>(response);
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load deck.');
       }
@@ -246,7 +257,7 @@ export function useDeckCollection() {
         headers,
         body: JSON.stringify(input)
       });
-      const payload = await response.json();
+      const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckEntry[] }>(response);
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to add deck.');
       }
@@ -275,7 +286,7 @@ export function useDeckCollection() {
         headers,
         body: JSON.stringify(input)
       });
-      const payload = await response.json();
+      const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckEntry[] }>(response);
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to update deck.');
       }
@@ -303,7 +314,7 @@ export function useDeckCollection() {
         method: 'DELETE',
         headers
       });
-      const payload = await response.json();
+      const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckEntry[] }>(response);
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to remove deck.');
       }
