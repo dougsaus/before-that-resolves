@@ -428,7 +428,7 @@ export function DeckCollection({
               <div className="divide-y divide-gray-800">
                 {sortedDecks.map((deck) => (
                   <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_8rem_8rem] grid-rows-[auto_auto] items-center gap-x-4 gap-y-0.5">
+                    <div className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] grid-rows-[auto_auto] items-center gap-x-3 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_8rem_8rem] sm:gap-x-4">
                       <div className="min-w-0 row-start-1 col-start-1">
                         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                           {deck.url ? (
@@ -436,35 +436,35 @@ export function DeckCollection({
                               href={deck.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="truncate text-base font-semibold text-cyan-300 hover:text-cyan-200"
+                              className="truncate text-sm font-semibold text-cyan-300 hover:text-cyan-200 sm:text-base"
                             >
                               {deck.name}
                             </a>
                           ) : (
-                            <p className="truncate text-base font-semibold text-white">{deck.name}</p>
+                            <p className="truncate text-sm font-semibold text-white sm:text-base">{deck.name}</p>
                           )}
                           {deck.commanderNames.length > 0 && (
-                            <span className="truncate text-sm text-gray-400">
+                            <span className="truncate text-xs text-gray-400 sm:text-sm">
                               {deck.commanderNames.join(', ')}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="row-start-1 col-start-2 flex w-32 items-center justify-start justify-self-start text-left pr-2">
+                      <div className="row-start-1 col-start-2 flex w-24 items-center justify-start justify-self-start text-left pr-1 sm:w-32 sm:pr-2">
                         {deck.colorIdentity && <ColorIdentityIcons colors={deck.colorIdentity} />}
                       </div>
-                      <div className="row-start-1 col-start-3 flex w-32 items-center justify-end gap-1">
+                      <div className="row-start-1 col-start-3 flex w-24 items-center justify-end gap-0.5 sm:w-32 sm:gap-1">
                         {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
                           <button
                             type="button"
                             onClick={() => onOpenInOracle(deck.url!)}
-                            className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                            className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-cyan-300 sm:h-8 sm:w-8"
                             aria-label={`Open ${deck.name} in Oracle`}
                             title="Open in Oracle"
                           >
                             <svg
                               viewBox="0 0 24 24"
-                              className="h-5 w-5"
+                              className="h-4 w-4 sm:h-5 sm:w-5"
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="2"
@@ -484,13 +484,13 @@ export function DeckCollection({
                         <button
                           type="button"
                           onClick={() => openEditModal(deck)}
-                          className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-cyan-300"
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-cyan-300 sm:h-8 sm:w-8"
                           aria-label={`Edit ${deck.name}`}
                           title="Edit deck"
                         >
                           <svg
                             viewBox="0 0 24 24"
-                            className="h-5 w-5"
+                            className="h-4 w-4 sm:h-5 sm:w-5"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2"
@@ -505,13 +505,13 @@ export function DeckCollection({
                         <button
                           type="button"
                           onClick={() => openLogModal(deck)}
-                          className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-emerald-300"
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-emerald-300 sm:h-8 sm:w-8"
                           aria-label={`Log game for ${deck.name}`}
                           title="Log game"
                         >
                           <svg
                             viewBox="0 0 24 24"
-                            className="h-5 w-5"
+                            className="h-4 w-4 sm:h-5 sm:w-5"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2"
@@ -527,13 +527,13 @@ export function DeckCollection({
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(deck)}
-                          className="inline-flex h-8 w-8 items-center justify-center text-gray-300 hover:text-red-300"
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-red-300 sm:h-8 sm:w-8"
                           aria-label={`Remove ${deck.name}`}
                           title="Delete"
                         >
                           <svg
                             viewBox="0 0 24 24"
-                            className="h-5 w-5"
+                            className="h-4 w-4 sm:h-5 sm:w-5"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2"
@@ -549,7 +549,7 @@ export function DeckCollection({
                           </svg>
                         </button>
                       </div>
-                      <div className="row-start-2 col-start-1 grid grid-cols-[5rem_4rem_4.5rem_8.5rem] items-center gap-3 text-xs text-gray-400">
+                      <div className="row-start-2 col-start-1 grid grid-cols-[4.5rem_3.5rem_4rem_7rem] items-center gap-2 text-[11px] text-gray-400 sm:grid-cols-[5rem_4rem_4.5rem_8.5rem] sm:gap-3 sm:text-xs">
                         <span>
                           Games <span className="text-gray-200">{deck.stats?.totalGames ?? 0}</span>
                         </span>
@@ -576,7 +576,7 @@ export function DeckCollection({
                           </>
                         )}
                       </div>
-                      <div className="row-start-2 col-start-2 flex w-32 items-start justify-start justify-self-start text-left pr-2">
+                      <div className="row-start-2 col-start-2 flex w-24 items-start justify-start justify-self-start text-left pr-1 sm:w-32 sm:pr-2">
                         {deck.colorIdentity && (
                           <span className="text-[10px] uppercase tracking-wide text-gray-500">
                             {getColorIdentityLabel(deck.colorIdentity)}
