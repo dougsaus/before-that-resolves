@@ -31,6 +31,7 @@ const defaultProps = {
 describe('DeckCollection', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   it('renders sort controls and sorts cards', async () => {
@@ -85,6 +86,30 @@ describe('DeckCollection', () => {
     await user.selectOptions(sortSelect, 'lastPlayed');
 
     deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    expect(deckNames[0]).toBe('High Stats');
+  });
+
+  it('restores saved sort preferences', () => {
+    localStorage.setItem('btr:deck-sort', JSON.stringify({ key: 'games', dir: 'desc' }));
+    const decks = [
+      baseDeck({
+        id: 'deck-1',
+        name: 'Low Stats',
+        stats: { totalGames: 2, wins: 1, losses: 1, winRate: 0.5, lastPlayed: '2024-01-10' }
+      }),
+      baseDeck({
+        id: 'deck-2',
+        name: 'High Stats',
+        stats: { totalGames: 9, wins: 7, losses: 2, winRate: 0.78, lastPlayed: '2024-02-20' }
+      })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    const sortSelect = screen.getByLabelText('Sort') as HTMLSelectElement;
+    expect(sortSelect.value).toBe('games');
+
+    const deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
     expect(deckNames[0]).toBe('High Stats');
   });
 

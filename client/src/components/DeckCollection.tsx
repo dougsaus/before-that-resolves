@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
@@ -112,6 +112,22 @@ export function DeckCollection({
   onRefreshDecks
 }: DeckCollectionProps) {
   type SortKey = 'name' | 'commander' | 'color' | 'games' | 'wins' | 'lastPlayed';
+  const sortStorageKey = 'btr:deck-sort';
+  const sortKeys: SortKey[] = ['name', 'commander', 'color', 'games', 'wins', 'lastPlayed'];
+  const loadSortPrefs = (): { key: SortKey; dir: 'asc' | 'desc' } | null => {
+    try {
+      const raw = localStorage.getItem(sortStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { key?: string; dir?: string };
+      const key = sortKeys.find((option) => option === parsed.key);
+      const dir = parsed.dir === 'asc' || parsed.dir === 'desc' ? parsed.dir : null;
+      if (!key || !dir) return null;
+      return { key, dir };
+    } catch {
+      return null;
+    }
+  };
+  const initialSort = loadSortPrefs();
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckUrl, setDeckUrl] = useState('');
   const [deckName, setDeckName] = useState('');
@@ -129,8 +145,8 @@ export function DeckCollection({
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
   const [logGoodGame, setLogGoodGame] = useState(true);
   const [logFormError, setLogFormError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'asc');
   const sortLabels: Record<SortKey, string> = {
     name: 'Deck name',
     commander: 'Commander',
@@ -146,6 +162,9 @@ export function DeckCollection({
     loading: logLoading,
     statusMessage: logStatusMessage
   } = useGameLogs(idToken, { autoLoad: false });
+  useEffect(() => {
+    localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: sortDir }));
+  }, [sortKey, sortDir]);
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
@@ -424,21 +443,21 @@ export function DeckCollection({
                           ) : (
                             <p className="truncate text-base font-semibold text-white">{deck.name}</p>
                           )}
-                          <span className="truncate text-sm text-gray-400">
-                            {deck.commanderNames.length > 0 ? deck.commanderNames.join(', ') : '—'}
-                          </span>
+                          {deck.commanderNames.length > 0 && (
+                            <span className="truncate text-sm text-gray-400">
+                              {deck.commanderNames.join(', ')}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex w-32 flex-col items-start justify-start justify-self-start text-left pr-2">
-                        {deck.colorIdentity ? (
+                        {deck.colorIdentity && (
                           <>
                             <ColorIdentityIcons colors={deck.colorIdentity} />
-                          <span className="mt-1 text-[10px] uppercase tracking-wide text-gray-500">
-                            {getColorIdentityLabel(deck.colorIdentity)}
-                          </span>
+                            <span className="mt-1 text-[10px] uppercase tracking-wide text-gray-500">
+                              {getColorIdentityLabel(deck.colorIdentity)}
+                            </span>
                           </>
-                        ) : (
-                          <span className="text-sm text-gray-500">—</span>
                         )}
                       </div>
                       <div className="flex w-32 items-center justify-end gap-1">
@@ -538,22 +557,32 @@ export function DeckCollection({
                         </button>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-4 text-xs text-gray-400">
+                    <div className="grid grid-cols-[5rem_4rem_4.5rem_8.5rem] items-center gap-3 text-xs text-gray-400">
                       <span>
-                        Games <span className="text-gray-200">{deck.stats?.totalGames ?? '—'}</span>
+                        Games <span className="text-gray-200">{deck.stats?.totalGames ?? 0}</span>
                       </span>
-                      <span>
-                        Win %{' '}
-                        <span className="text-gray-200">
-                          {deck.stats ? formatWinRate(deck.stats.winRate) : '—'}
-                        </span>
-                      </span>
-                      <span>
-                        Last played{' '}
-                        <span className="text-gray-200">
-                          {deck.stats ? formatLastPlayed(deck.stats.lastPlayed) : '—'}
-                        </span>
-                      </span>
+                      {deck.stats && deck.stats.totalGames > 0 ? (
+                        <>
+                          <span>
+                            Wins <span className="text-gray-200">{deck.stats.wins}</span>
+                          </span>
+                          <span>
+                            Rate <span className="text-gray-200">{formatWinRate(deck.stats.winRate)}</span>
+                          </span>
+                          <span className="whitespace-nowrap">
+                            Last played{' '}
+                            <span className="text-gray-200">
+                              {formatLastPlayed(deck.stats.lastPlayed)}
+                            </span>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span aria-hidden="true" />
+                          <span aria-hidden="true" />
+                          <span aria-hidden="true" />
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
