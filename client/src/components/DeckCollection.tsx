@@ -427,9 +427,9 @@ export function DeckCollection({
               </div>
               <div className="divide-y divide-gray-800">
                 {sortedDecks.map((deck) => (
-                  <div key={deck.id} className="flex flex-col gap-2 px-4 py-3">
-                    <div className="grid grid-cols-[minmax(0,1fr)_8rem_8rem] items-start gap-4">
-                      <div className="min-w-0">
+                  <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_8rem_8rem] grid-rows-[auto_auto] items-center gap-x-4 gap-y-0.5">
+                      <div className="min-w-0 row-start-1 col-start-1">
                         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                           {deck.url ? (
                             <a
@@ -450,17 +450,10 @@ export function DeckCollection({
                           )}
                         </div>
                       </div>
-                      <div className="flex w-32 flex-col items-start justify-start justify-self-start text-left pr-2">
-                        {deck.colorIdentity && (
-                          <>
-                            <ColorIdentityIcons colors={deck.colorIdentity} />
-                            <span className="mt-1 text-[10px] uppercase tracking-wide text-gray-500">
-                              {getColorIdentityLabel(deck.colorIdentity)}
-                            </span>
-                          </>
-                        )}
+                      <div className="row-start-1 col-start-2 flex w-32 items-center justify-start justify-self-start text-left pr-2">
+                        {deck.colorIdentity && <ColorIdentityIcons colors={deck.colorIdentity} />}
                       </div>
-                      <div className="flex w-32 items-center justify-end gap-1">
+                      <div className="row-start-1 col-start-3 flex w-32 items-center justify-end gap-1">
                         {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
                           <button
                             type="button"
@@ -556,33 +549,41 @@ export function DeckCollection({
                           </svg>
                         </button>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-[5rem_4rem_4.5rem_8.5rem] items-center gap-3 text-xs text-gray-400">
-                      <span>
-                        Games <span className="text-gray-200">{deck.stats?.totalGames ?? 0}</span>
-                      </span>
-                      {deck.stats && deck.stats.totalGames > 0 ? (
-                        <>
-                          <span>
-                            Wins <span className="text-gray-200">{deck.stats.wins}</span>
-                          </span>
-                          <span>
-                            Rate <span className="text-gray-200">{formatWinRate(deck.stats.winRate)}</span>
-                          </span>
-                          <span className="whitespace-nowrap">
-                            Last played{' '}
-                            <span className="text-gray-200">
-                              {formatLastPlayed(deck.stats.lastPlayed)}
+                      <div className="row-start-2 col-start-1 grid grid-cols-[5rem_4rem_4.5rem_8.5rem] items-center gap-3 text-xs text-gray-400">
+                        <span>
+                          Games <span className="text-gray-200">{deck.stats?.totalGames ?? 0}</span>
+                        </span>
+                        {deck.stats && deck.stats.totalGames > 0 ? (
+                          <>
+                            <span>
+                              Wins <span className="text-gray-200">{deck.stats.wins}</span>
                             </span>
+                            <span>
+                              Rate <span className="text-gray-200">{formatWinRate(deck.stats.winRate)}</span>
+                            </span>
+                            <span className="whitespace-nowrap">
+                              Last played{' '}
+                              <span className="text-gray-200">
+                                {formatLastPlayed(deck.stats.lastPlayed)}
+                              </span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span aria-hidden="true" />
+                            <span aria-hidden="true" />
+                            <span aria-hidden="true" />
+                          </>
+                        )}
+                      </div>
+                      <div className="row-start-2 col-start-2 flex w-32 items-start justify-start justify-self-start text-left pr-2">
+                        {deck.colorIdentity && (
+                          <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                            {getColorIdentityLabel(deck.colorIdentity)}
                           </span>
-                        </>
-                      ) : (
-                        <>
-                          <span aria-hidden="true" />
-                          <span aria-hidden="true" />
-                          <span aria-hidden="true" />
-                        </>
-                      )}
+                        )}
+                      </div>
+                      <div className="row-start-2 col-start-3" aria-hidden="true" />
                     </div>
                   </div>
                 ))}
