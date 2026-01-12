@@ -16,11 +16,11 @@ const WUBRG_INDEX: Record<WubrgColor, number> = {
 export const COLOR_OPTIONS: ColorOption[] = [
   { value: '', label: 'No color identity', colors: null },
   { value: 'C', label: 'Colorless', colors: [] },
-  { value: 'W', label: 'White', colors: ['W'] },
-  { value: 'U', label: 'Blue', colors: ['U'] },
-  { value: 'B', label: 'Black', colors: ['B'] },
-  { value: 'R', label: 'Red', colors: ['R'] },
-  { value: 'G', label: 'Green', colors: ['G'] },
+  { value: 'W', label: 'Mono White', colors: ['W'] },
+  { value: 'U', label: 'Mono Blue', colors: ['U'] },
+  { value: 'B', label: 'Mono Black', colors: ['B'] },
+  { value: 'R', label: 'Mono Red', colors: ['R'] },
+  { value: 'G', label: 'Mono Green', colors: ['G'] },
   { value: 'WU', label: 'Azorius', colors: ['W', 'U'] },
   { value: 'UB', label: 'Dimir', colors: ['U', 'B'] },
   { value: 'BR', label: 'Rakdos', colors: ['B', 'R'] },
@@ -70,4 +70,16 @@ export function sortColorsForDisplay(colors: string[]): string[] {
     .sort((a, b) => WUBRG_INDEX[a as WubrgColor] - WUBRG_INDEX[b as WubrgColor])
     .join('');
   return COLOR_IDENTITY_DISPLAY_MAP[key] ?? colors;
+}
+
+export function getColorIdentityLabel(colors: string[] | null): string {
+  if (colors === null) return '—';
+  const key = colors.length === 0 ? 'C' : sortColorsForDisplay(colors).join('');
+  const match = COLOR_OPTIONS.find((option) => {
+    if (!option.colors) return false;
+    const optionKey =
+      option.colors.length === 0 ? 'C' : sortColorsForDisplay(option.colors).join('');
+    return optionKey === key;
+  });
+  return match?.label ?? 'Color Identity';
 }

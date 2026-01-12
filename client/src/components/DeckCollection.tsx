@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
-import { sortColorsForDisplay } from '../utils/color-identity';
+import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
 
 function formatWinRate(winRate: number | null): string {
@@ -409,7 +409,7 @@ export function DeckCollection({
               <div className="divide-y divide-gray-800">
                 {sortedDecks.map((deck) => (
                   <div key={deck.id} className="flex flex-col gap-2 px-4 py-3">
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
+                    <div className="grid grid-cols-[minmax(0,1fr)_8rem_8rem] items-start gap-4">
                       <div className="min-w-0">
                         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                           {deck.url ? (
@@ -429,14 +429,19 @@ export function DeckCollection({
                           </span>
                         </div>
                       </div>
-                      <div className="flex w-24 items-center justify-start">
+                      <div className="flex w-32 flex-col items-start justify-start justify-self-start text-left pr-2">
                         {deck.colorIdentity ? (
-                          <ColorIdentityIcons colors={deck.colorIdentity} />
+                          <>
+                            <ColorIdentityIcons colors={deck.colorIdentity} />
+                          <span className="mt-1 text-[10px] uppercase tracking-wide text-gray-500">
+                            {getColorIdentityLabel(deck.colorIdentity)}
+                          </span>
+                          </>
                         ) : (
                           <span className="text-sm text-gray-500">—</span>
                         )}
                       </div>
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex w-32 items-center justify-end gap-1">
                         {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
                           <button
                             type="button"
