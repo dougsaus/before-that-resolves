@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { useGameLogs } from '../hooks/useGameLogs';
 
@@ -20,6 +20,23 @@ function formatDate(value: string): string {
   });
 }
 
+function truncateLabel(value: string, maxLength = 12): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function formatGameLength(durationMinutes: number | null, turns: number | null): string {
+  const parts: string[] = [];
+  if (durationMinutes) {
+    parts.push(`${durationMinutes}m`);
+  }
+  if (turns) {
+    parts.push(`${turns} turns`);
+  }
+  if (parts.length === 0) return '';
+  return `Game Length: ${parts.join(', ')}`;
+}
+
 type OpponentForm = {
   name: string;
   commander: string;
@@ -28,6 +45,25 @@ type OpponentForm = {
 
 export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const { logs, loading, error, removeLog, updateLog } = useGameLogs(idToken);
+  type SortKey = 'playedAt' | 'deckName' | 'result' | 'durationMinutes' | 'turns';
+  const sortStorageKey = 'btr:game-logs-sort';
+  const sortKeys: SortKey[] = ['playedAt', 'deckName', 'result', 'durationMinutes', 'turns'];
+  const loadSortPrefs = (): { key: SortKey; dir: 'asc' | 'desc' } | null => {
+    try {
+      const raw = localStorage.getItem(sortStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { key?: string; dir?: string };
+      const key = sortKeys.find((option) => option === parsed.key);
+      const dir = parsed.dir === 'asc' || parsed.dir === 'desc' ? parsed.dir : null;
+      if (!key || !dir) return null;
+      return { key, dir };
+    } catch {
+      return null;
+    }
+  };
+  const initialSort = loadSortPrefs();
+  const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'playedAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'desc');
   const [editTarget, setEditTarget] = useState<{
     id: string;
     deckName: string;
@@ -103,6 +139,72 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     }
   };
 
+  const sortLabels: Record<SortKey, string> = {
+    playedAt: 'Date played',
+    deckName: 'Deck name',
+    result: 'Win/Loss',
+    durationMinutes: 'Game length (minutes)',
+    turns: 'Game length (turns)'
+  };
+
+  const handleSortChange = (key: SortKey) => {
+    setSortKey(key);
+    try {
+      localStorage.setItem(sortStorageKey, JSON.stringify({ key, dir: sortDir }));
+    } catch {
+      // Ignore storage errors in private mode.
+    }
+  };
+
+  const handleSortDirToggle = () => {
+    setSortDir((prev) => {
+      const next = prev === 'asc' ? 'desc' : 'asc';
+      try {
+        localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: next }));
+      } catch {
+        // Ignore storage errors in private mode.
+      }
+      return next;
+    });
+  };
+
+  const sortedLogs = useMemo(() => {
+    const list = [...logs];
+    const compare = (a: number, b: number) => (sortDir === 'asc' ? a - b : b - a);
+    const compareStrings = (a: string, b: string) =>
+      sortDir === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+    list.sort((first, second) => {
+      switch (sortKey) {
+        case 'deckName':
+          return compareStrings(first.deckName, second.deckName);
+        case 'result': {
+          const rank = (value: typeof first.result) =>
+            value === 'win' ? 2 : value === 'loss' ? 1 : 0;
+          return compare(rank(first.result), rank(second.result));
+        }
+        case 'durationMinutes': {
+          const missingValue = sortDir === 'asc' ? Number.POSITIVE_INFINITY : -1;
+          const aValue = first.durationMinutes ?? missingValue;
+          const bValue = second.durationMinutes ?? missingValue;
+          return compare(aValue, bValue);
+        }
+        case 'turns': {
+          const missingValue = sortDir === 'asc' ? Number.POSITIVE_INFINITY : -1;
+          const aValue = first.turns ?? missingValue;
+          const bValue = second.turns ?? missingValue;
+          return compare(aValue, bValue);
+        }
+        case 'playedAt':
+        default: {
+          const aValue = new Date(first.playedAt).getTime();
+          const bValue = new Date(second.playedAt).getTime();
+          return compare(aValue, bValue);
+        }
+      }
+    });
+    return list;
+  }, [logs, sortDir, sortKey]);
+
   if (!enabled) {
     return (
       <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
@@ -136,7 +238,34 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
               Review recent Commander games logged from your deck list.
             </p>
           </div>
-          {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <label className="text-xs uppercase tracking-wide text-gray-500" htmlFor="game-log-sort">
+                Sort
+              </label>
+              <select
+                id="game-log-sort"
+                value={sortKey}
+                onChange={(event) => handleSortChange(event.target.value as SortKey)}
+                className="rounded-md border border-gray-700 bg-gray-900/80 px-2 py-1 text-xs text-gray-200"
+              >
+                {Object.entries(sortLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleSortDirToggle}
+                className="rounded-md border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:border-cyan-400 hover:text-cyan-200"
+                aria-label={`Sort ${sortDir === 'asc' ? 'descending' : 'ascending'}`}
+              >
+                {sortDir === 'asc' ? '^' : 'v'}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
@@ -152,9 +281,9 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                 <span className="text-xs text-gray-500">Recent activity</span>
               </div>
               <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
-                {logs.map((log) => (
+                {sortedLogs.map((log) => (
                   <div key={log.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(5.5rem,0.8fr)_minmax(12rem,1.8fr)_minmax(4.5rem,0.6fr)_minmax(5rem,0.7fr)_minmax(6rem,0.7fr)_auto] sm:items-center">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
                           Date
@@ -187,15 +316,9 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-300">
                         <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-                          Length
+                          Game Length
                         </span>
-                        <span>{log.durationMinutes ? `${log.durationMinutes}m` : '—'}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-300">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-                          Turns
-                        </span>
-                        <span>{log.turns ?? '—'}</span>
+                        <span>{formatGameLength(log.durationMinutes, log.turns)}</span>
                       </div>
                       <div className="flex items-center justify-start gap-1 sm:justify-end">
                         <button
@@ -251,25 +374,24 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         {log.opponents.map((opponent, index) => (
                           <div
                             key={`${log.id}-opponent-${index}`}
-                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(5.5rem,0.8fr)_minmax(12rem,1.8fr)_minmax(4.5rem,0.6fr)_minmax(5rem,0.7fr)_minmax(6rem,0.7fr)_auto] sm:items-center"
+                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_12ch_5.5rem_minmax(10rem,1fr)] sm:items-center"
                           >
                             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
                               {index === 0 ? 'Opponents:' : ''}
                             </span>
-                            <span className="font-medium">
-                              {opponent.name || `Opponent ${index + 1}`}
+                            <span className="truncate font-medium" title={opponent.name || undefined}>
+                              {opponent.name
+                                ? truncateLabel(opponent.name)
+                                : `Opponent ${index + 1}`}
                             </span>
                             <div className="flex items-center justify-start">
                               {opponent.colorIdentity ? (
                                 <ColorIdentityIcons colors={opponent.colorIdentity} />
-                              ) : (
-                                <span className="text-xs text-gray-500">—</span>
-                              )}
+                              ) : null}
                             </div>
-                            <span className="text-gray-400 sm:col-span-2">
-                              {opponent.commander || '—'}
+                            <span className="text-gray-400">
+                              {opponent.commander || ''}
                             </span>
-                            <span className="hidden sm:block" />
                           </div>
                         ))}
                       </div>
