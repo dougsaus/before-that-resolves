@@ -154,7 +154,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
               <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
                 {logs.map((log) => (
                   <div key={log.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(5rem,0.7fr)_minmax(12rem,1.6fr)_minmax(5rem,0.6fr)_minmax(5rem,0.7fr)_minmax(4rem,0.6fr)_auto] sm:items-center">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(5.5rem,0.8fr)_minmax(12rem,1.8fr)_minmax(4.5rem,0.6fr)_minmax(5rem,0.7fr)_minmax(6rem,0.7fr)_auto] sm:items-center">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
                           Date
@@ -251,10 +251,10 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         {log.opponents.map((opponent, index) => (
                           <div
                             key={`${log.id}-opponent-${index}`}
-                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(5rem,0.7fr)_minmax(12rem,1.6fr)_auto_minmax(10rem,1.2fr)] sm:items-center"
+                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(5.5rem,0.8fr)_minmax(12rem,1.8fr)_minmax(4.5rem,0.6fr)_minmax(5rem,0.7fr)_minmax(6rem,0.7fr)_auto] sm:items-center"
                           >
                             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
-                              {index === 0 ? 'Opponents' : ''}
+                              {index === 0 ? 'Opponents:' : ''}
                             </span>
                             <span className="font-medium">
                               {opponent.name || `Opponent ${index + 1}`}
@@ -266,9 +266,10 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                                 <span className="text-xs text-gray-500">—</span>
                               )}
                             </div>
-                            <span className="text-gray-400">
+                            <span className="text-gray-400 sm:col-span-2">
                               {opponent.commander || '—'}
                             </span>
+                            <span className="hidden sm:block" />
                           </div>
                         ))}
                       </div>
