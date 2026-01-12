@@ -26,12 +26,13 @@ describe('useGameLogs', () => {
             deckId: 'deck-1',
             deckName: 'Test Deck',
             playedAt: '2025-02-14',
+            turns: null,
+            durationMinutes: null,
             opponentsCount: 2,
             opponents: [],
-              result: null,
-              goodGame: true,
-              createdAt: '2025-02-14T00:00:00.000Z'
-            }
+            result: null,
+            createdAt: '2025-02-14T00:00:00.000Z'
+          }
           ]
       })
     });
@@ -69,10 +70,11 @@ describe('useGameLogs', () => {
               deckId: 'deck-2',
               deckName: 'Second Deck',
               playedAt: '2025-03-01',
+              turns: null,
+              durationMinutes: null,
               opponentsCount: 1,
               opponents: [],
               result: null,
-              goodGame: false,
               createdAt: '2025-03-01T00:00:00.000Z'
             }
           ]
@@ -89,10 +91,11 @@ describe('useGameLogs', () => {
       await result.current.addLog({
         deckId: 'deck-2',
         datePlayed: '2025-03-01',
+        turns: null,
+        durationMinutes: null,
         opponentsCount: 1,
         opponents: [{ name: 'Player 2', commander: 'Atraxa', colorIdentity: 'WUBG' }],
-        result: null,
-        goodGame: false
+        result: null
       });
     });
 
@@ -117,10 +120,11 @@ describe('useGameLogs', () => {
               deckId: 'deck-3',
               deckName: 'Third Deck',
               playedAt: '2025-03-02',
+              turns: null,
+              durationMinutes: null,
               opponentsCount: 3,
               opponents: [],
               result: null,
-              goodGame: false,
               createdAt: '2025-03-02T00:00:00.000Z'
             }
           ]
@@ -136,10 +140,11 @@ describe('useGameLogs', () => {
               deckId: 'deck-3',
               deckName: 'Third Deck',
               playedAt: '2025-03-02',
+              turns: null,
+              durationMinutes: null,
               opponentsCount: 3,
               opponents: [],
               result: 'win',
-              goodGame: true,
               createdAt: '2025-03-02T00:00:00.000Z'
             }
           ]
@@ -155,10 +160,11 @@ describe('useGameLogs', () => {
     await act(async () => {
       await result.current.updateLog('log-3', {
         datePlayed: '2025-03-02',
+        turns: null,
+        durationMinutes: null,
         opponentsCount: 3,
         opponents: [],
-        result: 'win',
-        goodGame: true
+        result: 'win'
       });
     });
 

@@ -195,13 +195,6 @@ export function createApp(deps: AppDeps = {}) {
     }
     return new Date().toISOString().slice(0, 10);
   };
-  const parseBooleanInput = (input: unknown, fallback = false): boolean => {
-    if (typeof input === 'boolean') return input;
-    if (typeof input === 'string') {
-      return input.trim().toLowerCase() === 'true';
-    }
-    return fallback;
-  };
   const parseResultInput = (input: unknown): 'win' | 'loss' | null => {
     if (input === undefined || input === null || input === '') {
       return null;
@@ -214,6 +207,25 @@ export function createApp(deps: AppDeps = {}) {
       return normalized === 'win' ? 'win' : normalized === 'loss' ? 'loss' : null;
     }
     return input === true ? 'win' : input === false ? 'loss' : null;
+  };
+  const parseOptionalNumber = (input: unknown): number | null => {
+    if (input === undefined || input === null || input === '') {
+      return null;
+    }
+    const value =
+      typeof input === 'number'
+        ? input
+        : typeof input === 'string'
+          ? Number.parseInt(input, 10)
+          : Number.NaN;
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    const normalized = Math.floor(value);
+    if (normalized <= 0) {
+      return null;
+    }
+    return normalized;
   };
   const parseOpponentEntry = (
     input: unknown
@@ -642,7 +654,15 @@ export function createApp(deps: AppDeps = {}) {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
 
-    const { deckId, datePlayed, opponentsCount, opponents, result, goodGame } = req.body ?? {};
+    const {
+      deckId,
+      datePlayed,
+      opponentsCount,
+      opponents,
+      result,
+      turns,
+      durationMinutes
+    } = req.body ?? {};
     if (!deckId || typeof deckId !== 'string') {
       res.status(400).json({
         success: false,
@@ -667,10 +687,11 @@ export function createApp(deps: AppDeps = {}) {
       deckId: deck.id,
       deckName: deck.name,
       playedAt: normalizeDateInput(datePlayed),
+      turns: parseOptionalNumber(turns),
+      durationMinutes: parseOptionalNumber(durationMinutes),
       opponentsCount: normalizedOpponentsCount,
       opponents: parsedOpponents,
-      result: parseResultInput(result),
-      goodGame: parseBooleanInput(goodGame)
+      result: parseResultInput(result)
     };
 
     const logs = await createLog(user.id, logInput);
@@ -690,15 +711,17 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
-    const { datePlayed, opponentsCount, opponents, result, goodGame } = req.body ?? {};
+    const { datePlayed, opponentsCount, opponents, result, turns, durationMinutes } =
+      req.body ?? {};
     const parsedOpponents = parseOpponentEntries(opponents);
     const normalizedOpponentsCount = parseOpponentsCount(opponentsCount, parsedOpponents);
     const logUpdate: GameLogUpdate = {
       playedAt: normalizeDateInput(datePlayed),
+      turns: parseOptionalNumber(turns),
+      durationMinutes: parseOptionalNumber(durationMinutes),
       opponentsCount: normalizedOpponentsCount,
       opponents: parsedOpponents,
-      result: parseResultInput(result),
-      goodGame: parseBooleanInput(goodGame)
+      result: parseResultInput(result)
     };
 
     const logs = await updateLog(user.id, logId, logUpdate);

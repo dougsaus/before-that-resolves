@@ -12,10 +12,11 @@ export type GameLogEntry = {
   deckId: string;
   deckName: string;
   playedAt: string;
+  turns: number | null;
+  durationMinutes: number | null;
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
-  goodGame: boolean;
   createdAt: string;
 };
 
@@ -23,10 +24,11 @@ export type GameLogInput = {
   deckId: string;
   deckName: string;
   playedAt: string;
+  turns: number | null;
+  durationMinutes: number | null;
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
-  goodGame: boolean;
 };
 
 export type GameLogUpdate = Omit<GameLogInput, 'deckId' | 'deckName'>;
@@ -36,10 +38,11 @@ type GameLogRow = {
   deck_id: string;
   deck_name: string;
   played_at: string | Date;
+  turns: number | null;
+  duration_minutes: number | null;
   opponents_count: number;
   opponents: unknown;
   result: 'win' | 'loss' | null;
-  good_game: boolean;
   created_at: string | Date;
 };
 
@@ -93,10 +96,11 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
     deckId: row.deck_id,
     deckName: row.deck_name,
     playedAt,
+    turns: row.turns ?? null,
+    durationMinutes: row.duration_minutes ?? null,
     opponentsCount: row.opponents_count,
     opponents: normalizeOpponents(row.opponents),
     result: row.result,
-    goodGame: row.good_game,
     createdAt
   };
 }
@@ -104,7 +108,7 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
 export async function listGameLogs(userId: string): Promise<GameLogEntry[]> {
   const db = getPool();
   const result = await db.query<GameLogRow>(
-    `SELECT id, deck_id, deck_name, played_at, opponents_count, opponents, result, good_game, created_at
+    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, created_at
      FROM game_logs
      WHERE user_id = $1
      ORDER BY played_at DESC, created_at DESC`,
@@ -123,23 +127,25 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       deck_id,
       deck_name,
       played_at,
+      turns,
+      duration_minutes,
       opponents_count,
       opponents,
       result,
-      good_game,
       created_at
     )
-    VALUES ($1, $2, $3, $4, $5::date, $6, $7::jsonb, $8, $9, NOW())`,
+    VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb, $10, NOW())`,
     [
       id,
       userId,
       input.deckId,
       input.deckName,
       input.playedAt,
+      input.turns,
+      input.durationMinutes,
       input.opponentsCount,
       JSON.stringify(input.opponents ?? []),
-      input.result,
-      input.goodGame
+      input.result
     ]
   );
   return listGameLogs(userId);
@@ -154,17 +160,19 @@ export async function updateGameLog(
   await db.query(
     `UPDATE game_logs
      SET played_at = $1::date,
-         opponents_count = $2,
-         opponents = $3::jsonb,
-         result = $4,
-         good_game = $5
-     WHERE user_id = $6 AND id = $7`,
+         turns = $2,
+         duration_minutes = $3,
+         opponents_count = $4,
+         opponents = $5::jsonb,
+         result = $6
+     WHERE user_id = $7 AND id = $8`,
     [
       input.playedAt,
+      input.turns,
+      input.durationMinutes,
       input.opponentsCount,
       JSON.stringify(input.opponents ?? []),
       input.result,
-      input.goodGame,
       userId,
       logId
     ]

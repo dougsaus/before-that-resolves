@@ -52,6 +52,8 @@ const schemaQueries = [
     deck_id TEXT NOT NULL,
     deck_name TEXT NOT NULL,
     played_at DATE NOT NULL,
+    turns INTEGER,
+    duration_minutes INTEGER,
     opponents_count INTEGER NOT NULL DEFAULT 0,
     opponents JSONB NOT NULL DEFAULT '[]'::jsonb,
     result TEXT CHECK (result IN ('win', 'loss')),
@@ -65,6 +67,8 @@ const schemaQueries = [
        ALTER TABLE game_logs ALTER COLUMN result DROP NOT NULL;
        ALTER TABLE game_logs DROP CONSTRAINT IF EXISTS game_logs_result_check;
        ALTER TABLE game_logs ADD CONSTRAINT game_logs_result_check CHECK (result IN ('win', 'loss'));
+       ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS turns INTEGER;
+       ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS duration_minutes INTEGER;
      END IF;
    END $$;`,
   `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx

@@ -583,7 +583,6 @@ describe('app routes', () => {
         opponentsCount: 2,
         opponents: [],
         result: null,
-        goodGame: true,
         createdAt: '2025-02-14T00:00:00.000Z'
       }
     ]);
@@ -629,7 +628,6 @@ describe('app routes', () => {
           }
         ],
         result: null,
-        goodGame: true,
         createdAt: '2025-02-14T00:00:00.000Z'
       }
     ]);
@@ -653,8 +651,7 @@ describe('app routes', () => {
             colorIdentity: 'WBG'
           }
         ],
-        result: null,
-        goodGame: true
+        result: null
       })
       .expect(200);
 
@@ -671,8 +668,7 @@ describe('app routes', () => {
           colorIdentity: ['W', 'B', 'G']
         }
       ],
-      result: null,
-      goodGame: true
+      result: null
     }));
   });
 
@@ -688,7 +684,6 @@ describe('app routes', () => {
         opponentsCount: 3,
         opponents: [],
         result: 'win',
-        goodGame: false,
         createdAt: '2025-02-14T00:00:00.000Z'
       }
     ]);
@@ -705,8 +700,7 @@ describe('app routes', () => {
         datePlayed: '2025-02-15',
         opponentsCount: 3,
         opponents: [],
-        result: 'win',
-        goodGame: false
+        result: 'win'
       })
       .expect(200);
 
@@ -714,8 +708,7 @@ describe('app routes', () => {
     expect(updateGameLog).toHaveBeenCalledWith('user-999', 'log-5', expect.objectContaining({
       playedAt: '2025-02-15',
       opponentsCount: 3,
-      result: 'win',
-      goodGame: false
+      result: 'win'
     }));
   });
 });

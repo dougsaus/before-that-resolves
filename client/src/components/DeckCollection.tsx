@@ -151,9 +151,10 @@ export function DeckCollection({
   const [deleteTarget, setDeleteTarget] = useState<DeckEntry | null>(null);
   const [logTarget, setLogTarget] = useState<DeckEntry | null>(null);
   const [logDate, setLogDate] = useState('');
+  const [logTurns, setLogTurns] = useState('');
+  const [logDurationMinutes, setLogDurationMinutes] = useState('');
   const [logOpponents, setLogOpponents] = useState<OpponentForm[]>([]);
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
-  const [logGoodGame, setLogGoodGame] = useState(true);
   const [logFormError, setLogFormError] = useState<string | null>(null);
   const deckListRef = useRef<HTMLDivElement | null>(null);
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -377,9 +378,10 @@ export function DeckCollection({
 
   const resetLogForm = () => {
     setLogDate(today);
+    setLogTurns('');
+    setLogDurationMinutes('');
     setLogOpponents([]);
     setLogResult('pending');
-    setLogGoodGame(true);
     setLogFormError(null);
   };
 
@@ -526,6 +528,13 @@ export function DeckCollection({
       return next;
     });
   };
+  const parseOptionalNumberInput = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  };
 
   const handleSaveLog = async () => {
     if (!logTarget) {
@@ -536,14 +545,15 @@ export function DeckCollection({
     const success = await addLog({
       deckId: logTarget.id,
       datePlayed: logDate || today,
+      turns: parseOptionalNumberInput(logTurns),
+      durationMinutes: parseOptionalNumberInput(logDurationMinutes),
       opponentsCount: logOpponents.length,
       opponents: logOpponents.map((opponent) => ({
         name: opponent.name.trim(),
         commander: opponent.commander.trim(),
         colorIdentity: opponent.colorIdentity.trim()
       })),
-      result: logResult === 'pending' ? null : logResult,
-      goodGame: logGoodGame
+      result: logResult === 'pending' ? null : logResult
     });
     if (success) {
       setLogTarget(null);
@@ -1023,6 +1033,30 @@ export function DeckCollection({
                   className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm text-gray-300">
+                  Number of turns (optional)
+                  <input
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    value={logTurns}
+                    onChange={(event) => setLogTurns(event.target.value)}
+                    className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm text-gray-300">
+                  Length (minutes, optional)
+                  <input
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    value={logDurationMinutes}
+                    onChange={(event) => setLogDurationMinutes(event.target.value)}
+                    className="px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+              </div>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-300">Opponents</p>
@@ -1131,15 +1165,6 @@ export function DeckCollection({
                     Later
                   </button>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={logGoodGame}
-                    onChange={(event) => setLogGoodGame(event.target.checked)}
-                    className="h-4 w-4 rounded border-gray-600 text-cyan-500 focus:ring-cyan-500"
-                  />
-                  Good game?
-                </label>
               </div>
               {(logFormError || logError) && (
                 <p className="text-xs text-red-400">{logFormError || logError}</p>
