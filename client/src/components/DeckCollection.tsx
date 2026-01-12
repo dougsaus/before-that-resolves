@@ -227,8 +227,16 @@ export function DeckCollection({
     localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: sortDir }));
   }, [sortKey, sortDir]);
 
-  const getTotalGames = (deck: DeckEntry) =>
-    deck.stats?.totalGames ?? (deck.stats ? deck.stats.wins + deck.stats.losses : 0);
+  const getTotalGames = (deck: DeckEntry) => {
+    const stats = deck.stats;
+    if (!stats) return 0;
+    const total = Number(stats.totalGames);
+    if (Number.isFinite(total) && total > 0) {
+      return total;
+    }
+    const fallback = stats.wins + stats.losses;
+    return Number.isFinite(fallback) ? fallback : 0;
+  };
 
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
