@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
@@ -145,6 +145,8 @@ export function DeckCollection({
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
   const [logGoodGame, setLogGoodGame] = useState(true);
   const [logFormError, setLogFormError] = useState<string | null>(null);
+  const deckListRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollHint, setShowScrollHint] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'asc');
   const sortLabels: Record<SortKey, string> = {
@@ -165,6 +167,7 @@ export function DeckCollection({
   useEffect(() => {
     localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: sortDir }));
   }, [sortKey, sortDir]);
+
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
@@ -203,6 +206,27 @@ export function DeckCollection({
     });
     return sorted;
   }, [decks, sortDir, sortKey]);
+  const updateScrollHint = () => {
+    const list = deckListRef.current;
+    if (!list) return;
+    const hasOverflow = list.scrollHeight > list.clientHeight + 1;
+    const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 1;
+    setShowScrollHint(hasOverflow && !atBottom);
+  };
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      updateScrollHint();
+    });
+    const list = deckListRef.current;
+    if (!list) return;
+    const ResizeObserverImpl = window.ResizeObserver;
+    const resizeObserver = ResizeObserverImpl ? new ResizeObserverImpl(updateScrollHint) : null;
+    resizeObserver?.observe(list);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+    };
+  }, [sortedDecks.length]);
 
   const handleSortChange = (key: SortKey) => {
     setSortKey(key);
@@ -371,9 +395,9 @@ export function DeckCollection({
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
+    <div className="w-full max-w-6xl mx-auto flex h-full min-h-0 flex-col gap-6">
       {deckError && <p className="text-red-400">{deckError}</p>}
-      <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">Your Deck Collection</h3>
@@ -390,13 +414,13 @@ export function DeckCollection({
             Deck
           </button>
         </div>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
           {loading && <p className="text-gray-400">Loading...</p>}
           {!loading && decks.length === 0 && (
             <p className="text-gray-400">No decks yet. Use + Deck to add your first deck.</p>
           )}
           {decks.length > 0 && (
-            <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60 sm:max-h-[60vh]">
+            <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
                 <span className="text-xs uppercase tracking-wide text-gray-500">Decks</span>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -425,10 +449,16 @@ export function DeckCollection({
                   </button>
                 </div>
               </div>
-              <div className="divide-y divide-gray-800">
-                {sortedDecks.map((deck) => (
-                  <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] grid-rows-[auto_auto] items-center gap-x-3 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_8rem_8rem] sm:gap-x-4">
+              <div className="relative flex-1 min-h-0 overflow-hidden">
+                <div
+                  ref={deckListRef}
+                  onScroll={updateScrollHint}
+                  className="h-full overflow-y-scroll"
+                >
+                <div className="divide-y divide-gray-800">
+                  {sortedDecks.map((deck) => (
+                    <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
+                      <div className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] grid-rows-[auto_auto] items-center gap-x-3 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_8rem_8rem] sm:gap-x-4">
                       <div className="min-w-0 row-start-1 col-start-1">
                         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                           {deck.url ? (
@@ -585,8 +615,13 @@ export function DeckCollection({
                       </div>
                       <div className="row-start-2 col-start-3" aria-hidden="true" />
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  ))}
+                </div>
+                </div>
+                {showScrollHint && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-gray-950" />
+                )}
               </div>
             </div>
           )}

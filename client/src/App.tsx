@@ -150,8 +150,8 @@ function App() {
 
   return (
     <DevModeProvider>
-      <div className="min-h-[100svh] bg-gradient-to-br from-gray-900 to-gray-800 text-white">
-        <div className="relative flex min-h-[100svh]">
+      <div className="h-[100svh] overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+        <div className="relative flex h-[100svh]">
           {navOpen && (
             <button
               type="button"
@@ -271,8 +271,8 @@ function App() {
           <div className="flex min-h-[100svh] flex-1 flex-col">
             <main
               ref={mainRef}
-              className={`flex-1 min-h-0 px-4 pb-6 pt-6 sm:px-6 ${
-                view === 'oracle' ? 'overflow-hidden' : 'overflow-auto'
+              className={`flex flex-1 min-h-0 flex-col px-4 pb-6 pt-6 sm:px-6 ${
+                view === 'oracle' || view === 'decks' ? 'overflow-hidden' : 'overflow-auto'
               }`}
             >
               <div className="mb-4 flex items-center justify-between lg:hidden">
@@ -301,22 +301,24 @@ function App() {
                 />
               )}
               {view === 'decks' && (
-                <DeckCollection
-                  enabled={decksEnabled}
-                  idToken={deckCollection.idToken}
-                  decks={deckCollection.decks}
-                  loading={deckCollection.loading}
-                  deckError={deckCollection.deckError}
-                  onCreateDeck={deckCollection.createDeck}
-                  onUpdateDeck={deckCollection.updateDeck}
-                  onPreviewDeck={deckCollection.previewDeck}
-                  onRemoveDeck={deckCollection.removeDeck}
-                  onOpenInOracle={(deckUrl) => {
-                    setPendingDeckUrl(deckUrl);
-                    setView('oracle');
-                  }}
-                  onRefreshDecks={deckCollection.refreshDecks}
-                />
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <DeckCollection
+                    enabled={decksEnabled}
+                    idToken={deckCollection.idToken}
+                    decks={deckCollection.decks}
+                    loading={deckCollection.loading}
+                    deckError={deckCollection.deckError}
+                    onCreateDeck={deckCollection.createDeck}
+                    onUpdateDeck={deckCollection.updateDeck}
+                    onPreviewDeck={deckCollection.previewDeck}
+                    onRemoveDeck={deckCollection.removeDeck}
+                    onOpenInOracle={(deckUrl) => {
+                      setPendingDeckUrl(deckUrl);
+                      setView('oracle');
+                    }}
+                    onRefreshDecks={deckCollection.refreshDecks}
+                  />
+                </div>
               )}
               {view === 'logs' && (
                 <GameLogs
