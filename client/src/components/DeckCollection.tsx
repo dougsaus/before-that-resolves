@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
@@ -145,6 +145,8 @@ export function DeckCollection({
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
   const [logGoodGame, setLogGoodGame] = useState(true);
   const [logFormError, setLogFormError] = useState<string | null>(null);
+  const deckListRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollHint, setShowScrollHint] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'asc');
   const sortLabels: Record<SortKey, string> = {
@@ -204,7 +206,27 @@ export function DeckCollection({
     });
     return sorted;
   }, [decks, sortDir, sortKey]);
-  const showScrollHint = sortedDecks.length > 6;
+  const updateScrollHint = () => {
+    const list = deckListRef.current;
+    if (!list) return;
+    const hasOverflow = list.scrollHeight > list.clientHeight + 1;
+    const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 1;
+    setShowScrollHint(hasOverflow && !atBottom);
+  };
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      updateScrollHint();
+    });
+    const list = deckListRef.current;
+    if (!list) return;
+    const ResizeObserverImpl = window.ResizeObserver;
+    const resizeObserver = ResizeObserverImpl ? new ResizeObserverImpl(updateScrollHint) : null;
+    resizeObserver?.observe(list);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+    };
+  }, [sortedDecks.length]);
 
   const handleSortChange = (key: SortKey) => {
     setSortKey(key);
@@ -398,7 +420,7 @@ export function DeckCollection({
             <p className="text-gray-400">No decks yet. Use + Deck to add your first deck.</p>
           )}
           {decks.length > 0 && (
-            <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
+            <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
                 <span className="text-xs uppercase tracking-wide text-gray-500">Decks</span>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -427,7 +449,12 @@ export function DeckCollection({
                   </button>
                 </div>
               </div>
-              <div className="relative flex-1 min-h-0 overflow-y-scroll">
+              <div className="relative flex-1 min-h-0 overflow-hidden">
+                <div
+                  ref={deckListRef}
+                  onScroll={updateScrollHint}
+                  className="h-full overflow-y-scroll"
+                >
                 <div className="divide-y divide-gray-800">
                   {sortedDecks.map((deck) => (
                     <div key={deck.id} className="flex flex-col gap-1 px-4 py-2">
@@ -591,8 +618,9 @@ export function DeckCollection({
                     </div>
                   ))}
                 </div>
+                </div>
                 {showScrollHint && (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-b from-transparent to-gray-950/80" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-gray-950" />
                 )}
               </div>
             </div>
