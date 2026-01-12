@@ -152,17 +152,9 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                 <span className="text-xs text-gray-500">Recent activity</span>
               </div>
               <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
-                <div className="sticky top-0 z-10 hidden sm:grid grid-cols-[minmax(6rem,0.7fr)_minmax(12rem,1.6fr)_minmax(5rem,0.6fr)_minmax(6rem,0.7fr)_minmax(6rem,0.6fr)_auto] gap-3 bg-gray-950/90 px-4 py-2 text-[11px] uppercase tracking-wide text-gray-500">
-                  <span>Date</span>
-                  <span>Deck</span>
-                  <span>Result</span>
-                  <span>Length</span>
-                  <span>Turns</span>
-                  <span className="justify-self-end">Actions</span>
-                </div>
                 {logs.map((log) => (
                   <div key={log.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,0.7fr)_minmax(12rem,1.6fr)_minmax(5rem,0.6fr)_minmax(6rem,0.7fr)_minmax(6rem,0.6fr)_auto] sm:items-center">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(5rem,0.7fr)_minmax(12rem,1.6fr)_minmax(5rem,0.6fr)_minmax(5rem,0.7fr)_minmax(4rem,0.6fr)_auto] sm:items-center">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
                           Date
@@ -259,7 +251,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         {log.opponents.map((opponent, index) => (
                           <div
                             key={`${log.id}-opponent-${index}`}
-                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[6rem_minmax(8rem,1fr)_minmax(6rem,0.6fr)_minmax(12rem,1.2fr)] sm:items-center"
+                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(5rem,0.7fr)_minmax(12rem,1.6fr)_auto_minmax(10rem,1.2fr)] sm:items-center"
                           >
                             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
                               {index === 0 ? 'Opponents' : ''}
