@@ -227,6 +227,17 @@ export function DeckCollection({
     localStorage.setItem(sortStorageKey, JSON.stringify({ key: sortKey, dir: sortDir }));
   }, [sortKey, sortDir]);
 
+  const getTotalGames = (deck: DeckEntry) => {
+    const stats = deck.stats;
+    if (!stats) return 0;
+    const total = Number(stats.totalGames);
+    if (Number.isFinite(total) && total > 0) {
+      return total;
+    }
+    const fallback = stats.wins + stats.losses;
+    return Number.isFinite(fallback) ? fallback : 0;
+  };
+
   const sortedDecks = useMemo(() => {
     const sorted = [...decks];
     const direction = sortDir === 'asc' ? 1 : -1;
@@ -235,7 +246,7 @@ export function DeckCollection({
       if (!deck.colorIdentity) return '';
       return sortColorsForDisplay(deck.colorIdentity).join('');
     };
-    const getGamesValue = (deck: DeckEntry) => deck.stats?.totalGames ?? 0;
+    const getGamesValue = (deck: DeckEntry) => getTotalGames(deck);
     const getWinsValue = (deck: DeckEntry) => deck.stats?.wins ?? 0;
     const getLastPlayedValue = (deck: DeckEntry) =>
       deck.stats?.lastPlayed ? parseLocalDate(deck.stats.lastPlayed).getTime() : 0;
@@ -805,9 +816,9 @@ export function DeckCollection({
                       </div>
                       <div className="row-start-2 col-start-1 grid grid-cols-[4.5rem_3.5rem_4rem_7rem] items-center gap-2 text-[11px] text-gray-400 sm:grid-cols-[5rem_4rem_4.5rem_8.5rem] sm:gap-3 sm:text-xs">
                         <span>
-                          Games <span className="text-gray-200">{deck.stats?.totalGames ?? 0}</span>
+                          Games <span className="text-gray-200">{getTotalGames(deck)}</span>
                         </span>
-                        {deck.stats && deck.stats.totalGames > 0 ? (
+                        {deck.stats && getTotalGames(deck) > 0 ? (
                           <>
                             <span>
                               Wins <span className="text-gray-200">{deck.stats.wins}</span>

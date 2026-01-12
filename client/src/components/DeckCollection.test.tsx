@@ -114,6 +114,21 @@ describe('DeckCollection', () => {
     expect(deckNames[0]).toBe('High Stats');
   });
 
+  it('falls back to wins/losses when total games is zero', () => {
+    const decks = [
+      baseDeck({
+        id: 'deck-1',
+        name: 'Fallback Stats',
+        stats: { totalGames: 0, wins: 2, losses: 1, winRate: 0.66, lastPlayed: '2024-02-20' }
+      })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    const gamesLabel = screen.getByText('Games');
+    expect(gamesLabel.parentElement).toHaveTextContent('Games 3');
+  });
+
   it('opens the deck modal and validates required fields', async () => {
     const user = userEvent.setup();
     const onCreateDeck = vi.fn().mockResolvedValue(true);
