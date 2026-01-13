@@ -586,16 +586,6 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                       </div>
                     </div>
 
-                    {log.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {log.tags.map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
                     {log.opponents.length > 0 && (
                       <div className="flex flex-col gap-1">
                         {log.opponents.map((opponent, index) => (
@@ -644,6 +634,21 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                             </span>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {log.tags.length > 0 && (
+                      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+                          Tags:
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {log.tags.map((tag) => (
+                            <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
