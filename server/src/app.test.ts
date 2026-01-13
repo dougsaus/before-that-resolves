@@ -735,7 +735,9 @@ describe('app routes', () => {
         opponentsCount: 2,
         opponents: [
           {
-            commander: 'Ghave, Guru of Spores',
+            name: null,
+            commanderNames: ['Ghave, Guru of Spores'],
+            commanderLinks: [null],
             colorIdentity: ['W', 'B', 'G']
           }
         ],
@@ -759,7 +761,7 @@ describe('app routes', () => {
         opponentsCount: 2,
         opponents: [
           {
-            commander: 'Ghave, Guru of Spores',
+            commanderNames: ['Ghave, Guru of Spores'],
             colorIdentity: 'WBG'
           }
         ],
@@ -776,8 +778,8 @@ describe('app routes', () => {
       opponents: [
         {
           name: null,
-          commander: 'Ghave, Guru of Spores',
-          commanderLink: null,
+          commanderNames: ['Ghave, Guru of Spores'],
+          commanderLinks: [null],
           colorIdentity: ['W', 'B', 'G']
         }
       ],

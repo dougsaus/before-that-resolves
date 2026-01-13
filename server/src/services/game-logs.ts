@@ -3,8 +3,8 @@ import { getPool } from './db';
 
 export type GameLogOpponent = {
   name: string | null;
-  commander: string | null;
-  commanderLink: string | null;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   colorIdentity: string[] | null;
 };
 
@@ -56,24 +56,45 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
     typeof record.name === 'string' && record.name.trim()
       ? record.name.trim()
       : null;
-  const commander =
-    typeof record.commander === 'string' && record.commander.trim()
-      ? record.commander.trim()
-      : null;
-  const commanderLink =
-    typeof record.commanderLink === 'string' && record.commanderLink.trim()
-      ? record.commanderLink.trim()
-      : null;
+
+  // Support both old format (commander/commanderLink) and new format (commanderNames/commanderLinks)
+  let commanderNames: string[] = [];
+  let commanderLinks: Array<string | null> = [];
+
+  if (Array.isArray(record.commanderNames)) {
+    commanderNames = record.commanderNames
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => value.trim())
+      .slice(0, 2);
+    if (Array.isArray(record.commanderLinks)) {
+      commanderLinks = record.commanderLinks
+        .slice(0, commanderNames.length)
+        .map((value) => (typeof value === 'string' && value.trim() ? value.trim() : null));
+    }
+    // Ensure commanderLinks has same length as commanderNames
+    while (commanderLinks.length < commanderNames.length) {
+      commanderLinks.push(null);
+    }
+  } else if (typeof record.commander === 'string' && record.commander.trim()) {
+    // Legacy single commander support
+    commanderNames = [record.commander.trim()];
+    commanderLinks = [
+      typeof record.commanderLink === 'string' && record.commanderLink.trim()
+        ? record.commanderLink.trim()
+        : null
+    ];
+  }
+
   const colorIdentity = Array.isArray(record.colorIdentity)
     ? record.colorIdentity.filter((value): value is string => typeof value === 'string')
     : null;
-  if (!name && !commander && (!colorIdentity || colorIdentity.length === 0)) {
+  if (!name && commanderNames.length === 0 && (!colorIdentity || colorIdentity.length === 0)) {
     return null;
   }
   return {
     name,
-    commander,
-    commanderLink,
+    commanderNames,
+    commanderLinks,
     colorIdentity: colorIdentity && colorIdentity.length > 0 ? colorIdentity : null
   };
 }

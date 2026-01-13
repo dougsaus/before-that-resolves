@@ -94,7 +94,7 @@ describe('useGameLogs', () => {
         turns: null,
         durationMinutes: null,
         opponentsCount: 1,
-        opponents: [{ name: 'Player 2', commander: 'Atraxa', commanderLink: null, colorIdentity: 'WUBG' }],
+        opponents: [{ name: 'Player 2', commanderNames: ['Atraxa'], commanderLinks: [null], colorIdentity: 'WUBG' }],
         result: null
       });
     });
