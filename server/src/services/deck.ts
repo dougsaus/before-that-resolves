@@ -318,11 +318,15 @@ async function fetchArchidektDeckById(deckId: string): Promise<ArchidektDeck> {
 }
 
 async function fetchMoxfieldDeckById(deckId: string): Promise<MoxfieldDeck> {
+  const userAgent = process.env.MOXFIELD_USER_AGENT;
+  if (!userAgent) {
+    throw new Error('Moxfield API access not configured. Set MOXFIELD_USER_AGENT environment variable.');
+  }
+
   const apiUrl = `https://api2.moxfield.com/v3/decks/all/${deckId}`;
   const result = await fetchJson(apiUrl, {
     headers: {
-      origin: 'https://www.moxfield.com',
-      referer: 'https://www.moxfield.com/'
+      'user-agent': userAgent
     }
   });
 

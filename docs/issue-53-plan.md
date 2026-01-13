@@ -55,10 +55,9 @@ Add Moxfield as a supported deck source for both Oracle deck loading and the Dec
 
 ## Remaining Work / Open Questions
 - [x] Verify Moxfield API access from server runtime.
-  - **Finding:** The Moxfield API at `api2.moxfield.com` is protected by Cloudflare and returns 403 for server-side requests.
-  - Tested with various headers (Origin, Referer, User-Agent) - all blocked.
-  - Tested the `moxfield-api` npm package - also blocked (uses same endpoint).
-  - **Conclusion:** Moxfield API access requires browser-based requests or a specialized proxy. The implementation is complete and will work once API access is available. Current error handling surfaces "Failed to load Moxfield deck" to users.
+  - **Resolved:** Moxfield granted API access via allowlisted User-Agent.
+  - API credentials stored in `MOXFIELD_USER_AGENT` env var (see `.env.example`).
+  - Rate limit: max 1 request per second to avoid firewall ban.
 - [x] Run full test suite and lint/build per repo workflow before PR.
   - All tests pass, lint clean, build succeeds.
 
@@ -69,4 +68,4 @@ Add Moxfield as a supported deck source for both Oracle deck loading and the Dec
   - `boards.commanders` drives commander names.
   - `colorIdentity` uses deck-level value when present; otherwise derives from commander cards.
   - `maybeboard`, `sideboard`, `tokens` are excluded from deck list.
-- If Moxfield API 403 persists, expect `fetchDeckSummary` and `cacheDeckFromUrl` to fail with "Failed to load Moxfield deck"; error surfaces in UI.
+- Moxfield API requires `MOXFIELD_USER_AGENT` env var; if not set, returns clear error message.

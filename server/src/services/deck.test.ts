@@ -168,6 +168,8 @@ describe('deck service', () => {
   });
 
   it('summarizes Moxfield decks using commander boards', async () => {
+    vi.stubEnv('MOXFIELD_USER_AGENT', 'test-agent');
+
     const deckData = {
       name: 'Mox Summary',
       format: 'commander',

@@ -326,7 +326,7 @@ export function createApp(deps: AppDeps = {}) {
       commanderNames: string[];
       commanderLinks: Array<string | null>;
       colorIdentity: string[] | null;
-      source: 'archidekt' | 'manual';
+      source: 'archidekt' | 'moxfield' | 'manual';
       addedAt: string;
     }>
   ) => {
