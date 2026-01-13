@@ -17,6 +17,7 @@ DB_USER=${DB_USER:-btr}
 DB_PASSWORD=${DB_PASSWORD:-}
 DB_HOST=${DB_HOST:-}
 DB_SSL=${DB_SSL:-false}
+MOXFIELD_USER_AGENT=${MOXFIELD_USER_AGENT:-}
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}"
 
 printf 'Using project %s in %s\n' "$PROJECT_ID" "$REGION"
@@ -94,6 +95,10 @@ if [[ -n "$DB_HOST" ]]; then
   ENV_VARS+=("DB_USER=${DB_USER}")
   ENV_VARS+=("DB_PASSWORD=${DB_PASSWORD}")
   ENV_VARS+=("DB_SSL=${DB_SSL}")
+fi
+
+if [[ -n "$MOXFIELD_USER_AGENT" ]]; then
+  ENV_VARS+=("MOXFIELD_USER_AGENT=${MOXFIELD_USER_AGENT}")
 fi
 
 if [[ "${#ENV_VARS[@]}" -gt 0 ]]; then
