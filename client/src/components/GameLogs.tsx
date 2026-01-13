@@ -537,18 +537,6 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         </span>
                         <span>{formatGameLength(log.durationMinutes, log.turns)}</span>
                       </div>
-                      {log.tags.length > 0 && (
-                        <div className="col-span-full flex flex-wrap gap-1 mt-1 sm:col-span-4 sm:mt-0">
-                          {log.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                       <div className="flex items-center justify-start gap-1 sm:justify-end">
                         <button
                           type="button"
@@ -597,6 +585,16 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         </button>
                       </div>
                     </div>
+
+                    {log.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {log.tags.map((tag) => (
+                          <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {log.opponents.length > 0 && (
                       <div className="flex flex-col gap-1">
