@@ -1,6 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { useGameLogs } from '../hooks/useGameLogs';
+import { buildApiUrl } from '../utils/api';
+
+function getScryfallImageUrl(cardName: string) {
+  const encoded = encodeURIComponent(cardName.trim());
+  return `https://api.scryfall.com/cards/named?exact=${encoded}&format=image&version=normal`;
+}
 
 type GameLogsProps = {
   enabled: boolean;
@@ -37,9 +44,15 @@ function formatGameLength(durationMinutes: number | null, turns: number | null):
   return `Game Length: ${parts.join(', ')}`;
 }
 
+type CommanderEntry = {
+  name: string;
+  link: string | null;
+  lookupStatus: 'idle' | 'loading' | 'found' | 'not-found' | 'error';
+};
+
 type OpponentForm = {
   name: string;
-  commander: string;
+  commanders: CommanderEntry[];
   colorIdentity: string;
 };
 
@@ -74,6 +87,52 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const [editOpponents, setEditOpponents] = useState<OpponentForm[]>([]);
   const [editResult, setEditResult] = useState<'win' | 'loss' | 'pending'>('pending');
   const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [hoverCard, setHoverCard] = useState<{ label: string; rect: DOMRect } | null>(null);
+  const anchorRef = useRef<HTMLAnchorElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+
+  useEffect(() => {
+    const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!hoverCard) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (anchorRef.current?.contains(target)) return;
+      if (popupRef.current?.contains(target)) return;
+      setHoverCard(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [hoverCard]);
+
+  const hoverPosition = useMemo(() => {
+    if (!hoverCard) return null;
+    const margin = 12;
+    const popupWidth = 272;
+    const popupHeight = 360;
+
+    let left = hoverCard.rect.left + hoverCard.rect.width / 2 - popupWidth / 2;
+    left = Math.max(margin, Math.min(left, viewport.width - popupWidth - margin));
+
+    const aboveTop = hoverCard.rect.top - popupHeight - margin;
+    if (aboveTop >= margin) {
+      const bottom = viewport.height - hoverCard.rect.top + margin;
+      return { left, bottom, placement: 'above' as const };
+    }
+
+    const top = hoverCard.rect.bottom + margin;
+    return { left, top, placement: 'below' as const };
+  }, [hoverCard, viewport.height, viewport.width]);
+
+  const imageUrl = useMemo(() => {
+    if (!hoverCard) return null;
+    return getScryfallImageUrl(hoverCard.label);
+  }, [hoverCard]);
 
   const openEditModal = (log: (typeof logs)[number]) => {
     setEditTarget({ id: log.id, deckName: log.deckName });
@@ -83,7 +142,13 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setEditOpponents(
       log.opponents.map((opponent) => ({
         name: opponent.name ?? '',
-        commander: opponent.commander ?? '',
+        commanders: opponent.commanderNames.length > 0
+          ? opponent.commanderNames.map((cmdName, idx) => ({
+              name: cmdName,
+              link: opponent.commanderLinks[idx] ?? null,
+              lookupStatus: opponent.commanderLinks[idx] ? 'found' as const : 'idle' as const
+            }))
+          : [{ name: '', link: null, lookupStatus: 'idle' as const }],
         colorIdentity: opponent.colorIdentity ? opponent.colorIdentity.join('') : ''
       }))
     );
@@ -100,20 +165,140 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   };
 
   const addEditOpponent = () => {
-    setEditOpponents((current) => [...current, { name: '', commander: '', colorIdentity: '' }]);
+    setEditOpponents((current) => [...current, {
+      name: '',
+      commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
+      colorIdentity: ''
+    }]);
   };
 
   const removeEditOpponent = (index: number) => {
     setEditOpponents((current) => current.filter((_, i) => i !== index));
   };
 
-  const updateEditOpponent = (index: number, field: keyof OpponentForm, value: string) => {
+  const updateEditOpponentField = (opponentIndex: number, field: 'name' | 'colorIdentity', value: string) => {
     setEditOpponents((current) => {
       const next = [...current];
-      const target = next[index] ?? { name: '', commander: '', colorIdentity: '' };
-      next[index] = { ...target, [field]: value };
+      if (next[opponentIndex]) {
+        next[opponentIndex] = { ...next[opponentIndex], [field]: value };
+      }
       return next;
     });
+  };
+
+  const updateEditOpponentCommander = (opponentIndex: number, commanderIndex: number, value: string) => {
+    setEditOpponents((current) => {
+      const next = [...current];
+      const opponent = next[opponentIndex];
+      if (opponent) {
+        const commanders = [...opponent.commanders];
+        commanders[commanderIndex] = { name: value, link: null, lookupStatus: 'idle' };
+        next[opponentIndex] = { ...opponent, commanders };
+      }
+      return next;
+    });
+  };
+
+  const addOpponentCommander = (opponentIndex: number) => {
+    setEditOpponents((current) => {
+      const next = [...current];
+      const opponent = next[opponentIndex];
+      if (opponent && opponent.commanders.length < 2) {
+        next[opponentIndex] = {
+          ...opponent,
+          commanders: [...opponent.commanders, { name: '', link: null, lookupStatus: 'idle' }]
+        };
+      }
+      return next;
+    });
+  };
+
+  const removeOpponentCommander = (opponentIndex: number, commanderIndex: number) => {
+    setEditOpponents((current) => {
+      const next = [...current];
+      const opponent = next[opponentIndex];
+      if (opponent && opponent.commanders.length > 1) {
+        const commanders = opponent.commanders.filter((_, i) => i !== commanderIndex);
+        next[opponentIndex] = { ...opponent, commanders };
+      }
+      return next;
+    });
+  };
+
+  const lookupOpponentCommander = async (opponentIndex: number, commanderIndex: number) => {
+    if (!idToken) {
+      setEditFormError('Sign in with Google to search commanders.');
+      return;
+    }
+    const commanderName = editOpponents[opponentIndex]?.commanders[commanderIndex]?.name?.trim();
+    if (!commanderName) {
+      return;
+    }
+    setEditOpponents((current) => {
+      const next = [...current];
+      const opponent = next[opponentIndex];
+      if (opponent) {
+        const commanders = [...opponent.commanders];
+        commanders[commanderIndex] = { ...commanders[commanderIndex], lookupStatus: 'loading' };
+        next[opponentIndex] = { ...opponent, commanders };
+      }
+      return next;
+    });
+    setEditFormError(null);
+    try {
+      const response = await fetch(buildApiUrl('/api/scryfall/lookup'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: commanderName })
+      });
+      const payload = await response.json() as { success?: boolean; error?: string; card?: { name: string; scryfallUrl: string | null } | null };
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to lookup commander.');
+      }
+      if (!payload.card) {
+        setEditOpponents((current) => {
+          const next = [...current];
+          const opponent = next[opponentIndex];
+          if (opponent) {
+            const commanders = [...opponent.commanders];
+            commanders[commanderIndex] = { ...commanders[commanderIndex], link: null, lookupStatus: 'not-found' };
+            next[opponentIndex] = { ...opponent, commanders };
+          }
+          return next;
+        });
+        return;
+      }
+      setEditOpponents((current) => {
+        const next = [...current];
+        const opponent = next[opponentIndex];
+        if (opponent) {
+          const commanders = [...opponent.commanders];
+          commanders[commanderIndex] = {
+            name: payload.card?.name || commanderName,
+            link: payload.card?.scryfallUrl ?? null,
+            lookupStatus: payload.card?.scryfallUrl ? 'found' : 'idle'
+          };
+          next[opponentIndex] = { ...opponent, commanders };
+        }
+        return next;
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to lookup commander.';
+      setEditOpponents((current) => {
+        const next = [...current];
+        const opponent = next[opponentIndex];
+        if (opponent) {
+          const commanders = [...opponent.commanders];
+          commanders[commanderIndex] = { ...commanders[commanderIndex], lookupStatus: 'error' };
+          next[opponentIndex] = { ...opponent, commanders };
+        }
+        return next;
+      });
+      setEditFormError(message);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -129,7 +314,12 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
       opponentsCount: editOpponents.length,
       opponents: editOpponents.map((opponent) => ({
         name: opponent.name.trim(),
-        commander: opponent.commander.trim(),
+        commanderNames: opponent.commanders
+          .map((cmd) => cmd.name.trim())
+          .filter((name) => name.length > 0),
+        commanderLinks: opponent.commanders
+          .filter((cmd) => cmd.name.trim().length > 0)
+          .map((cmd) => cmd.link),
         colorIdentity: opponent.colorIdentity.trim()
       })),
       result: editResult === 'pending' ? null : editResult
@@ -387,7 +577,30 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                               ) : null}
                             </div>
                             <span className="text-gray-400">
-                              {opponent.commander || ''}
+                              {opponent.commanderNames.length > 0 ? (
+                                opponent.commanderNames.map((cmdName, cmdIndex) => (
+                                  <span key={cmdIndex}>
+                                    {cmdIndex > 0 && ' / '}
+                                    {opponent.commanderLinks[cmdIndex] ? (
+                                      <a
+                                        href={opponent.commanderLinks[cmdIndex]!}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-cyan-200 hover:text-cyan-100"
+                                        onMouseEnter={(event) => {
+                                          anchorRef.current = event.currentTarget;
+                                          const rect = event.currentTarget.getBoundingClientRect();
+                                          setHoverCard({ label: cmdName, rect });
+                                        }}
+                                      >
+                                        {cmdName}
+                                      </a>
+                                    ) : (
+                                      cmdName
+                                    )}
+                                  </span>
+                                ))
+                              ) : ''}
                             </span>
                           </div>
                         ))}
@@ -461,43 +674,109 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                 {editOpponents.length === 0 && (
                   <p className="text-xs text-gray-500">No opponents added yet.</p>
                 )}
-                {editOpponents.map((opponent, index) => (
+                {editOpponents.map((opponent, opponentIndex) => (
                   <div
-                    key={`${editTarget.id}-opponent-${index}`}
+                    key={`${editTarget.id}-opponent-${opponentIndex}`}
                     className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        value={opponent.name}
-                        onChange={(event) => updateEditOpponent(index, 'name', event.target.value)}
-                        placeholder="Name"
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      />
-                      <input
-                        type="text"
-                        value={opponent.commander}
-                        onChange={(event) => updateEditOpponent(index, 'commander', event.target.value)}
-                        placeholder="Commander"
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <ColorIdentitySelect
-                          label=""
-                          value={opponent.colorIdentity}
-                          onChange={(value) => updateEditOpponent(index, 'colorIdentity', value)}
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="text"
+                          value={opponent.name}
+                          onChange={(event) => updateEditOpponentField(opponentIndex, 'name', event.target.value)}
+                          placeholder="Name"
+                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                         />
+                        <div className="flex-1 min-w-0">
+                          <ColorIdentitySelect
+                            label=""
+                            value={opponent.colorIdentity}
+                            onChange={(value) => updateEditOpponentField(opponentIndex, 'colorIdentity', value)}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeEditOpponent(opponentIndex)}
+                          className="text-gray-500 hover:text-red-400 p-1"
+                          aria-label={`Remove opponent ${opponentIndex + 1}`}
+                        >
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeEditOpponent(index)}
-                        className="text-gray-500 hover:text-red-400 p-1"
-                        aria-label={`Remove opponent ${index + 1}`}
-                      >
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                      </button>
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs text-gray-400">Commanders (0-2)</p>
+                        {opponent.commanders.map((commander, cmdIndex) => (
+                          <div key={cmdIndex} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={commander.name}
+                              onChange={(event) => updateEditOpponentCommander(opponentIndex, cmdIndex, event.target.value)}
+                              placeholder={`Commander ${cmdIndex + 1}`}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => lookupOpponentCommander(opponentIndex, cmdIndex)}
+                              disabled={!commander.name.trim() || commander.lookupStatus === 'loading'}
+                              className="rounded-lg border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                              aria-label="Lookup commander"
+                              title="Lookup commander on Scryfall"
+                            >
+                              {commander.lookupStatus === 'loading' ? '...' : 'Scryfall'}
+                            </button>
+                            {opponent.commanders.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeOpponentCommander(opponentIndex, cmdIndex)}
+                                className="text-gray-500 hover:text-red-400 p-1"
+                                aria-label={`Remove commander ${cmdIndex + 1}`}
+                              >
+                                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {opponent.commanders.some((cmd) => cmd.lookupStatus === 'not-found') && (
+                          <p className="text-xs text-amber-300">Card not found on Scryfall.</p>
+                        )}
+                        {opponent.commanders.some((cmd) => cmd.lookupStatus === 'error') && (
+                          <p className="text-xs text-red-400">Lookup failed.</p>
+                        )}
+                        {opponent.commanders.some((cmd) => cmd.link) && (
+                          <div className="flex flex-wrap gap-2">
+                            {opponent.commanders
+                              .filter((cmd) => cmd.link)
+                              .map((cmd, i) => (
+                                <a
+                                  key={i}
+                                  href={cmd.link!}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-cyan-300 hover:text-cyan-200"
+                                >
+                                  {cmd.name} on Scryfall
+                                </a>
+                              ))}
+                          </div>
+                        )}
+                        {opponent.commanders.length < 2 && (
+                          <button
+                            type="button"
+                            onClick={() => addOpponentCommander(opponentIndex)}
+                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-cyan-300"
+                          >
+                            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                              <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+                            </svg>
+                            Add partner commander
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -571,6 +850,28 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {hoverCard && imageUrl && hoverPosition && createPortal(
+        <div
+          className="fixed z-50"
+          style={
+            hoverPosition.placement === 'above'
+              ? { left: hoverPosition.left, bottom: hoverPosition.bottom }
+              : { left: hoverPosition.left, top: hoverPosition.top }
+          }
+          ref={popupRef}
+        >
+          <div className="rounded-lg border border-gray-700 bg-gray-900 p-2 shadow-2xl">
+            <img
+              src={imageUrl}
+              alt={hoverCard.label}
+              className="h-auto w-auto max-h-96 max-w-72 rounded object-contain"
+              loading="lazy"
+            />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

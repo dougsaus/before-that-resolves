@@ -229,7 +229,7 @@ export function createApp(deps: AppDeps = {}) {
   };
   const parseOpponentEntry = (
     input: unknown
-  ): { name: string | null; commander: string | null; colorIdentity: string[] | null } | null => {
+  ): { name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } | null => {
     if (!input || typeof input !== 'object') {
       return null;
     }
@@ -238,10 +238,34 @@ export function createApp(deps: AppDeps = {}) {
       typeof record.name === 'string' && record.name.trim()
         ? record.name.trim()
         : null;
-    const commander =
-      typeof record.commander === 'string' && record.commander.trim()
-        ? record.commander.trim()
-        : null;
+
+    // Parse commander names (supports array or comma-separated string)
+    let commanderNames: string[] = [];
+    if (Array.isArray(record.commanderNames)) {
+      commanderNames = record.commanderNames
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => value.trim())
+        .slice(0, 2);
+    } else if (typeof record.commanderNames === 'string' && record.commanderNames.trim()) {
+      commanderNames = record.commanderNames
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .slice(0, 2);
+    }
+
+    // Parse commander links (parallel array)
+    let commanderLinks: Array<string | null> = [];
+    if (Array.isArray(record.commanderLinks)) {
+      commanderLinks = record.commanderLinks
+        .slice(0, commanderNames.length)
+        .map((value) => (typeof value === 'string' && value.trim() ? value.trim() : null));
+    }
+    // Ensure commanderLinks has same length as commanderNames
+    while (commanderLinks.length < commanderNames.length) {
+      commanderLinks.push(null);
+    }
+
     const rawColorIdentity = record.colorIdentity;
     const hasColorInput =
       typeof rawColorIdentity === 'string'
@@ -250,12 +274,13 @@ export function createApp(deps: AppDeps = {}) {
           ? rawColorIdentity.length > 0
           : false;
     const parsedColorIdentity = hasColorInput ? parseColorIdentityInput(rawColorIdentity) : null;
-    if (!name && !commander && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
+    if (!name && commanderNames.length === 0 && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
       return null;
     }
     return {
       name,
-      commander,
+      commanderNames,
+      commanderLinks,
       colorIdentity: parsedColorIdentity
     };
   };
@@ -265,9 +290,9 @@ export function createApp(deps: AppDeps = {}) {
     }
     return input
       .map((entry) => parseOpponentEntry(entry))
-      .filter((entry): entry is { name: string | null; commander: string | null; colorIdentity: string[] | null } => Boolean(entry));
+      .filter((entry): entry is { name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } => Boolean(entry));
   };
-  const parseOpponentsCount = (input: unknown, opponents: Array<{ commander: string | null }>) => {
+  const parseOpponentsCount = (input: unknown, opponents: Array<{ commanderNames: string[] }>) => {
     if (typeof input === 'number' && Number.isFinite(input)) {
       return Math.max(0, Math.floor(input));
     }
