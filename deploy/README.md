@@ -109,6 +109,7 @@ Common options (environment variables):
 - `DB_USER` (default: `btr`)
 - `DB_PASSWORD` (required)
 - `DB_SSL` (default: `false`)
+- `MOXFIELD_USER_AGENT` (optional; required for loading Moxfield decks)
 
 Cloud Run expects a Cloud SQL connection when `CLOUD_SQL_INSTANCE` is set; the deploy script attaches the instance and uses a Unix socket (`/cloudsql/...`) for `DB_HOST`.
 
@@ -132,6 +133,7 @@ Required GitHub secrets:
 - `VITE_GOOGLE_CLIENT_ID`
 - `CLOUD_SQL_INSTANCE` (e.g. `before-that-resolves:us-central1:btr-postgres`)
 - `DB_PASSWORD`
+- `MOXFIELD_USER_AGENT` (optional; for Moxfield deck loading)
 
 Optional GitHub variables:
 - `GCP_PROJECT_ID` (default: `before-that-resolves`)
@@ -160,6 +162,7 @@ gh secret set GOOGLE_CLIENT_ID -b "YOUR_GOOGLE_CLIENT_ID"
 gh secret set VITE_GOOGLE_CLIENT_ID -b "YOUR_GOOGLE_CLIENT_ID"
 gh secret set CLOUD_SQL_INSTANCE -b "PROJECT:REGION:INSTANCE"
 gh secret set DB_PASSWORD -b "YOUR_DB_PASSWORD"
+gh secret set MOXFIELD_USER_AGENT -b "YOUR_MOXFIELD_USER_AGENT"
 
 gh variable set GCP_PROJECT_ID -b "before-that-resolves"
 gh variable set GCP_REGION -b "us-central1"
