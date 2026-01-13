@@ -9,7 +9,7 @@ export type DeckCollectionEntry = {
   commanderNames: string[];
   commanderLinks: Array<string | null>;
   colorIdentity: string[] | null;
-  source: 'archidekt' | 'manual';
+  source: 'archidekt' | 'moxfield' | 'manual';
   addedAt: string;
 };
 
@@ -25,7 +25,7 @@ type DeckRow = {
   commander_scryfall_url_primary: string | null;
   commander_scryfall_url_secondary: string | null;
   color_identity: string[] | null;
-  source: 'archidekt' | 'manual';
+  source: 'archidekt' | 'moxfield' | 'manual';
   added_at: string | Date;
 };
 

@@ -22,7 +22,7 @@ const schemaQueries = [
     commander_scryfall_url_primary TEXT,
     commander_scryfall_url_secondary TEXT,
     color_identity TEXT[],
-    source TEXT NOT NULL CHECK (source IN ('archidekt', 'manual')),
+    source TEXT NOT NULL CHECK (source IN ('archidekt', 'moxfield', 'manual')),
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, deck_id)
   );`,
@@ -30,6 +30,8 @@ const schemaQueries = [
   `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_name_secondary TEXT;`,
   `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_scryfall_url_primary TEXT;`,
   `ALTER TABLE decks ADD COLUMN IF NOT EXISTS commander_scryfall_url_secondary TEXT;`,
+  `ALTER TABLE decks DROP CONSTRAINT IF EXISTS decks_source_check;`,
+  `ALTER TABLE decks ADD CONSTRAINT decks_source_check CHECK (source IN ('archidekt', 'moxfield', 'manual'));`,
   `DO $$
    BEGIN
      IF EXISTS (

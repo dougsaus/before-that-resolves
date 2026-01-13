@@ -182,15 +182,16 @@ describe('DeckCollection', () => {
     });
   });
 
-  it('loads deck details from an Archidekt link', async () => {
+  it('loads deck details from a deck link', async () => {
     const user = userEvent.setup();
     const onPreviewDeck = vi.fn().mockResolvedValue({
       deck: {
         id: 'deck-42',
-        name: 'Archidekt Preview',
+        name: 'Deck Preview',
         url: 'https://archidekt.com/decks/42/preview',
         commanderNames: ['Giada, Font of Hope'],
-        colorIdentity: ['W']
+        colorIdentity: ['W'],
+        source: 'archidekt'
       }
     });
 
@@ -216,8 +217,47 @@ describe('DeckCollection', () => {
       expect(onPreviewDeck).toHaveBeenCalledWith('https://archidekt.com/decks/42/preview');
     });
 
-    expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Archidekt Preview');
+    expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Deck Preview');
     expect(screen.getByLabelText('Commander(s) (optional)')).toHaveValue('Giada, Font of Hope');
+  });
+
+  it('loads deck details from a Moxfield link', async () => {
+    const user = userEvent.setup();
+    const onPreviewDeck = vi.fn().mockResolvedValue({
+      deck: {
+        id: 'deck-99',
+        name: 'Moxfield Preview',
+        url: 'https://moxfield.com/decks/abc123',
+        commanderNames: ["Atraxa, Praetors' Voice"],
+        colorIdentity: ['W', 'U', 'B', 'G'],
+        source: 'moxfield'
+      }
+    });
+
+    render(<DeckCollection {...defaultProps} onPreviewDeck={onPreviewDeck} />);
+
+    await user.click(screen.getByRole('button', { name: /\+\s*Deck/ }));
+
+    const loadButton = screen.getByRole('button', { name: 'Load deck' });
+    expect(loadButton).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText('Deck link (optional)'),
+      'https://moxfield.com/decks/abc123'
+    );
+
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled();
+    });
+
+    await user.click(loadButton);
+
+    await waitFor(() => {
+      expect(onPreviewDeck).toHaveBeenCalledWith('https://moxfield.com/decks/abc123');
+    });
+
+    expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Moxfield Preview');
+    expect(screen.getByLabelText('Commander(s) (optional)')).toHaveValue("Atraxa, Praetors' Voice");
   });
 
   it('opens edit modal and saves updates', async () => {
@@ -252,17 +292,19 @@ describe('DeckCollection', () => {
     });
   });
 
-  it('only shows Oracle button for Archidekt links', () => {
+  it('only shows Oracle button for supported deck links', () => {
     const onOpenInOracle = vi.fn();
     const decks = [
       baseDeck({ id: 'deck-1', name: 'Manual Link', url: 'https://example.com/deck' }),
-      baseDeck({ id: 'deck-2', name: 'Archidekt Link', url: 'https://archidekt.com/decks/12/test' })
+      baseDeck({ id: 'deck-2', name: 'Archidekt Link', url: 'https://archidekt.com/decks/12/test' }),
+      baseDeck({ id: 'deck-3', name: 'Moxfield Link', url: 'https://moxfield.com/decks/abc123' })
     ];
 
     render(<DeckCollection {...defaultProps} decks={decks} onOpenInOracle={onOpenInOracle} />);
 
     expect(screen.queryByRole('button', { name: 'Open Manual Link in Oracle' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Open Archidekt Link in Oracle' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Moxfield Link in Oracle' })).toBeInTheDocument();
   });
 
   it('confirms before removing a deck', async () => {

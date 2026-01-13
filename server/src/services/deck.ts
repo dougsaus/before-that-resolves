@@ -1,3 +1,5 @@
+type DeckSource = 'archidekt' | 'moxfield';
+
 type DeckCard = {
   name: string;
   quantity: number;
@@ -5,11 +7,26 @@ type DeckCard = {
 };
 
 export type DeckData = {
-  source: 'archidekt';
+  source: DeckSource;
   name: string;
   url: string;
   format?: string | null;
   cards: DeckCard[];
+};
+
+export type DeckSummary = {
+  id: string;
+  name: string;
+  format: string | null;
+  url: string;
+  commanderNames: string[];
+  colorIdentity: string[];
+  source: DeckSource;
+};
+
+export type RawDeck = {
+  source: DeckSource;
+  deck: ArchidektDeck | MoxfieldDeck;
 };
 
 type FetchResult = {
@@ -40,12 +57,59 @@ type ArchidektDeck = {
   deckFormat?: string;
 };
 
+type MoxfieldBoardCard = {
+  boardType?: string;
+  card?: {
+    name?: string;
+    color_identity?: unknown;
+    colorIdentity?: unknown;
+    colors?: unknown;
+  };
+  colorIdentityOverride?: unknown;
+  useColorIdentityOverride?: boolean;
+  quantity?: number;
+};
+
+type MoxfieldBoard = {
+  cards?: Record<string, MoxfieldBoardCard>;
+  count?: number;
+};
+
+type MoxfieldDeck = {
+  name?: string;
+  format?: string;
+  publicId?: string;
+  publicUrl?: string;
+  colorIdentity?: unknown;
+  boards?: Record<string, MoxfieldBoard>;
+  main?: {
+    name?: string;
+    color_identity?: unknown;
+    colorIdentity?: unknown;
+    colors?: unknown;
+  };
+};
+
 const COLOR_NAME_MAP: Record<string, string> = {
   white: 'W',
   blue: 'U',
   black: 'B',
   red: 'R',
   green: 'G'
+};
+const COLOR_ORDER = ['W', 'U', 'B', 'R', 'G'];
+const MOXFIELD_EXCLUDED_BOARDS = new Set(['maybeboard', 'sideboard', 'tokens']);
+const MOXFIELD_BOARD_LABELS: Record<string, string> = {
+  attractions: 'Attractions',
+  commanders: 'Commander',
+  companions: 'Companion',
+  contraptions: 'Contraptions',
+  mainboard: 'Mainboard',
+  planes: 'Planes',
+  schemes: 'Schemes',
+  signatureSpells: 'Signature Spell',
+  stickers: 'Stickers',
+  tokens: 'Tokens'
 };
 
 function normalizeColorIdentity(input: unknown): string[] {
@@ -74,12 +138,27 @@ function normalizeColorIdentity(input: unknown): string[] {
   return Array.from(new Set(colors));
 }
 
+function sortColorIdentity(colors: string[]): string[] {
+  return Array.from(new Set(colors)).sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
+}
+
 function getCardColorIdentity(entry: ArchidektCardEntry): string[] {
   const oracleCard = entry?.card?.oracleCard as { colorIdentity?: unknown; color_identity?: unknown; colors?: unknown } | undefined;
   const raw =
     oracleCard?.colorIdentity ??
     oracleCard?.color_identity ??
     oracleCard?.colors ??
+    [];
+  return normalizeColorIdentity(raw);
+}
+
+function getMoxfieldCardColorIdentity(entry: MoxfieldBoardCard): string[] {
+  const useOverride = Boolean(entry.useColorIdentityOverride);
+  const raw =
+    (useOverride ? entry.colorIdentityOverride : undefined) ??
+    entry.card?.color_identity ??
+    entry.card?.colorIdentity ??
+    entry.card?.colors ??
     [];
   return normalizeColorIdentity(raw);
 }
@@ -105,15 +184,55 @@ function extractCommanderNames(cards: ArchidektCardEntry[]): string[] {
 
 function extractColorIdentityFromCards(cards: ArchidektCardEntry[]): string[] {
   const colors = cards.flatMap((entry) => getCardColorIdentity(entry));
-  const unique = Array.from(new Set(colors));
-  const order = ['W', 'U', 'B', 'R', 'G'];
-  return unique.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  return sortColorIdentity(colors);
 }
 
+function getMoxfieldBoardCards(deck: MoxfieldDeck, boardKey: string): MoxfieldBoardCard[] {
+  const board = deck.boards?.[boardKey];
+  if (!board?.cards) return [];
+  return Object.values(board.cards);
+}
+
+function extractMoxfieldCommanderNames(deck: MoxfieldDeck): string[] {
+  const commanderCards = getMoxfieldBoardCards(deck, 'commanders');
+  const names = commanderCards
+    .map((entry) => entry.card?.name)
+    .filter((name): name is string => Boolean(name));
+  return Array.from(new Set(names));
+}
+
+function extractMoxfieldColorIdentity(deck: MoxfieldDeck, commanderNames: string[]): string[] {
+  const rawDeckIdentity = deck.colorIdentity;
+  if (Array.isArray(rawDeckIdentity)) {
+    return sortColorIdentity(normalizeColorIdentity(rawDeckIdentity));
+  }
+  if (typeof rawDeckIdentity === 'string') {
+    const letters = rawDeckIdentity
+      .trim()
+      .toUpperCase()
+      .split('')
+      .filter((value) => COLOR_ORDER.includes(value));
+    return sortColorIdentity(letters);
+  }
+  const commanderCards = getMoxfieldBoardCards(deck, 'commanders');
+  const colors = commanderNames.length > 0
+    ? commanderCards.flatMap((entry) => getMoxfieldCardColorIdentity(entry))
+    : Object.values(deck.boards ?? {}).flatMap((board) =>
+        Object.values(board.cards ?? {}).flatMap((entry) => getMoxfieldCardColorIdentity(entry))
+      );
+  return sortColorIdentity(colors);
+}
+
+type CachedDeck = {
+  source: DeckSource;
+  deckId: string;
+  deckUrl: string;
+  deck: ArchidektDeck | MoxfieldDeck;
+};
+
 type DeckCache = {
-  decks: Map<string, ArchidektDeck>;
-  lastDeckId?: string;
-  lastDeckUrl?: string;
+  decks: Map<string, CachedDeck>;
+  lastDeckKey?: string;
 };
 
 const conversationDecks = new Map<string, DeckCache>();
@@ -128,12 +247,16 @@ function getDeckCache(conversationId: string): DeckCache {
   return cache;
 }
 
-async function fetchJson(url: string): Promise<FetchResult> {
+async function fetchJson(
+  url: string,
+  options: { headers?: Record<string, string> } = {}
+): Promise<FetchResult> {
   try {
     const response = await fetch(url, {
       headers: {
-        'accept': 'application/json',
-        'user-agent': 'before-that-resolves/1.0'
+        accept: 'application/json',
+        'user-agent': 'before-that-resolves/1.0',
+        ...(options.headers ?? {})
       }
     });
 
@@ -163,6 +286,26 @@ function parseDeckId(url: string, expectedHost: string): string | null {
   }
 }
 
+function buildCacheKey(source: DeckSource, deckId: string): string {
+  return `${source}:${deckId}`;
+}
+
+export function getDeckSourceFromUrl(input: string | null): DeckSource | null {
+  if (!input) return null;
+  try {
+    const parsed = new URL(input);
+    if (parsed.host.includes('archidekt.com') && parsed.pathname.includes('/decks/')) {
+      return 'archidekt';
+    }
+    if (parsed.host.includes('moxfield.com') && parsed.pathname.includes('/decks/')) {
+      return 'moxfield';
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchArchidektDeckById(deckId: string): Promise<ArchidektDeck> {
   const apiUrl = `https://archidekt.com/api/decks/${deckId}/`;
   const result = await fetchJson(apiUrl);
@@ -174,14 +317,27 @@ async function fetchArchidektDeckById(deckId: string): Promise<ArchidektDeck> {
   return result.json as ArchidektDeck;
 }
 
-export async function fetchArchidektDeckSummary(deckUrl: string): Promise<{
-  id: string;
-  name: string;
-  format: string | null;
-  url: string;
-  commanderNames: string[];
-  colorIdentity: string[];
-}> {
+async function fetchMoxfieldDeckById(deckId: string): Promise<MoxfieldDeck> {
+  const userAgent = process.env.MOXFIELD_USER_AGENT;
+  if (!userAgent) {
+    throw new Error('Moxfield API access not configured. Set MOXFIELD_USER_AGENT environment variable.');
+  }
+
+  const apiUrl = `https://api2.moxfield.com/v3/decks/all/${deckId}`;
+  const result = await fetchJson(apiUrl, {
+    headers: {
+      'user-agent': userAgent
+    }
+  });
+
+  if (!result.ok || !result.json) {
+    throw new Error(result.error || 'Failed to load Moxfield deck');
+  }
+
+  return result.json as MoxfieldDeck;
+}
+
+async function fetchArchidektDeckSummary(deckUrl: string): Promise<DeckSummary> {
   const deckId = parseDeckId(deckUrl, 'archidekt.com');
   if (!deckId) {
     throw new Error('Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}');
@@ -205,63 +361,149 @@ export async function fetchArchidektDeckSummary(deckUrl: string): Promise<{
     format,
     url: deckUrl,
     commanderNames,
-    colorIdentity
+    colorIdentity,
+    source: 'archidekt'
   };
 }
 
-export async function cacheArchidektDeckFromUrl(
+async function fetchMoxfieldDeckSummary(deckUrl: string): Promise<DeckSummary> {
+  const deckId = parseDeckId(deckUrl, 'moxfield.com');
+  if (!deckId) {
+    throw new Error('Invalid Moxfield URL. Expected https://moxfield.com/decks/{deckId}');
+  }
+
+  const deck = await fetchMoxfieldDeckById(deckId);
+  const commanderNames = extractMoxfieldCommanderNames(deck);
+  const colorIdentity = extractMoxfieldColorIdentity(deck, commanderNames);
+  return {
+    id: deckId,
+    name: deck.name || 'Untitled Deck',
+    format: typeof deck.format === 'string' ? deck.format : null,
+    url: deckUrl,
+    commanderNames,
+    colorIdentity,
+    source: 'moxfield'
+  };
+}
+
+export async function fetchDeckSummary(deckUrl: string): Promise<DeckSummary> {
+  const source = getDeckSourceFromUrl(deckUrl);
+  if (source === 'archidekt') {
+    return fetchArchidektDeckSummary(deckUrl);
+  }
+  if (source === 'moxfield') {
+    return fetchMoxfieldDeckSummary(deckUrl);
+  }
+  throw new Error('Invalid deck URL. Expected an Archidekt or Moxfield deck link.');
+}
+
+export async function cacheDeckFromUrl(
   deckUrl: string,
   conversationId: string
-): Promise<ArchidektDeck> {
-  const deckId = parseDeckId(deckUrl, 'archidekt.com');
+): Promise<ArchidektDeck | MoxfieldDeck> {
+  const source = getDeckSourceFromUrl(deckUrl);
+  if (!source) {
+    throw new Error('Invalid deck URL. Expected an Archidekt or Moxfield deck link.');
+  }
+
+  const deckId = parseDeckId(deckUrl, source === 'archidekt' ? 'archidekt.com' : 'moxfield.com');
   if (!deckId) {
-    throw new Error('Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}');
+    throw new Error(
+      source === 'archidekt'
+        ? 'Invalid Archidekt URL. Expected https://archidekt.com/decks/{deckId}/{slug}'
+        : 'Invalid Moxfield URL. Expected https://moxfield.com/decks/{deckId}'
+    );
   }
 
   const cache = getDeckCache(conversationId);
-  const cached = cache.decks.get(deckId);
+  const cacheKey = buildCacheKey(source, deckId);
+  const cached = cache.decks.get(cacheKey);
   if (cached) {
-    cache.lastDeckId = deckId;
-    cache.lastDeckUrl = deckUrl;
-    return cached;
+    cached.deckUrl = deckUrl;
+    cache.lastDeckKey = cacheKey;
+    return cached.deck;
   }
 
-  const deck = await fetchArchidektDeckById(deckId);
-  cache.decks.set(deckId, deck);
-  cache.lastDeckId = deckId;
-  cache.lastDeckUrl = deckUrl;
+  const deck = source === 'archidekt'
+    ? await fetchArchidektDeckById(deckId)
+    : await fetchMoxfieldDeckById(deckId);
+  cache.decks.set(cacheKey, {
+    source,
+    deckId,
+    deckUrl,
+    deck
+  });
+  cache.lastDeckKey = cacheKey;
   return deck;
 }
 
 export function buildArchidektDeckData(deck: ArchidektDeck, deckUrl: string): DeckData {
-  return buildDeckData(deck, deckUrl);
+  return buildArchidektDeckList(deck, deckUrl);
 }
 
-export function getLastCachedArchidektDeck(conversationId: string): DeckData | null {
+export function buildMoxfieldDeckData(deck: MoxfieldDeck, deckUrl: string): DeckData {
+  const boards = deck.boards ?? {};
+  const cards: DeckCard[] = [];
+  for (const [boardKey, board] of Object.entries(boards)) {
+    if (MOXFIELD_EXCLUDED_BOARDS.has(boardKey)) continue;
+    const section = boardKey === 'mainboard'
+      ? undefined
+      : MOXFIELD_BOARD_LABELS[boardKey] ?? boardKey;
+    const entries = Object.values(board.cards ?? {});
+    for (const entry of entries) {
+      const name = entry.card?.name;
+      if (!name) continue;
+      cards.push({
+        name,
+        quantity: entry.quantity ?? 0,
+        section
+      });
+    }
+  }
+
+  return {
+    source: 'moxfield',
+    name: deck.name || 'Untitled Deck',
+    url: deckUrl,
+    format: typeof deck.format === 'string' ? deck.format : null,
+    cards
+  };
+}
+
+export function getLastCachedDeck(conversationId: string): DeckData | null {
   const cache = conversationDecks.get(conversationId);
-  if (!cache?.lastDeckId || !cache?.lastDeckUrl) {
+  if (!cache?.lastDeckKey) {
     return null;
   }
-  const cached = cache.decks.get(cache.lastDeckId);
+  const cached = cache.decks.get(cache.lastDeckKey);
   if (!cached) {
     return null;
   }
-  return buildDeckData(cached, cache.lastDeckUrl);
+  return cached.source === 'archidekt'
+    ? buildArchidektDeckList(cached.deck as ArchidektDeck, cached.deckUrl)
+    : buildMoxfieldDeckData(cached.deck as MoxfieldDeck, cached.deckUrl);
 }
 
-export function getLastCachedArchidektDeckRaw(conversationId: string): ArchidektDeck | null {
+export function getLastCachedDeckRaw(conversationId: string): RawDeck | null {
   const cache = conversationDecks.get(conversationId);
-  if (!cache?.lastDeckId) {
+  if (!cache?.lastDeckKey) {
     return null;
   }
-  return cache.decks.get(cache.lastDeckId) ?? null;
+  const cached = cache.decks.get(cache.lastDeckKey);
+  if (!cached) {
+    return null;
+  }
+  return {
+    source: cached.source,
+    deck: cached.deck
+  };
 }
 
-export function resetArchidektDeckCache(conversationId: string): void {
+export function resetDeckCache(conversationId: string): void {
   conversationDecks.delete(conversationId);
 }
 
-function buildDeckData(deck: ArchidektDeck, deckUrl: string): DeckData {
+function buildArchidektDeckList(deck: ArchidektDeck, deckUrl: string): DeckData {
   const cards = Array.isArray(deck.cards)
     ? deck.cards
         .map((entry: ArchidektCardEntry): DeckCard | null => {

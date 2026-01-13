@@ -10,7 +10,7 @@ import {
   randomCommanderTool,
   checkCommanderLegalityTool
 } from '../../tools/card-tools';
-import { createArchidektDeckTool, createArchidektDeckRawTool } from '../../tools/deck-tools';
+import { createLoadedDeckTool, createLoadedDeckRawTool } from '../../tools/deck-tools';
 import { createCommanderBracketTool } from '../../tools/bracket-tool';
 import { createGoldfishAgentTool } from '../../tools/goldfish-agent-tool';
 import { extractResponseText, countToolCalls, getToolCallDetails } from '../../utils/agent-helpers';
@@ -62,8 +62,8 @@ function createCardOracleAgent(
       getCardRulingsTool,
       randomCommanderTool,
       checkCommanderLegalityTool,
-      createArchidektDeckTool(conversationId),
-      createArchidektDeckRawTool(conversationId),
+      createLoadedDeckTool(conversationId),
+      createLoadedDeckRawTool(conversationId),
       createCommanderBracketTool(model, reasoningEffort, verbosity, runConfig),
       createGoldfishAgentTool(model, reasoningEffort, verbosity, runConfig, conversationId)
     ]

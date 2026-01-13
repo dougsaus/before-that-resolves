@@ -370,7 +370,7 @@ export function CardOracle({
         ? 'Provide counts of cards matching prevalent tribal types present in this deck.'
         : null,
       deckAnalysisOptions.categoryCounts
-        ? 'Provide counts of cards in the following categories (analyze the card itself, not just the category provided by archidekt): Ramp, Card Draw, Tutors, Removal, Board Wipes, Counterspells, Mill, Disruption, Aggro, Finishers, Utility, Token Generator, Counters, Anthem, Stax, Mana Rocks, Mana Dorks.'
+        ? 'Provide counts of cards in the following categories (analyze the card itself, not just the category provided by the deck source): Ramp, Card Draw, Tutors, Removal, Board Wipes, Counterspells, Mill, Disruption, Aggro, Finishers, Utility, Token Generator, Counters, Anthem, Stax, Mana Rocks, Mana Dorks.'
         : null,
       deckAnalysisOptions.subtypeCounts
         ? 'Provide counts of cards for each subtype: Creature subtypes, Enchantment subtypes (Aura, Saga, Curse, Shrine), Artifact subtypes (Equipment, Vehicle).'
@@ -517,7 +517,7 @@ export function CardOracle({
                 setDeckLoaded(false);
               }
             }}
-            placeholder="https://archidekt.com/decks/..."
+            placeholder="https://archidekt.com/decks/... or https://moxfield.com/decks/..."
             className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
             disabled={loading}
           />
@@ -531,7 +531,7 @@ export function CardOracle({
           </button>
         </div>
         <div className="mt-2 text-xs text-gray-500">
-          Supports public decks from Archidekt.
+          Supports public decks from Archidekt and Moxfield.
         </div>
       </div>
       {deckLoaded && (

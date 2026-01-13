@@ -121,8 +121,8 @@ describe('app routes', () => {
 
   it('resets conversations', async () => {
     const resetConversation = vi.fn().mockReturnValue(true);
-    const resetArchidektDeckCache = vi.fn();
-    const app = createApp({ resetConversation, resetArchidektDeckCache });
+    const resetDeckCache = vi.fn();
+    const app = createApp({ resetConversation, resetDeckCache });
 
     const response = await request(app)
       .post('/api/agent/reset')
@@ -131,12 +131,12 @@ describe('app routes', () => {
 
     expect(response.body.cleared).toBe(true);
     expect(resetConversation).toHaveBeenCalledWith('conv-123');
-    expect(resetArchidektDeckCache).toHaveBeenCalledWith('conv-123');
+    expect(resetDeckCache).toHaveBeenCalledWith('conv-123');
   });
 
-  it('caches Archidekt decks', async () => {
-    const cacheArchidektDeckFromUrl = vi.fn().mockResolvedValue({ name: 'Raw Deck' });
-    const app = createApp({ cacheArchidektDeckFromUrl });
+  it('caches decks', async () => {
+    const cacheDeckFromUrl = vi.fn().mockResolvedValue({ name: 'Raw Deck' });
+    const app = createApp({ cacheDeckFromUrl });
 
     const response = await request(app)
       .post('/api/deck/cache')
@@ -144,7 +144,7 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
-    expect(cacheArchidektDeckFromUrl).toHaveBeenCalledWith(
+    expect(cacheDeckFromUrl).toHaveBeenCalledWith(
       'https://archidekt.com/decks/12345/test',
       'conv-123'
     );
@@ -287,13 +287,14 @@ describe('app routes', () => {
 
   it('adds a deck to the collection', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-456' });
-    const fetchArchidektDeckSummary = vi.fn().mockResolvedValue({
+    const fetchDeckSummary = vi.fn().mockResolvedValue({
       id: '123',
       name: 'Added Deck',
       url: 'https://archidekt.com/decks/123/added',
       format: 'commander',
       commanderNames: ['Edgar Markov'],
-      colorIdentity: ['W', 'B', 'R']
+      colorIdentity: ['W', 'B', 'R'],
+      source: 'archidekt'
     });
     const upsertDeckInCollection = vi.fn().mockResolvedValue([
       {
@@ -333,7 +334,7 @@ describe('app routes', () => {
     );
     const app = createApp({
       verifyGoogleIdToken,
-      fetchArchidektDeckSummary,
+      fetchDeckSummary,
       searchScryfallCardByName,
       upsertDeckInCollection,
       upsertUser,
@@ -347,7 +348,7 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
-    expect(fetchArchidektDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/123/added');
+    expect(fetchDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/123/added');
     expect(searchScryfallCardByName).toHaveBeenCalledWith('Edgar Markov');
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-456', {
       id: '123',
@@ -369,20 +370,21 @@ describe('app routes', () => {
     });
   });
 
-  it('previews an archidekt deck before saving', async () => {
+  it('previews a deck before saving', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-321' });
-    const fetchArchidektDeckSummary = vi.fn().mockResolvedValue({
+    const fetchDeckSummary = vi.fn().mockResolvedValue({
       id: '42',
       name: 'Preview Deck',
       url: 'https://archidekt.com/decks/42/preview',
       format: 'commander',
       commanderNames: ['Teysa Karlov'],
-      colorIdentity: ['W', 'B']
+      colorIdentity: ['W', 'B'],
+      source: 'archidekt'
     });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
-      fetchArchidektDeckSummary,
+      fetchDeckSummary,
       upsertUser
     });
 
@@ -393,14 +395,15 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
-    expect(fetchArchidektDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/42/preview');
+    expect(fetchDeckSummary).toHaveBeenCalledWith('https://archidekt.com/decks/42/preview');
     expect(response.body.deck).toEqual({
       id: '42',
       name: 'Preview Deck',
       url: 'https://archidekt.com/decks/42/preview',
       format: 'commander',
       commanderNames: ['Teysa Karlov'],
-      colorIdentity: ['W', 'B']
+      colorIdentity: ['W', 'B'],
+      source: 'archidekt'
     });
   });
 

@@ -45,4 +45,5 @@ jobs:
           DB_USER: ${{ vars.DB_USER || 'btr' }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_SSL: ${{ vars.DB_SSL || 'false' }}
+          MOXFIELD_USER_AGENT: ${{ secrets.MOXFIELD_USER_AGENT }}
         run: ./deploy/cloudrun-deploy.sh

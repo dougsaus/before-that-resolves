@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { tool } from '@openai/agents';
-import { getLastCachedArchidektDeck } from '../../services/deck';
+import { getLastCachedDeck } from '../../services/deck';
 
 type CardRef = {
   id: string;
@@ -108,19 +108,19 @@ function canMoveToLibrary(zone: Zone, toLibraryPosition?: 'top' | 'bottom') {
 export function createLoadDeckTool(conversationId: string) {
   return tool({
     name: 'loadDeck',
-    description: 'Load the currently loaded Archidekt deck into the goldfish tool state',
+    description: 'Load the currently loaded deck into the goldfish tool state',
     parameters: z.object({}).strict(),
     execute: async () => {
-      console.log('🧪 Loading goldfish deck from current Archidekt cache.');
+      console.log('🧪 Loading goldfish deck from current deck cache.');
       try {
         resetZones();
         deckList = null;
         commanderName = null;
         cardIdCounter = 1;
-        const cachedDeck = getLastCachedArchidektDeck(conversationId);
+        const cachedDeck = getLastCachedDeck(conversationId);
         if (!cachedDeck) {
-          console.warn('⚠️ No loaded Archidekt deck available for goldfish.');
-          return { ok: false, error: 'No Archidekt deck is loaded.' };
+          console.warn('⚠️ No loaded deck available for goldfish.');
+          return { ok: false, error: 'No deck is loaded.' };
         }
         const commanderEntry = cachedDeck.cards.find((card) =>
           (card.section || '').toLowerCase().includes('commander')

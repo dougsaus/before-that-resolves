@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunContext } from '@openai/agents';
 
-const mockGetLastCachedArchidektDeck = vi.fn();
+const mockGetLastCachedDeck = vi.fn();
 
 vi.mock('../../services/deck', () => ({
-  getLastCachedArchidektDeck: mockGetLastCachedArchidektDeck
+  getLastCachedDeck: mockGetLastCachedDeck
 }));
 
 type ToolSet = typeof import('./index');
@@ -50,8 +50,8 @@ async function buildTools(conversationId = 'conv-123') {
 
 describe('goldfish tools', () => {
   beforeEach(() => {
-    mockGetLastCachedArchidektDeck.mockReset();
-    mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
+    mockGetLastCachedDeck.mockReset();
+    mockGetLastCachedDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
   });
 
   it('loads a deck and resets zones with commander in command zone', async () => {
@@ -79,7 +79,7 @@ describe('goldfish tools', () => {
   });
 
   it('rejects decks that are not exactly 100 cards', async () => {
-    mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(99, "Atraxa, Praetors' Voice"));
+    mockGetLastCachedDeck.mockReturnValue(buildDeck(99, "Atraxa, Praetors' Voice"));
     const tools = await buildTools();
 
     const loadResult = await invokeTool<
@@ -266,7 +266,7 @@ describe('goldfish tools', () => {
   });
 
   it('loads from the currently loaded deck', async () => {
-    mockGetLastCachedArchidektDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
+    mockGetLastCachedDeck.mockReturnValue(buildDeck(100, "Atraxa, Praetors' Voice"));
     const tools = await buildTools();
 
     const loadResult = await invokeTool<

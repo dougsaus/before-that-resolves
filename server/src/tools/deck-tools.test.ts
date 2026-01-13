@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunContext } from '@openai/agents';
 
-const mockGetLastCachedArchidektDeck = vi.fn();
-const mockGetLastCachedArchidektDeckRaw = vi.fn();
+const mockGetLastCachedDeck = vi.fn();
+const mockGetLastCachedDeckRaw = vi.fn();
 
 vi.mock('../services/deck', () => ({
-  getLastCachedArchidektDeck: mockGetLastCachedArchidektDeck,
-  getLastCachedArchidektDeckRaw: mockGetLastCachedArchidektDeckRaw
+  getLastCachedDeck: mockGetLastCachedDeck,
+  getLastCachedDeckRaw: mockGetLastCachedDeckRaw
 }));
 
 type ToolInvoker = {
@@ -27,12 +27,12 @@ async function loadTools() {
 
 describe('deck tools', () => {
   beforeEach(() => {
-    mockGetLastCachedArchidektDeck.mockReset();
-    mockGetLastCachedArchidektDeckRaw.mockReset();
+    mockGetLastCachedDeck.mockReset();
+    mockGetLastCachedDeckRaw.mockReset();
   });
 
-  it('returns loaded deck data for get_archidekt_deck', async () => {
-    mockGetLastCachedArchidektDeck.mockReturnValue({
+  it('returns loaded deck data for get_loaded_deck', async () => {
+    mockGetLastCachedDeck.mockReturnValue({
       source: 'archidekt',
       name: 'Cached Deck',
       url: 'https://archidekt.com/decks/1/test',
@@ -40,7 +40,7 @@ describe('deck tools', () => {
       cards: []
     });
     const tools = await loadTools();
-    const tool = tools.createArchidektDeckTool('conv-123');
+    const tool = tools.createLoadedDeckTool('conv-123');
 
     const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string } }>(
       tool,
@@ -49,28 +49,32 @@ describe('deck tools', () => {
 
     expect(result.success).toBe(true);
     expect(result.deck?.name).toBe('Cached Deck');
-    expect(mockGetLastCachedArchidektDeck).toHaveBeenCalledWith('conv-123');
+    expect(mockGetLastCachedDeck).toHaveBeenCalledWith('conv-123');
   });
 
-  it('returns loaded raw data for get_archidekt_deck_raw', async () => {
-    mockGetLastCachedArchidektDeckRaw.mockReturnValue({ name: 'Raw Cached Deck' });
+  it('returns loaded raw data for get_loaded_deck_raw', async () => {
+    mockGetLastCachedDeckRaw.mockReturnValue({
+      source: 'moxfield',
+      deck: { name: 'Raw Cached Deck' }
+    });
     const tools = await loadTools();
-    const tool = tools.createArchidektDeckRawTool('conv-123');
+    const tool = tools.createLoadedDeckRawTool('conv-123');
 
-    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string } }>(
+    const result = await invokeTool<Record<string, never>, { success: boolean; deck?: { name?: string }; source?: string }>(
       tool,
       {}
     );
 
     expect(result.success).toBe(true);
     expect(result.deck?.name).toBe('Raw Cached Deck');
-    expect(mockGetLastCachedArchidektDeckRaw).toHaveBeenCalledWith('conv-123');
+    expect(result.source).toBe('moxfield');
+    expect(mockGetLastCachedDeckRaw).toHaveBeenCalledWith('conv-123');
   });
 
   it('returns an error when no deck is loaded', async () => {
-    mockGetLastCachedArchidektDeck.mockReturnValue(null);
+    mockGetLastCachedDeck.mockReturnValue(null);
     const tools = await loadTools();
-    const tool = tools.createArchidektDeckTool('conv-123');
+    const tool = tools.createLoadedDeckTool('conv-123');
 
     const result = await invokeTool<Record<string, never>, { success: boolean; message?: string }>(
       tool,
@@ -78,7 +82,7 @@ describe('deck tools', () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/No Archidekt deck is loaded/);
-    expect(mockGetLastCachedArchidektDeck).toHaveBeenCalledWith('conv-123');
+    expect(result.message).toMatch(/No deck is loaded/);
+    expect(mockGetLastCachedDeck).toHaveBeenCalledWith('conv-123');
   });
 });

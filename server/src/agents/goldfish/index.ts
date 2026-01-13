@@ -14,7 +14,7 @@ import {
   moveById,
   findAndMoveByName
 } from '../../tools/goldfish';
-import { createArchidektDeckRawTool } from '../../tools/deck-tools';
+import { createLoadedDeckRawTool } from '../../tools/deck-tools';
 import { cardCollectionTool, searchCardTool } from '../../tools/card-tools';
 
 function loadPrompt(filename: string): string {
@@ -54,7 +54,7 @@ export function createGoldfishAgent(
       zoneContents,
       moveById,
       findAndMoveByName,
-      createArchidektDeckRawTool(conversationId),
+      createLoadedDeckRawTool(conversationId),
       searchCardTool,
       cardCollectionTool
     ]
