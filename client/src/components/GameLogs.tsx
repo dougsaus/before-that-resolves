@@ -4,6 +4,15 @@ import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { useGameLogs } from '../hooks/useGameLogs';
 import { buildApiUrl } from '../utils/api';
 
+const PREDEFINED_TAGS = [
+  'mulligan',
+  'missed land drops',
+  'poor card draw',
+  'god hand',
+  'bad opening hand',
+  'scooped'
+] as const;
+
 function getScryfallImageUrl(cardName: string) {
   const encoded = encodeURIComponent(cardName.trim());
   return `https://api.scryfall.com/cards/named?exact=${encoded}&format=image&version=normal`;
@@ -86,6 +95,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const [editDurationMinutes, setEditDurationMinutes] = useState('');
   const [editOpponents, setEditOpponents] = useState<OpponentForm[]>([]);
   const [editResult, setEditResult] = useState<'win' | 'loss' | 'pending'>('pending');
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [hoverCard, setHoverCard] = useState<{ label: string; rect: DOMRect } | null>(null);
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
@@ -153,7 +164,25 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
       }))
     );
     setEditResult(log.result ?? 'pending');
+    setEditTags(log.tags ?? []);
+    setCustomTagInput('');
     setEditFormError(null);
+  };
+
+  const toggleEditTag = (tag: string) => {
+    setEditTags((current) =>
+      current.includes(tag)
+        ? current.filter((t) => t !== tag)
+        : [...current, tag]
+    );
+  };
+
+  const addCustomTag = () => {
+    const tag = customTagInput.trim().toLowerCase();
+    if (tag && !editTags.includes(tag)) {
+      setEditTags((current) => [...current, tag]);
+    }
+    setCustomTagInput('');
   };
 
   const parseOptionalNumberInput = (value: string) => {
@@ -322,7 +351,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
           .map((cmd) => cmd.link),
         colorIdentity: opponent.colorIdentity.trim()
       })),
-      result: editResult === 'pending' ? null : editResult
+      result: editResult === 'pending' ? null : editResult,
+      tags: editTags
     });
     if (success) {
       setEditTarget(null);
@@ -606,6 +636,21 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                         ))}
                       </div>
                     )}
+
+                    {log.tags.length > 0 && (
+                      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+                          Tags:
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {log.tags.map((tag) => (
+                            <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -827,6 +872,70 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                     }`}
                   >
                     Later
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-gray-300">Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {PREDEFINED_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleEditTag(tag)}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm border transition ${
+                        editTags.includes(tag)
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100'
+                          : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                      }`}
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                        {editTags.includes(tag) ? (
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        ) : (
+                          <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+                        )}
+                      </svg>
+                      {tag}
+                    </button>
+                  ))}
+                  {editTags
+                    .filter((tag) => !PREDEFINED_TAGS.includes(tag as typeof PREDEFINED_TAGS[number]))
+                    .map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleEditTag(tag)}
+                        className="flex items-center gap-1 px-3 py-1 rounded-full text-sm border border-cyan-400 bg-cyan-500/20 text-cyan-100 transition"
+                      >
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        {tag}
+                      </button>
+                    ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customTagInput}
+                    onChange={(e) => setCustomTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCustomTag();
+                      }
+                    }}
+                    placeholder="Add custom tag..."
+                    className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomTag}
+                    disabled={!customTagInput.trim()}
+                    className="px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                  >
+                    Add
                   </button>
                 </div>
               </div>
