@@ -316,12 +316,28 @@ describe('app routes', () => {
       scryfall_uri: 'https://scryfall.com/card/markov/edgar-markov'
     });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getDeckStats = vi.fn().mockResolvedValue(
+      new Map([
+        [
+          '123',
+          {
+            deckId: '123',
+            totalGames: 5,
+            wins: 3,
+            losses: 2,
+            winRate: 60,
+            lastPlayed: '2025-06-01'
+          }
+        ]
+      ])
+    );
     const app = createApp({
       verifyGoogleIdToken,
       fetchArchidektDeckSummary,
       searchScryfallCardByName,
       upsertDeckInCollection,
-      upsertUser
+      upsertUser,
+      getDeckStats
     });
 
     const response = await request(app)
@@ -342,6 +358,14 @@ describe('app routes', () => {
       commanderLinks: ['https://scryfall.com/card/markov/edgar-markov'],
       colorIdentity: ['W', 'B', 'R'],
       source: 'archidekt'
+    });
+    expect(getDeckStats).toHaveBeenCalledWith('user-456');
+    expect(response.body.decks[0].stats).toEqual({
+      totalGames: 5,
+      wins: 3,
+      losses: 2,
+      winRate: 60,
+      lastPlayed: '2025-06-01'
     });
   });
 
@@ -412,6 +436,7 @@ describe('app routes', () => {
       {
         id: 'manual-abc',
         name: 'Manual Deck',
+        format: null,
         url: 'https://example.com/decklist',
         commanderNames: ['Commander One'],
         commanderLinks: ['https://scryfall.com/card/abc/commander-one'],
@@ -428,11 +453,13 @@ describe('app routes', () => {
       scryfall_uri: 'https://scryfall.com/card/abc/commander-one'
     });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getDeckStats = vi.fn().mockResolvedValue(new Map());
     const app = createApp({
       verifyGoogleIdToken,
       searchScryfallCardByName,
       upsertDeckInCollection,
-      upsertUser
+      upsertUser,
+      getDeckStats
     });
 
     const response = await request(app)
@@ -457,6 +484,8 @@ describe('app routes', () => {
       colorIdentity: ['G'],
       source: 'manual'
     }));
+    expect(getDeckStats).toHaveBeenCalledWith('user-789');
+    expect(response.body.decks[0].stats).toBe(null);
   });
 
   it('updates a deck in the collection', async () => {
@@ -465,6 +494,7 @@ describe('app routes', () => {
       {
         id: 'deck-202',
         name: 'Updated Deck',
+        format: null,
         url: 'https://archidekt.com/decks/202/updated',
         commanderNames: ['Tymna the Weaver', 'Kraum'],
         commanderLinks: [],
@@ -489,11 +519,27 @@ describe('app routes', () => {
         scryfall_uri: 'https://scryfall.com/card/kraum/kraum'
       });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getDeckStats = vi.fn().mockResolvedValue(
+      new Map([
+        [
+          'deck-202',
+          {
+            deckId: 'deck-202',
+            totalGames: 10,
+            wins: 7,
+            losses: 3,
+            winRate: 70,
+            lastPlayed: '2025-07-01'
+          }
+        ]
+      ])
+    );
     const app = createApp({
       verifyGoogleIdToken,
       searchScryfallCardByName,
       upsertDeckInCollection,
-      upsertUser
+      upsertUser,
+      getDeckStats
     });
 
     const response = await request(app)
@@ -523,6 +569,14 @@ describe('app routes', () => {
       colorIdentity: ['W', 'U', 'B', 'R'],
       source: 'archidekt'
     });
+    expect(getDeckStats).toHaveBeenCalledWith('user-202');
+    expect(response.body.decks[0].stats).toEqual({
+      totalGames: 10,
+      wins: 7,
+      losses: 3,
+      winRate: 70,
+      lastPlayed: '2025-07-01'
+    });
   });
 
   it('allows manual decks without a color identity', async () => {
@@ -541,10 +595,12 @@ describe('app routes', () => {
       }
     ]);
     const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getDeckStats = vi.fn().mockResolvedValue(new Map());
     const app = createApp({
       verifyGoogleIdToken,
       upsertDeckInCollection,
-      upsertUser
+      upsertUser,
+      getDeckStats
     });
 
     const response = await request(app)
@@ -559,6 +615,62 @@ describe('app routes', () => {
       colorIdentity: null,
       source: 'manual'
     }));
+    expect(getDeckStats).toHaveBeenCalledWith('user-101');
+  });
+
+  it('removes a deck from the collection and includes stats', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-303' });
+    const removeDeckFromCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'remaining-deck',
+        name: 'Remaining Deck',
+        url: null,
+        format: null,
+        commanderNames: ['Sol Ring'],
+        commanderLinks: [],
+        colorIdentity: [],
+        source: 'manual',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getDeckStats = vi.fn().mockResolvedValue(
+      new Map([
+        [
+          'remaining-deck',
+          {
+            deckId: 'remaining-deck',
+            totalGames: 3,
+            wins: 2,
+            losses: 1,
+            winRate: 66.67,
+            lastPlayed: '2025-05-15'
+          }
+        ]
+      ])
+    );
+    const app = createApp({
+      verifyGoogleIdToken,
+      removeDeckFromCollection,
+      upsertUser,
+      getDeckStats
+    });
+
+    const response = await request(app)
+      .delete('/api/decks/deck-to-remove')
+      .set('authorization', 'Bearer token-303')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(removeDeckFromCollection).toHaveBeenCalledWith('user-303', 'deck-to-remove');
+    expect(getDeckStats).toHaveBeenCalledWith('user-303');
+    expect(response.body.decks[0].stats).toEqual({
+      totalGames: 3,
+      wins: 2,
+      losses: 1,
+      winRate: 66.67,
+      lastPlayed: '2025-05-15'
+    });
   });
 
   it('requires a Google token to access game logs', async () => {

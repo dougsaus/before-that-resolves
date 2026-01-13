@@ -314,6 +314,38 @@ export function createApp(deps: AppDeps = {}) {
     }
   };
 
+  const attachDeckStats = async (
+    userId: string,
+    decks: Array<{
+      id: string;
+      name: string;
+      format: string | null;
+      url: string | null;
+      commanderNames: string[];
+      commanderLinks: Array<string | null>;
+      colorIdentity: string[] | null;
+      source: 'archidekt' | 'manual';
+      addedAt: string;
+    }>
+  ) => {
+    const statsMap = await fetchDeckStats(userId);
+    return decks.map((deck) => {
+      const stats = statsMap.get(deck.id);
+      return {
+        ...deck,
+        stats: stats
+          ? {
+              totalGames: stats.totalGames,
+              wins: stats.wins,
+              losses: stats.losses,
+              winRate: stats.winRate,
+              lastPlayed: stats.lastPlayed
+            }
+          : null
+      };
+    });
+  };
+
   app.use(cors());
   app.use(express.json());
 
@@ -483,7 +515,8 @@ export function createApp(deps: AppDeps = {}) {
         colorIdentity: summary.colorIdentity,
         source: 'archidekt'
       });
-      res.json({ success: true, user, decks });
+      const decksWithStats = await attachDeckStats(user.id, decks);
+      res.json({ success: true, user, decks: decksWithStats });
     } catch (error: unknown) {
       res.status(400).json({
         success: false,
@@ -579,7 +612,8 @@ export function createApp(deps: AppDeps = {}) {
     };
 
     const decks = await addDeckToCollection(user.id, deck);
-    res.json({ success: true, user, decks });
+    const decksWithStats = await attachDeckStats(user.id, decks);
+    res.json({ success: true, user, decks: decksWithStats });
   });
 
   app.put('/api/decks/:deckId', async (req, res) => {
@@ -622,7 +656,8 @@ export function createApp(deps: AppDeps = {}) {
     };
 
     const decks = await addDeckToCollection(user.id, deck);
-    res.json({ success: true, user, decks });
+    const decksWithStats = await attachDeckStats(user.id, decks);
+    res.json({ success: true, user, decks: decksWithStats });
   });
 
   app.delete('/api/decks/:deckId', async (req, res) => {
@@ -639,7 +674,8 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const decks = await removeDeckFromUser(user.id, deckId);
-    res.json({ success: true, user, decks });
+    const decksWithStats = await attachDeckStats(user.id, decks);
+    res.json({ success: true, user, decks: decksWithStats });
   });
 
   app.get('/api/game-logs', async (req, res) => {
