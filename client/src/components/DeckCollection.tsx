@@ -89,6 +89,8 @@ export type DeckPreviewResult = {
 type OpponentForm = {
   name: string;
   commander: string;
+  commanderLink: string | null;
+  commanderLookupStatus: 'idle' | 'loading' | 'found' | 'not-found' | 'error';
   colorIdentity: string;
 };
 
@@ -397,7 +399,7 @@ export function DeckCollection({
   };
 
   const addLogOpponent = () => {
-    setLogOpponents((current) => [...current, { name: '', commander: '', colorIdentity: '' }]);
+    setLogOpponents((current) => [...current, { name: '', commander: '', commanderLink: null, commanderLookupStatus: 'idle', colorIdentity: '' }]);
   };
 
   const removeLogOpponent = (index: number) => {
@@ -534,10 +536,79 @@ export function DeckCollection({
   const updateLogOpponent = (index: number, field: keyof OpponentForm, value: string) => {
     setLogOpponents((current) => {
       const next = [...current];
-      const target = next[index] ?? { name: '', commander: '', colorIdentity: '' };
-      next[index] = { ...target, [field]: value };
+      const target = next[index] ?? { name: '', commander: '', commanderLink: null, commanderLookupStatus: 'idle' as const, colorIdentity: '' };
+      if (field === 'commander') {
+        next[index] = { ...target, commander: value, commanderLink: null, commanderLookupStatus: 'idle' };
+      } else {
+        next[index] = { ...target, [field]: value };
+      }
       return next;
     });
+  };
+
+  const lookupLogOpponentCommander = async (index: number) => {
+    if (!idToken) {
+      setLogFormError('Sign in with Google to search commanders.');
+      return;
+    }
+    const commander = logOpponents[index]?.commander?.trim();
+    if (!commander) {
+      return;
+    }
+    setLogOpponents((current) => {
+      const next = [...current];
+      if (next[index]) {
+        next[index] = { ...next[index], commanderLookupStatus: 'loading' };
+      }
+      return next;
+    });
+    setLogFormError(null);
+    try {
+      const response = await fetch(buildApiUrl('/api/scryfall/lookup'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: commander })
+      });
+      const payload = await response.json() as { success?: boolean; error?: string; card?: { name: string; scryfallUrl: string | null } | null };
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to lookup commander.');
+      }
+      if (!payload.card) {
+        setLogOpponents((current) => {
+          const next = [...current];
+          if (next[index]) {
+            next[index] = { ...next[index], commanderLink: null, commanderLookupStatus: 'not-found' };
+          }
+          return next;
+        });
+        return;
+      }
+      setLogOpponents((current) => {
+        const next = [...current];
+        if (next[index]) {
+          next[index] = {
+            ...next[index],
+            commander: payload.card?.name || commander,
+            commanderLink: payload.card?.scryfallUrl ?? null,
+            commanderLookupStatus: payload.card?.scryfallUrl ? 'found' : 'idle'
+          };
+        }
+        return next;
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to lookup commander.';
+      setLogOpponents((current) => {
+        const next = [...current];
+        if (next[index]) {
+          next[index] = { ...next[index], commanderLookupStatus: 'error' };
+        }
+        return next;
+      });
+      setLogFormError(message);
+    }
   };
   const parseOptionalNumberInput = (value: string) => {
     const trimmed = value.trim();
@@ -562,6 +633,7 @@ export function DeckCollection({
       opponents: logOpponents.map((opponent) => ({
         name: opponent.name.trim(),
         commander: opponent.commander.trim(),
+        commanderLink: opponent.commanderLink,
         colorIdentity: opponent.colorIdentity.trim()
       })),
       result: logResult === 'pending' ? null : logResult
@@ -1092,38 +1164,71 @@ export function DeckCollection({
                     key={`${logTarget.id}-opponent-${index}`}
                     className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        value={opponent.name}
-                        onChange={(event) => updateLogOpponent(index, 'name', event.target.value)}
-                        placeholder="Name"
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      />
-                      <input
-                        type="text"
-                        value={opponent.commander}
-                        onChange={(event) => updateLogOpponent(index, 'commander', event.target.value)}
-                        placeholder="Commander"
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <ColorIdentitySelect
-                          label=""
-                          value={opponent.colorIdentity}
-                          onChange={(value) => updateLogOpponent(index, 'colorIdentity', value)}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="text"
+                          value={opponent.name}
+                          onChange={(event) => updateLogOpponent(index, 'name', event.target.value)}
+                          placeholder="Name"
+                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                         />
+                        <div className="flex flex-1 min-w-0 gap-1">
+                          <input
+                            type="text"
+                            value={opponent.commander}
+                            onChange={(event) => updateLogOpponent(index, 'commander', event.target.value)}
+                            placeholder="Commander"
+                            className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => lookupLogOpponentCommander(index)}
+                            disabled={!opponent.commander.trim() || opponent.commanderLookupStatus === 'loading'}
+                            className="rounded-lg border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                            aria-label="Lookup commander"
+                            title="Lookup commander on Scryfall"
+                          >
+                            Scryfall
+                          </button>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <ColorIdentitySelect
+                            label=""
+                            value={opponent.colorIdentity}
+                            onChange={(value) => updateLogOpponent(index, 'colorIdentity', value)}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeLogOpponent(index)}
+                          className="text-gray-500 hover:text-red-400 p-1"
+                          aria-label={`Remove opponent ${index + 1}`}
+                        >
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeLogOpponent(index)}
-                        className="text-gray-500 hover:text-red-400 p-1"
-                        aria-label={`Remove opponent ${index + 1}`}
-                      >
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                      </button>
+                      {opponent.commanderLookupStatus === 'loading' && (
+                        <p className="text-xs text-gray-400">Searching Scryfall...</p>
+                      )}
+                      {opponent.commanderLookupStatus === 'not-found' && (
+                        <p className="text-xs text-amber-300">No card found in Scryfall.</p>
+                      )}
+                      {opponent.commanderLookupStatus === 'error' && (
+                        <p className="text-xs text-red-400">Lookup failed.</p>
+                      )}
+                      {opponent.commanderLink && (
+                        <a
+                          href={opponent.commanderLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-cyan-300 hover:text-cyan-200"
+                        >
+                          View on Scryfall
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}

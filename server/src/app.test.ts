@@ -777,6 +777,7 @@ describe('app routes', () => {
         {
           name: null,
           commander: 'Ghave, Guru of Spores',
+          commanderLink: null,
           colorIdentity: ['W', 'B', 'G']
         }
       ],

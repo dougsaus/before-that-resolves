@@ -4,6 +4,7 @@ import { getPool } from './db';
 export type GameLogOpponent = {
   name: string | null;
   commander: string | null;
+  commanderLink: string | null;
   colorIdentity: string[] | null;
 };
 
@@ -59,6 +60,10 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
     typeof record.commander === 'string' && record.commander.trim()
       ? record.commander.trim()
       : null;
+  const commanderLink =
+    typeof record.commanderLink === 'string' && record.commanderLink.trim()
+      ? record.commanderLink.trim()
+      : null;
   const colorIdentity = Array.isArray(record.colorIdentity)
     ? record.colorIdentity.filter((value): value is string => typeof value === 'string')
     : null;
@@ -68,6 +73,7 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
   return {
     name,
     commander,
+    commanderLink,
     colorIdentity: colorIdentity && colorIdentity.length > 0 ? colorIdentity : null
   };
 }

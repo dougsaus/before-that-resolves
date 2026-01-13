@@ -4,6 +4,7 @@ import { buildApiUrl } from '../utils/api';
 export type GameLogOpponent = {
   name: string | null;
   commander: string | null;
+  commanderLink: string | null;
   colorIdentity: string[] | null;
 };
 
@@ -26,7 +27,7 @@ export type GameLogInput = {
   turns: number | null;
   durationMinutes: number | null;
   opponentsCount: number;
-  opponents: Array<{ name: string; commander: string; colorIdentity: string }>;
+  opponents: Array<{ name: string; commander: string; commanderLink: string | null; colorIdentity: string }>;
   result: 'win' | 'loss' | null;
 };
 

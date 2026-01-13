@@ -229,7 +229,7 @@ export function createApp(deps: AppDeps = {}) {
   };
   const parseOpponentEntry = (
     input: unknown
-  ): { name: string | null; commander: string | null; colorIdentity: string[] | null } | null => {
+  ): { name: string | null; commander: string | null; commanderLink: string | null; colorIdentity: string[] | null } | null => {
     if (!input || typeof input !== 'object') {
       return null;
     }
@@ -241,6 +241,10 @@ export function createApp(deps: AppDeps = {}) {
     const commander =
       typeof record.commander === 'string' && record.commander.trim()
         ? record.commander.trim()
+        : null;
+    const commanderLink =
+      typeof record.commanderLink === 'string' && record.commanderLink.trim()
+        ? record.commanderLink.trim()
         : null;
     const rawColorIdentity = record.colorIdentity;
     const hasColorInput =
@@ -256,6 +260,7 @@ export function createApp(deps: AppDeps = {}) {
     return {
       name,
       commander,
+      commanderLink,
       colorIdentity: parsedColorIdentity
     };
   };
@@ -265,7 +270,7 @@ export function createApp(deps: AppDeps = {}) {
     }
     return input
       .map((entry) => parseOpponentEntry(entry))
-      .filter((entry): entry is { name: string | null; commander: string | null; colorIdentity: string[] | null } => Boolean(entry));
+      .filter((entry): entry is { name: string | null; commander: string | null; commanderLink: string | null; colorIdentity: string[] | null } => Boolean(entry));
   };
   const parseOpponentsCount = (input: unknown, opponents: Array<{ commander: string | null }>) => {
     if (typeof input === 'number' && Number.isFinite(input)) {
