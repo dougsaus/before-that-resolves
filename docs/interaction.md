@@ -11,14 +11,20 @@ sequenceDiagram
   participant API as Express API
   participant Deck as Deck Cache
   participant Archidekt as Archidekt API
+  participant Moxfield as Moxfield API
   participant Agent as Card Oracle Agent
   participant OpenAI as OpenAI API
 
-  User->>UI: Enter Archidekt URL
+  User->>UI: Enter Archidekt or Moxfield URL
   User->>UI: Click Load Deck
   UI->>API: POST /api/deck/cache
-  API->>Archidekt: GET /api/decks/:id/
-  Archidekt-->>API: Deck JSON
+  alt Archidekt deck
+    API->>Archidekt: GET /api/decks/:id/
+    Archidekt-->>API: Deck JSON
+  else Moxfield deck
+    API->>Moxfield: GET /v3/decks/all/:id
+    Moxfield-->>API: Deck JSON
+  end
   API->>Deck: Store cached deck
   API-->>UI: { success: true }
 

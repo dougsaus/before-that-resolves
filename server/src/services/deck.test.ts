@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildArchidektDeckData,
-  cacheArchidektDeckFromUrl,
-  fetchArchidektDeckSummary,
-  getLastCachedArchidektDeck
+  buildMoxfieldDeckData,
+  cacheDeckFromUrl,
+  fetchDeckSummary,
+  getLastCachedDeck
 } from './deck';
 
 describe('deck service', () => {
@@ -74,7 +75,7 @@ describe('deck service', () => {
       json: async () => deckData
     } as unknown as Response);
 
-    const deck = await cacheArchidektDeckFromUrl(
+    const deck = await cacheDeckFromUrl(
       'https://archidekt.com/decks/99999/raw',
       'conv-123'
     );
@@ -102,8 +103,8 @@ describe('deck service', () => {
       json: async () => deckData
     } as unknown as Response);
 
-    await cacheArchidektDeckFromUrl('https://archidekt.com/decks/55555/cache', 'conv-123');
-    const cached = getLastCachedArchidektDeck('conv-123');
+    await cacheDeckFromUrl('https://archidekt.com/decks/55555/cache', 'conv-123');
+    const cached = getLastCachedDeck('conv-123');
 
     expect(cached?.name).toBe('Cached Deck');
     expect(cached?.cards[0]?.name).toBe('Edgar Markov');
@@ -123,10 +124,76 @@ describe('deck service', () => {
       json: async () => deckData
     } as unknown as Response);
 
-    const summary = await fetchArchidektDeckSummary(
+    const summary = await fetchDeckSummary(
       'https://archidekt.com/decks/77777/numeric'
     );
 
     expect(summary.format).toBeNull();
+  });
+
+  it('builds deck data from a raw Moxfield payload', () => {
+    const deckData = {
+      name: 'Mox Deck',
+      format: 'commander',
+      boards: {
+        commanders: {
+          cards: {
+            commander: { quantity: 1, card: { name: 'Alela, Artful Provocateur' } }
+          },
+          count: 1
+        },
+        mainboard: {
+          cards: {
+            card1: { quantity: 2, card: { name: 'Sol Ring' } }
+          },
+          count: 2
+        },
+        sideboard: {
+          cards: {
+            card2: { quantity: 1, card: { name: 'Sideboard Card' } }
+          },
+          count: 1
+        }
+      }
+    };
+
+    const deck = buildMoxfieldDeckData(deckData, 'https://moxfield.com/decks/abc123');
+
+    expect(deck.source).toBe('moxfield');
+    expect(deck.name).toBe('Mox Deck');
+    expect(deck.format).toBe('commander');
+    expect(deck.cards.length).toBe(2);
+    expect(deck.cards.some((card) => card.name === 'Sideboard Card')).toBe(false);
+    expect(deck.cards.some((card) => card.section === 'Commander')).toBe(true);
+  });
+
+  it('summarizes Moxfield decks using commander boards', async () => {
+    const deckData = {
+      name: 'Mox Summary',
+      format: 'commander',
+      colorIdentity: ['U', 'B'],
+      boards: {
+        commanders: {
+          cards: {
+            commander: { quantity: 1, card: { name: 'Satoru Umezawa' } }
+          },
+          count: 1
+        }
+      }
+    };
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => deckData
+    } as unknown as Response);
+
+    const summary = await fetchDeckSummary('https://moxfield.com/decks/xyz987');
+
+    expect(summary.name).toBe('Mox Summary');
+    expect(summary.commanderNames).toEqual(['Satoru Umezawa']);
+    expect(summary.colorIdentity).toEqual(['U', 'B']);
+    expect(summary.source).toBe('moxfield');
   });
 });

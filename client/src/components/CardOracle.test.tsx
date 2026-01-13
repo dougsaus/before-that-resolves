@@ -67,7 +67,7 @@ describe('CardOracle chat UI', () => {
     renderCardOracle();
 
     expect(screen.getByText('Deck list URL to discuss with The Oracle')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('https://archidekt.com/decks/...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://archidekt.com/decks/... or https://moxfield.com/decks/...')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Type a question to the Oracle...')).toBeInTheDocument();
   });
 
@@ -165,7 +165,7 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
-    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/... or https://moxfield.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
@@ -209,7 +209,7 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
-    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/... or https://moxfield.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
@@ -266,7 +266,7 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
-    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/... or https://moxfield.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
@@ -321,7 +321,7 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
-    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/... or https://moxfield.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17352990/the_world_is_a_vampire');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 
@@ -485,7 +485,7 @@ describe('CardOracle chat UI', () => {
 
     renderCardOracle();
 
-    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/...');
+    const deckInput = screen.getByPlaceholderText('https://archidekt.com/decks/... or https://moxfield.com/decks/...');
     await user.type(deckInput, 'https://archidekt.com/decks/17524661/ms_badonkadonk');
     await user.click(screen.getByRole('button', { name: 'Load Deck' }));
 

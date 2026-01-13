@@ -15,8 +15,8 @@ graph TD
     Rulings[get_card_rulings]
     Random[random_commander]
     Legality[check_commander_legality]
-    Deck[get_archidekt_deck]
-    DeckRaw[get_archidekt_deck_raw]
+    Deck[get_loaded_deck]
+    DeckRaw[get_loaded_deck_raw]
   end
 
   subgraph SubAgents[Agents as Tools]
@@ -39,7 +39,7 @@ graph TD
 ### Notes
 
 - The Card Oracle agent is the single entry point for user queries.
-- Deck-related tools only read from the in-memory Archidekt cache; agents never fetch URLs directly.
+- Deck-related tools only read from the in-memory deck cache (Archidekt or Moxfield); agents never fetch URLs directly.
 - Two sub-agents are exposed as tools to the main agent:
   - **Commander Bracket Expert** for bracket system analysis.
   - **Goldfish Expert** for simulation-based analytics using goldfish tools.
@@ -49,7 +49,7 @@ graph TD
 ```mermaid
 graph TD
   GoldfishAgent[Goldfish Agent]
-  DeckTool[get_archidekt_deck]
+  DeckTool[get_loaded_deck]
   GoldfishTools[Goldfish Simulator Tools]
   Zones[Zones: library/hand/battlefield/graveyard/exile/command/revealed]
 
@@ -60,7 +60,7 @@ graph TD
 
 ### Goldfish Simulator Capabilities
 
-- Loads the cached Archidekt deck into tool state (`loadDeck`).
+- Loads the cached deck into tool state (`loadDeck`).
 - Resets/shuffles with deterministic seeds (`reset`, `shuffle`).
 - Draws, peeks, and moves cards between zones (`draw`, `peek`, `moveById`, `findAndMoveByName`).
 - Reports zone contents and counts for analytics.

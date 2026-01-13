@@ -24,14 +24,24 @@ function formatLastPlayed(lastPlayed: string | null): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function isArchidektUrl(input: string): boolean {
-  if (!input.trim()) return false;
+function getDeckSource(input: string): 'archidekt' | 'moxfield' | null {
+  if (!input.trim()) return null;
   try {
     const parsed = new URL(input);
-    return parsed.host.includes('archidekt.com') && parsed.pathname.includes('/decks/');
+    if (parsed.host.includes('archidekt.com') && parsed.pathname.includes('/decks/')) {
+      return 'archidekt';
+    }
+    if (parsed.host.includes('moxfield.com') && parsed.pathname.includes('/decks/')) {
+      return 'moxfield';
+    }
+    return null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isSupportedDeckUrl(input: string): boolean {
+  return getDeckSource(input) !== null;
 }
 
 function formatColorValue(colors: string[] | null): string {
@@ -60,7 +70,7 @@ export type DeckEntry = {
   commanderNames: string[];
   commanderLinks: Array<string | null>;
   colorIdentity: string[] | null;
-  source: 'archidekt' | 'manual';
+  source: 'archidekt' | 'moxfield' | 'manual';
   addedAt: string;
   stats: DeckStats | null;
 };
@@ -79,6 +89,7 @@ export type DeckPreview = {
   url: string;
   commanderNames: string[];
   colorIdentity: string[];
+  source?: 'archidekt' | 'moxfield';
 };
 
 export type DeckPreviewResult = {
@@ -411,7 +422,7 @@ export function DeckCollection({
 
   const handlePreviewDeck = async () => {
     const trimmedUrl = deckUrl.trim();
-    if (!isArchidektUrl(trimmedUrl)) return;
+    if (!isSupportedDeckUrl(trimmedUrl)) return;
     setDeckPreviewError(null);
     setDeckPreviewLoading(true);
     const result = await onPreviewDeck(trimmedUrl);
@@ -719,7 +730,7 @@ export function DeckCollection({
                         {deck.colorIdentity && <ColorIdentityIcons colors={deck.colorIdentity} />}
                       </div>
                       <div className="row-start-1 col-start-3 flex w-24 items-center justify-end gap-0.5 sm:w-32 sm:gap-1">
-                        {deck.url && onOpenInOracle && isArchidektUrl(deck.url) && (
+                        {deck.url && onOpenInOracle && isSupportedDeckUrl(deck.url) && (
                           <button
                             type="button"
                             onClick={() => onOpenInOracle(deck.url!)}
@@ -870,7 +881,7 @@ export function DeckCollection({
               <div>
                 <h3 className="text-lg font-semibold">{editTarget ? 'Edit deck' : 'Add deck'}</h3>
                 <p className="text-sm text-gray-400">
-                  Add a deck link to auto-fill details from Archidekt or enter them manually.
+                  Add a deck link to auto-fill details from Archidekt or Moxfield or enter them manually.
                 </p>
               </div>
               <label className="text-sm text-gray-300" htmlFor="deck-link-input">
@@ -891,13 +902,13 @@ export function DeckCollection({
                 <button
                   type="button"
                   onClick={handlePreviewDeck}
-                  disabled={!isArchidektUrl(deckUrl) || deckPreviewLoading}
+                  disabled={!isSupportedDeckUrl(deckUrl) || deckPreviewLoading}
                   className="px-4 py-3 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
                 >
                   {deckPreviewLoading ? 'Loading...' : 'Load deck'}
                 </button>
               </div>
-              <p className="text-xs text-gray-500">Load deck supports Archidekt deck links.</p>
+              <p className="text-xs text-gray-500">Load deck supports Archidekt and Moxfield deck links.</p>
               <label className="text-sm text-gray-300" htmlFor="deck-name-input">
                 Deck name (required)
               </label>

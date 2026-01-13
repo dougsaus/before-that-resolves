@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
-import { cacheArchidektDeckFromUrl, fetchArchidektDeckSummary, resetArchidektDeckCache } from './services/deck';
+import { cacheDeckFromUrl, fetchDeckSummary as fetchDeckSummaryService, getDeckSourceFromUrl, resetDeckCache as resetDeckCacheService } from './services/deck';
 import type { DeckCollectionInput } from './services/deck-collection';
 import {
   listDeckCollection,
@@ -28,11 +28,19 @@ type AppDeps = {
   exampleQueries?: string[];
   getOrCreateConversationId?: () => string;
   resetConversation?: (conversationId: string) => boolean;
-  cacheArchidektDeckFromUrl?: (deckUrl: string, conversationId: string) => Promise<unknown>;
-  resetArchidektDeckCache?: (conversationId: string) => void;
+  cacheDeckFromUrl?: (deckUrl: string, conversationId: string) => Promise<unknown>;
+  resetDeckCache?: (conversationId: string) => void;
   generateChatPdf?: (input: { title?: string; subtitle?: string; messages: Array<{ role: string; content: string }> }) => Promise<Buffer>;
   verifyGoogleIdToken?: (token: string) => Promise<GoogleUser>;
-  fetchArchidektDeckSummary?: (deckUrl: string) => Promise<{ id: string; name: string; format: string | null; url: string; commanderNames: string[]; colorIdentity: string[] }>;
+  fetchDeckSummary?: (deckUrl: string) => Promise<{
+    id: string;
+    name: string;
+    format: string | null;
+    url: string;
+    commanderNames: string[];
+    colorIdentity: string[];
+    source: 'archidekt' | 'moxfield';
+  }>;
   searchScryfallCardByName?: (name: string) => Promise<Card | null>;
   listDeckCollection?: (userId: string) => Promise<Array<{
     id: string;
@@ -42,7 +50,7 @@ type AppDeps = {
     commanderNames: string[];
     commanderLinks: Array<string | null>;
     colorIdentity: string[] | null;
-    source: 'archidekt' | 'manual';
+    source: 'archidekt' | 'moxfield' | 'manual';
     addedAt: string;
   }>>;
   upsertDeckInCollection?: (userId: string, deck: DeckCollectionInput) => Promise<Array<{
@@ -53,7 +61,7 @@ type AppDeps = {
     commanderNames: string[];
     commanderLinks: Array<string | null>;
     colorIdentity: string[] | null;
-    source: 'archidekt' | 'manual';
+    source: 'archidekt' | 'moxfield' | 'manual';
     addedAt: string;
   }>>;
   removeDeckFromCollection?: (userId: string, deckId: string) => Promise<Array<{
@@ -64,7 +72,7 @@ type AppDeps = {
     commanderNames: string[];
     commanderLinks: Array<string | null>;
     colorIdentity: string[] | null;
-    source: 'archidekt' | 'manual';
+    source: 'archidekt' | 'moxfield' | 'manual';
     addedAt: string;
   }>>;
   upsertUser?: (user: GoogleUser) => Promise<void>;
@@ -81,11 +89,11 @@ export function createApp(deps: AppDeps = {}) {
   const examples = deps.exampleQueries ?? exampleQueries;
   const getConversationId = deps.getOrCreateConversationId ?? getOrCreateConversationId;
   const reset = deps.resetConversation ?? resetConversation;
-  const cacheDeck = deps.cacheArchidektDeckFromUrl ?? cacheArchidektDeckFromUrl;
-  const resetDeckCache = deps.resetArchidektDeckCache ?? resetArchidektDeckCache;
+  const cacheDeck = deps.cacheDeckFromUrl ?? cacheDeckFromUrl;
+  const resetDeckCache = deps.resetDeckCache ?? resetDeckCacheService;
   const exportChatPdf = deps.generateChatPdf ?? generateChatPdf;
   const verifyGoogleToken = deps.verifyGoogleIdToken ?? verifyGoogleIdToken;
-  const fetchDeckSummary = deps.fetchArchidektDeckSummary ?? fetchArchidektDeckSummary;
+  const fetchDeckSummary = deps.fetchDeckSummary ?? fetchDeckSummaryService;
   const listUserDecks = deps.listDeckCollection ?? listDeckCollection;
   const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
   const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
@@ -108,14 +116,8 @@ export function createApp(deps: AppDeps = {}) {
     const trimmed = input.trim();
     return trimmed ? trimmed : null;
   };
-  const isArchidektUrl = (input: string | null): boolean => {
-    if (!input) return false;
-    try {
-      const parsed = new URL(input);
-      return parsed.host.includes('archidekt.com') && parsed.pathname.includes('/decks/');
-    } catch {
-      return false;
-    }
+  const resolveDeckSource = (input: string | null): 'archidekt' | 'moxfield' | null => {
+    return getDeckSourceFromUrl(input);
   };
   const parseCommanderNames = (input: unknown): string[] => {
     if (Array.isArray(input)) {
@@ -513,7 +515,7 @@ export function createApp(deps: AppDeps = {}) {
         commanderNames: resolvedCommanderNames,
         commanderLinks,
         colorIdentity: summary.colorIdentity,
-        source: 'archidekt'
+        source: summary.source
       });
       const decksWithStats = await attachDeckStats(user.id, decks);
       res.json({ success: true, user, decks: decksWithStats });
@@ -595,7 +597,7 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const normalizedUrl = normalizeDeckUrl(url);
-    const source = isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual';
+    const source = resolveDeckSource(normalizedUrl) ?? 'manual';
     const { commanderNames: resolvedCommanderNames, commanderLinks } = await resolveCommanderEntries(
       commanderNames,
       true
@@ -639,7 +641,7 @@ export function createApp(deps: AppDeps = {}) {
     }
 
     const normalizedUrl = normalizeDeckUrl(url);
-    const source = isArchidektUrl(normalizedUrl) ? 'archidekt' : 'manual';
+    const source = resolveDeckSource(normalizedUrl) ?? 'manual';
     const { commanderNames: resolvedCommanderNames, commanderLinks } = await resolveCommanderEntries(
       commanderNames,
       true

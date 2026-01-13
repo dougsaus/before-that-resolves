@@ -1,33 +1,33 @@
 import { z } from 'zod';
 import { tool } from '@openai/agents';
-import { getLastCachedArchidektDeck, getLastCachedArchidektDeckRaw } from '../services/deck';
+import { getLastCachedDeck, getLastCachedDeckRaw } from '../services/deck';
 
-export function createArchidektDeckTool(conversationId: string) {
+export function createLoadedDeckTool(conversationId: string) {
   return tool({
-    name: 'get_archidekt_deck',
-    description: 'Return the currently loaded Archidekt deck list',
+    name: 'get_loaded_deck',
+    description: 'Return the currently loaded deck list',
     parameters: z.object({}),
     execute: async () => {
-      const deck = getLastCachedArchidektDeck(conversationId);
+      const deck = getLastCachedDeck(conversationId);
       if (!deck) {
-        return { success: false, message: 'No Archidekt deck is loaded' };
+        return { success: false, message: 'No deck is loaded' };
       }
       return { success: true, deck };
     }
   });
 }
 
-export function createArchidektDeckRawTool(conversationId: string) {
+export function createLoadedDeckRawTool(conversationId: string) {
   return tool({
-    name: 'get_archidekt_deck_raw',
-    description: 'Return the currently loaded raw Archidekt deck payload',
+    name: 'get_loaded_deck_raw',
+    description: 'Return the currently loaded raw deck payload',
     parameters: z.object({}),
     execute: async () => {
-      const deck = getLastCachedArchidektDeckRaw(conversationId);
+      const deck = getLastCachedDeckRaw(conversationId);
       if (!deck) {
-        return { success: false, message: 'No Archidekt deck is loaded' };
+        return { success: false, message: 'No deck is loaded' };
       }
-      return { success: true, deck };
+      return { success: true, deck: deck.deck, source: deck.source };
     }
   });
 }

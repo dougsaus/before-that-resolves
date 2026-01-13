@@ -1,13 +1,13 @@
 # Before That Resolves
 
-Before That Resolves is a local web app that lets you chat with a Magic: The Gathering assistant. It can look up cards and rules, check commander legality, explain interactions, and summarize Commander decklists from Archidekt.
+Before That Resolves is a local web app that lets you chat with a Magic: The Gathering assistant. It can look up cards and rules, check commander legality, explain interactions, and summarize Commander decklists from Archidekt or Moxfield.
 
 The app runs entirely on your machine and calls OpenAI’s API for answers, so you will need your own OpenAI API key.
 
 ## How It Works
 
 - You open the app in a browser and chat with “The Oracle.”
-- The Oracle uses Scryfall for real card data and can load decklists from Archidekt.
+- The Oracle uses Scryfall for real card data and can load decklists from Archidekt or Moxfield.
 - Responses include Scryfall links that show a card image on hover.
 - You can choose which OpenAI model to use and (for supported models) set reasoning and text verbosity.
 

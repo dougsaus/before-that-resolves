@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Before That Resolves is a Magic: The Gathering assistant web app. Users chat with "The Oracle" to look up cards, check commander legality, explain interactions, and analyze decklists from Archidekt. The app uses OpenAI's API for AI responses and Scryfall for card data.
+Before That Resolves is a Magic: The Gathering assistant web app. Users chat with "The Oracle" to look up cards, check commander legality, explain interactions, and analyze decklists from Archidekt or Moxfield. The app uses OpenAI's API for AI responses and Scryfall for card data.
 
 ## Monorepo Structure
 
@@ -55,7 +55,7 @@ export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
 4. Conversation history tracked per conversation ID via `lastResponseId`
 
 **Key Services:**
-- Deck cache: In-memory storage for loaded Archidekt decks (resets on server restart)
+- Deck cache: In-memory storage for loaded Archidekt or Moxfield decks (resets on server restart)
 - Conversation store: Tracks OpenAI conversation history per user
 - Game logs & deck collections: PostgreSQL persistence with Google OAuth
 

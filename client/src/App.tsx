@@ -123,7 +123,7 @@ function App() {
       id: 'decks',
       label: 'Decks',
       shortLabel: 'Decks',
-      description: 'Save Archidekt lists to revisit later.'
+      description: 'Save Archidekt or Moxfield lists to revisit later.'
     },
     {
       id: 'logs',

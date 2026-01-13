@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { run } from '@openai/agents';
 import { executeCardOracle } from '../agents/card-oracle';
 import { createGoldfishAgent } from '../agents/goldfish';
-import { buildArchidektDeckData, cacheArchidektDeckFromUrl } from '../services/deck';
+import { buildArchidektDeckData, cacheDeckFromUrl } from '../services/deck';
 import { countToolCalls, extractResponseText } from '../utils/agent-helpers';
 import { getOrCreateConversationId } from '../utils/conversation-store';
 
@@ -17,7 +17,7 @@ describeLive('live integrations', () => {
     'loads an Archidekt deck from the live API',
     async () => {
       const conversationId = getOrCreateConversationId();
-      const raw = await cacheArchidektDeckFromUrl(
+      const raw = await cacheDeckFromUrl(
         'https://archidekt.com/decks/17352990/the_world_is_a_vampire',
         conversationId
       );
