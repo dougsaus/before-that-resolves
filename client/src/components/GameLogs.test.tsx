@@ -20,6 +20,7 @@ const baseLog = (overrides: Partial<GameLogEntry> = {}): GameLogEntry => ({
   opponentsCount: 0,
   opponents: [],
   result: null,
+  tags: [],
   createdAt: '2026-01-12T00:00:00.000Z',
   ...overrides
 });

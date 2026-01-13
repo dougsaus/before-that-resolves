@@ -31,6 +31,7 @@ describe('useGameLogs', () => {
             opponentsCount: 2,
             opponents: [],
             result: null,
+            tags: [],
             createdAt: '2025-02-14T00:00:00.000Z'
           }
           ]
@@ -75,6 +76,7 @@ describe('useGameLogs', () => {
               opponentsCount: 1,
               opponents: [],
               result: null,
+              tags: [],
               createdAt: '2025-03-01T00:00:00.000Z'
             }
           ]
@@ -95,7 +97,8 @@ describe('useGameLogs', () => {
         durationMinutes: null,
         opponentsCount: 1,
         opponents: [{ name: 'Player 2', commanderNames: ['Atraxa'], commanderLinks: [null], colorIdentity: 'WUBG' }],
-        result: null
+        result: null,
+        tags: []
       });
     });
 
@@ -125,6 +128,7 @@ describe('useGameLogs', () => {
               opponentsCount: 3,
               opponents: [],
               result: null,
+              tags: [],
               createdAt: '2025-03-02T00:00:00.000Z'
             }
           ]
@@ -145,6 +149,7 @@ describe('useGameLogs', () => {
               opponentsCount: 3,
               opponents: [],
               result: 'win',
+              tags: [],
               createdAt: '2025-03-02T00:00:00.000Z'
             }
           ]
@@ -164,7 +169,8 @@ describe('useGameLogs', () => {
         durationMinutes: null,
         opponentsCount: 3,
         opponents: [],
-        result: 'win'
+        result: 'win',
+        tags: []
       });
     });
 

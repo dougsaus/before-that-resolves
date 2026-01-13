@@ -208,6 +208,12 @@ export function createApp(deps: AppDeps = {}) {
     }
     return input === true ? 'win' : input === false ? 'loss' : null;
   };
+  const parseTagsInput = (input: unknown): string[] => {
+    if (!Array.isArray(input)) return [];
+    return input
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => value.trim());
+  };
   const parseOptionalNumber = (input: unknown): number | null => {
     if (input === undefined || input === null || input === '') {
       return null;
@@ -722,7 +728,8 @@ export function createApp(deps: AppDeps = {}) {
       opponents,
       result,
       turns,
-      durationMinutes
+      durationMinutes,
+      tags
     } = req.body ?? {};
     if (!deckId || typeof deckId !== 'string') {
       res.status(400).json({
@@ -752,7 +759,8 @@ export function createApp(deps: AppDeps = {}) {
       durationMinutes: parseOptionalNumber(durationMinutes),
       opponentsCount: normalizedOpponentsCount,
       opponents: parsedOpponents,
-      result: parseResultInput(result)
+      result: parseResultInput(result),
+      tags: parseTagsInput(tags)
     };
 
     const logs = await createLog(user.id, logInput);
@@ -772,7 +780,7 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
-    const { datePlayed, opponentsCount, opponents, result, turns, durationMinutes } =
+    const { datePlayed, opponentsCount, opponents, result, turns, durationMinutes, tags } =
       req.body ?? {};
     const parsedOpponents = parseOpponentEntries(opponents);
     const normalizedOpponentsCount = parseOpponentsCount(opponentsCount, parsedOpponents);
@@ -782,7 +790,8 @@ export function createApp(deps: AppDeps = {}) {
       durationMinutes: parseOptionalNumber(durationMinutes),
       opponentsCount: normalizedOpponentsCount,
       opponents: parsedOpponents,
-      result: parseResultInput(result)
+      result: parseResultInput(result),
+      tags: parseTagsInput(tags)
     };
 
     const logs = await updateLog(user.id, logId, logUpdate);

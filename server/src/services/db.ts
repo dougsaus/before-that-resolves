@@ -69,6 +69,7 @@ const schemaQueries = [
        ALTER TABLE game_logs ADD CONSTRAINT game_logs_result_check CHECK (result IN ('win', 'loss'));
        ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS turns INTEGER;
        ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS duration_minutes INTEGER;
+       ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'::jsonb;
      END IF;
    END $$;`,
   `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx

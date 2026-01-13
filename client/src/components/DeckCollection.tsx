@@ -5,6 +5,15 @@ import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-iden
 import { useGameLogs } from '../hooks/useGameLogs';
 import { buildApiUrl } from '../utils/api';
 
+const PREDEFINED_TAGS = [
+  'mulligan',
+  'missed land drops',
+  'poor card draw',
+  'god hand',
+  'bad opening hand',
+  'scooped'
+] as const;
+
 function formatWinRate(winRate: number | null): string {
   if (winRate === null) return '—';
   return `${Math.round(winRate * 100)}%`;
@@ -161,6 +170,8 @@ export function DeckCollection({
   const [logDurationMinutes, setLogDurationMinutes] = useState('');
   const [logOpponents, setLogOpponents] = useState<OpponentForm[]>([]);
   const [logResult, setLogResult] = useState<'win' | 'loss' | 'pending'>('pending');
+  const [logTags, setLogTags] = useState<string[]>([]);
+  const [logCustomTagInput, setLogCustomTagInput] = useState('');
   const [logFormError, setLogFormError] = useState<string | null>(null);
   const deckListRef = useRef<HTMLDivElement | null>(null);
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -399,7 +410,25 @@ export function DeckCollection({
     setLogDurationMinutes('');
     setLogOpponents([]);
     setLogResult('pending');
+    setLogTags([]);
+    setLogCustomTagInput('');
     setLogFormError(null);
+  };
+
+  const toggleLogTag = (tag: string) => {
+    setLogTags((current) =>
+      current.includes(tag)
+        ? current.filter((t) => t !== tag)
+        : [...current, tag]
+    );
+  };
+
+  const addLogCustomTag = () => {
+    const tag = logCustomTagInput.trim().toLowerCase();
+    if (tag && !logTags.includes(tag)) {
+      setLogTags((current) => [...current, tag]);
+    }
+    setLogCustomTagInput('');
   };
 
   const addLogOpponent = () => {
@@ -695,7 +724,8 @@ export function DeckCollection({
           .map((cmd) => cmd.link),
         colorIdentity: opponent.colorIdentity.trim()
       })),
-      result: logResult === 'pending' ? null : logResult
+      result: logResult === 'pending' ? null : logResult,
+      tags: logTags
     });
     if (success) {
       setLogTarget(null);
@@ -1371,6 +1401,70 @@ export function DeckCollection({
                     }`}
                   >
                     Later
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-gray-300">Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {PREDEFINED_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleLogTag(tag)}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm border transition ${
+                        logTags.includes(tag)
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100'
+                          : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                      }`}
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                        {logTags.includes(tag) ? (
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        ) : (
+                          <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+                        )}
+                      </svg>
+                      {tag}
+                    </button>
+                  ))}
+                  {logTags
+                    .filter((tag) => !PREDEFINED_TAGS.includes(tag as typeof PREDEFINED_TAGS[number]))
+                    .map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleLogTag(tag)}
+                        className="flex items-center gap-1 px-3 py-1 rounded-full text-sm border border-cyan-400 bg-cyan-500/20 text-cyan-100 transition"
+                      >
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        {tag}
+                      </button>
+                    ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={logCustomTagInput}
+                    onChange={(e) => setLogCustomTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addLogCustomTag();
+                      }
+                    }}
+                    placeholder="Add custom tag..."
+                    className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addLogCustomTag}
+                    disabled={!logCustomTagInput.trim()}
+                    className="px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                  >
+                    Add
                   </button>
                 </div>
               </div>

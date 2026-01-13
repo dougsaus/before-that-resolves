@@ -18,6 +18,7 @@ export type GameLogEntry = {
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
+  tags: string[];
   createdAt: string;
 };
 
@@ -30,6 +31,7 @@ export type GameLogInput = {
   opponentsCount: number;
   opponents: GameLogOpponent[];
   result: 'win' | 'loss' | null;
+  tags: string[];
 };
 
 export type GameLogUpdate = Omit<GameLogInput, 'deckId' | 'deckName'>;
@@ -44,6 +46,7 @@ type GameLogRow = {
   opponents_count: number;
   opponents: unknown;
   result: 'win' | 'loss' | null;
+  tags: unknown;
   created_at: string | Date;
 };
 
@@ -106,6 +109,13 @@ function normalizeOpponents(input: unknown): GameLogOpponent[] {
     .filter((entry): entry is GameLogOpponent => Boolean(entry));
 }
 
+function normalizeTags(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim());
+}
+
 function normalizeDate(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.valueOf())) {
@@ -128,6 +138,7 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
     opponentsCount: row.opponents_count,
     opponents: normalizeOpponents(row.opponents),
     result: row.result,
+    tags: normalizeTags(row.tags),
     createdAt
   };
 }
@@ -135,7 +146,7 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
 export async function listGameLogs(userId: string): Promise<GameLogEntry[]> {
   const db = getPool();
   const result = await db.query<GameLogRow>(
-    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, created_at
+    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, tags, created_at
      FROM game_logs
      WHERE user_id = $1
      ORDER BY played_at DESC, created_at DESC`,
@@ -159,9 +170,10 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       opponents_count,
       opponents,
       result,
+      tags,
       created_at
     )
-    VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb, $10, NOW())`,
+    VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb, $10, $11::jsonb, NOW())`,
     [
       id,
       userId,
@@ -172,7 +184,8 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       input.durationMinutes,
       input.opponentsCount,
       JSON.stringify(input.opponents ?? []),
-      input.result
+      input.result,
+      JSON.stringify(input.tags ?? [])
     ]
   );
   return listGameLogs(userId);
@@ -191,8 +204,9 @@ export async function updateGameLog(
          duration_minutes = $3,
          opponents_count = $4,
          opponents = $5::jsonb,
-         result = $6
-     WHERE user_id = $7 AND id = $8`,
+         result = $6,
+         tags = $7::jsonb
+     WHERE user_id = $8 AND id = $9`,
     [
       input.playedAt,
       input.turns,
@@ -200,6 +214,7 @@ export async function updateGameLog(
       input.opponentsCount,
       JSON.stringify(input.opponents ?? []),
       input.result,
+      JSON.stringify(input.tags ?? []),
       userId,
       logId
     ]
