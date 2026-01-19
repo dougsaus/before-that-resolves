@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getPool } from './db';
+import { normalizeDateInput } from '../utils/date';
 
 export type GameLogOpponent = {
   name: string | null;
@@ -116,16 +117,8 @@ function normalizeTags(input: unknown): string[] {
     .map((value) => value.trim());
 }
 
-function normalizeDate(value: string | Date): string {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return new Date().toISOString().slice(0, 10);
-  }
-  return date.toISOString().slice(0, 10);
-}
-
 function mapGameLogRow(row: GameLogRow): GameLogEntry {
-  const playedAt = normalizeDate(row.played_at);
+  const playedAt = normalizeDateInput(row.played_at);
   const createdAt =
     row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at;
   return {
@@ -271,11 +264,7 @@ export async function getDeckStats(userId: string): Promise<Map<string, DeckStat
     const losses = Number.parseInt(row.losses, 10);
     const gamesWithResult = wins + losses;
     const winRate = gamesWithResult > 0 ? wins / gamesWithResult : null;
-    const lastPlayed = row.last_played
-      ? (row.last_played instanceof Date
-          ? row.last_played.toISOString().slice(0, 10)
-          : new Date(row.last_played).toISOString().slice(0, 10))
-      : null;
+    const lastPlayed = row.last_played ? normalizeDateInput(row.last_played) : null;
 
     statsMap.set(row.deck_id, {
       deckId: row.deck_id,

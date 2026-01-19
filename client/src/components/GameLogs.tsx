@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { useGameLogs } from '../hooks/useGameLogs';
 import { buildApiUrl } from '../utils/api';
+import { parseLocalDate } from '../utils/date';
 
 const PREDEFINED_TAGS = [
   'mulligan',
@@ -24,8 +25,7 @@ type GameLogsProps = {
 };
 
 function formatDate(value: string): string {
-  // Append time to treat date-only strings as local time, not UTC
-  const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`);
+  const parsed = parseLocalDate(value);
   if (Number.isNaN(parsed.valueOf())) {
     return value;
   }
@@ -416,8 +416,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
         }
         case 'playedAt':
         default: {
-          const aValue = new Date(first.playedAt).getTime();
-          const bValue = new Date(second.playedAt).getTime();
+          const aValue = parseLocalDate(first.playedAt).getTime();
+          const bValue = parseLocalDate(second.playedAt).getTime();
           return compare(aValue, bValue);
         }
       }
