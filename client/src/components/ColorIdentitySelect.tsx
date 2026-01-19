@@ -17,9 +17,10 @@ type ColorIdentitySelectProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onFocus?: () => void;
 };
 
-export function ColorIdentitySelect({ label, value, onChange }: ColorIdentitySelectProps) {
+export function ColorIdentitySelect({ label, value, onChange, onFocus }: ColorIdentitySelectProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const options = useMemo(() => COLOR_OPTIONS, []);
@@ -46,6 +47,7 @@ export function ColorIdentitySelect({ label, value, onChange }: ColorIdentitySel
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
+          onFocus={onFocus}
           className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left text-sm text-gray-200 hover:border-gray-600"
         >
           <span className="flex items-center gap-2">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { useGameLogs } from '../hooks/useGameLogs';
+import { useOpponentUsers, type OpponentUser } from '../hooks/useOpponentUsers';
 import { buildApiUrl } from '../utils/api';
 import { parseLocalDate } from '../utils/date';
 
@@ -53,6 +54,26 @@ function formatGameLength(durationMinutes: number | null, turns: number | null):
   return `Game Length: ${parts.join(', ')}`;
 }
 
+function formatOpponentUserLabel(user: { name?: string | null; email?: string | null }): string {
+  const name = user.name?.trim() ?? '';
+  const email = user.email?.trim() ?? '';
+  if (name && email) return `${name} <${email}>`;
+  return name || email || 'Unknown user';
+}
+
+function createEditOpponent(): OpponentForm {
+  return {
+    id: crypto.randomUUID(),
+    userId: null,
+    userLabel: null,
+    searchMessage: null,
+    searchStatus: null,
+    name: '',
+    commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
+    colorIdentity: ''
+  };
+}
+
 type CommanderEntry = {
   name: string;
   link: string | null;
@@ -60,6 +81,11 @@ type CommanderEntry = {
 };
 
 type OpponentForm = {
+  id: string;
+  userId: string | null;
+  userLabel: string | null;
+  searchMessage: string | null;
+  searchStatus: 'matched' | 'not-found' | 'multiple' | 'error' | null;
   name: string;
   commanders: CommanderEntry[];
   colorIdentity: string;
@@ -67,6 +93,19 @@ type OpponentForm = {
 
 export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const { logs, loading, error, removeLog, updateLog } = useGameLogs(idToken);
+  const {
+    recentOpponents,
+    recentError,
+    recentLoading,
+    searchResults,
+    searchError,
+    searchLoading,
+    loadRecentOpponents,
+    searchOpponents,
+    clearSearch
+  } = useOpponentUsers(idToken);
+  const [recentOpenIndex, setRecentOpenIndex] = useState<number | null>(null);
+  const [searchOpenIndex, setSearchOpenIndex] = useState<number | null>(null);
   type SortKey = 'playedAt' | 'deckName' | 'result' | 'durationMinutes' | 'turns';
   const sortStorageKey = 'btr:game-logs-sort';
   const sortKeys: SortKey[] = ['playedAt', 'deckName', 'result', 'durationMinutes', 'turns'];
@@ -101,6 +140,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const [hoverCard, setHoverCard] = useState<{ label: string; rect: DOMRect } | null>(null);
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
+  const opponentDropdownRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   useEffect(() => {
@@ -108,6 +148,39 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (recentOpenIndex === null && searchOpenIndex === null) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (opponentDropdownRef.current?.contains(target)) return;
+      setRecentOpenIndex(null);
+      setSearchOpenIndex(null);
+      clearSearch();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [clearSearch, recentOpenIndex, searchOpenIndex]);
+
+  useEffect(() => {
+    if (!editTarget || !idToken) return;
+    void loadRecentOpponents();
+  }, [editTarget, idToken, loadRecentOpponents]);
+
+  useEffect(() => {
+    if (searchOpenIndex === null || !searchError) return;
+    setEditOpponents((current) => {
+      const next = [...current];
+      if (next[searchOpenIndex]) {
+        next[searchOpenIndex] = {
+          ...next[searchOpenIndex],
+          searchMessage: searchError,
+          searchStatus: 'error'
+        };
+      }
+      return next;
+    });
+  }, [searchError, searchOpenIndex]);
 
   useEffect(() => {
     if (!hoverCard) return;
@@ -152,6 +225,11 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setEditDurationMinutes(log.durationMinutes ? String(log.durationMinutes) : '');
     setEditOpponents(
       log.opponents.map((opponent) => ({
+        id: crypto.randomUUID(),
+        userId: opponent.userId ?? null,
+        userLabel: null,
+        searchMessage: null,
+        searchStatus: null,
         name: opponent.name ?? '',
         commanders: opponent.commanderNames.length > 0
           ? opponent.commanderNames.map((cmdName, idx) => ({
@@ -167,6 +245,9 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setEditTags(log.tags ?? []);
     setCustomTagInput('');
     setEditFormError(null);
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
   };
 
   const toggleEditTag = (tag: string) => {
@@ -194,25 +275,115 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   };
 
   const addEditOpponent = () => {
-    setEditOpponents((current) => [...current, {
-      name: '',
-      commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
-      colorIdentity: ''
-    }]);
+    setEditOpponents((current) => [...current, createEditOpponent()]);
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
   };
 
   const removeEditOpponent = (index: number) => {
     setEditOpponents((current) => current.filter((_, i) => i !== index));
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
   };
 
   const updateEditOpponentField = (opponentIndex: number, field: 'name' | 'colorIdentity', value: string) => {
     setEditOpponents((current) => {
       const next = [...current];
       if (next[opponentIndex]) {
-        next[opponentIndex] = { ...next[opponentIndex], [field]: value };
+        next[opponentIndex] = {
+          ...next[opponentIndex],
+          [field]: value,
+          ...(field === 'name'
+            ? { userId: null, userLabel: null, searchMessage: null, searchStatus: null }
+            : {})
+        };
       }
       return next;
     });
+  };
+
+  const applyEditOpponentUser = (opponentId: string, user: OpponentUser) => {
+    const label = formatOpponentUserLabel(user);
+    setEditOpponents((current) => {
+      const next = [...current];
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        userId: user.id,
+        name: (user.name ?? user.email ?? '').trim(),
+        userLabel: label,
+        searchMessage: `Matched user: ${label}`,
+        searchStatus: 'matched'
+      };
+      return next;
+    });
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
+  };
+
+  const handleEditOpponentSearch = async (opponentIndex: number) => {
+    if (!idToken) {
+      setEditFormError('Sign in with Google to search opponents.');
+      return;
+    }
+    const opponentId = editOpponents[opponentIndex]?.id;
+    if (!opponentId) return;
+    const query = editOpponents[opponentIndex]?.name?.trim() ?? '';
+    if (!query) {
+      setEditFormError('Enter a name or email to search.');
+      return;
+    }
+    setEditFormError(null);
+    setSearchOpenIndex(opponentIndex);
+    setRecentOpenIndex(null);
+    setEditOpponents((current) => {
+      const next = [...current];
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        searchMessage: null,
+        searchStatus: null
+      };
+      return next;
+    });
+    const results = await searchOpponents(query);
+    if (results.length === 1) {
+      applyEditOpponentUser(opponentId, results[0]);
+      return;
+    }
+    setEditOpponents((current) => {
+      const next = [...current];
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        searchMessage: results.length === 0
+          ? 'No users found.'
+          : 'Multiple users found. Select one.',
+        searchStatus: results.length === 0 ? 'not-found' : 'multiple'
+      };
+      return next;
+    });
+  };
+
+  const openRecentOpponents = async (opponentIndex: number) => {
+    if (!idToken) {
+      setEditFormError('Sign in with Google to view recent opponents.');
+      return;
+    }
+    setEditFormError(null);
+    const nextIndex = opponentIndex;
+    setRecentOpenIndex(nextIndex);
+    setSearchOpenIndex(null);
+    clearSearch();
+    if (nextIndex !== null && recentOpponents.length === 0 && !recentLoading) {
+      await loadRecentOpponents();
+    }
   };
 
   const updateEditOpponentCommander = (opponentIndex: number, commanderIndex: number, value: string) => {
@@ -342,6 +513,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
       durationMinutes: parseOptionalNumberInput(editDurationMinutes),
       opponentsCount: editOpponents.length,
       opponents: editOpponents.map((opponent) => ({
+        userId: opponent.userId,
         name: opponent.name.trim(),
         commanderNames: opponent.commanders
           .map((cmd) => cmd.name.trim())
@@ -356,6 +528,9 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     });
     if (success) {
       setEditTarget(null);
+      setRecentOpenIndex(null);
+      setSearchOpenIndex(null);
+      clearSearch();
     }
   };
 
@@ -723,21 +898,40 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                   <div
                     key={`${editTarget.id}-opponent-${opponentIndex}`}
                     className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
+                    ref={opponentIndex === recentOpenIndex || opponentIndex === searchOpenIndex ? opponentDropdownRef : null}
                   >
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="text"
-                          value={opponent.name}
-                          onChange={(event) => updateEditOpponentField(opponentIndex, 'name', event.target.value)}
-                          placeholder="Name"
-                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        />
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={opponent.name}
+                            onChange={(event) => updateEditOpponentField(opponentIndex, 'name', event.target.value)}
+                            onFocus={() => openRecentOpponents(opponentIndex)}
+                            placeholder="Name"
+                            className="w-full min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditOpponentSearch(opponentIndex)}
+                            disabled={searchLoading && searchOpenIndex === opponentIndex}
+                            className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                          >
+                            {searchLoading && searchOpenIndex === opponentIndex ? 'Searching...' : 'Search'}
+                          </button>
+                        </div>
                         <div className="flex-1 min-w-0">
                           <ColorIdentitySelect
                             label=""
                             value={opponent.colorIdentity}
                             onChange={(value) => updateEditOpponentField(opponentIndex, 'colorIdentity', value)}
+                            onFocus={() => {
+                              setRecentOpenIndex(null);
+                              setSearchOpenIndex(null);
+                              clearSearch();
+                            }}
                           />
                         </div>
                         <button
@@ -751,6 +945,61 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                           </svg>
                         </button>
                       </div>
+                      {recentOpenIndex === opponentIndex && (
+                        <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
+                          <p className="text-xs text-gray-400 mb-2">Recent opponents</p>
+                          {recentLoading && <p className="text-xs text-gray-400">Loading recent opponents...</p>}
+                          {recentError && <p className="text-xs text-red-400">{recentError}</p>}
+                          {!recentLoading && recentOpponents.length === 0 && (
+                            <p className="text-xs text-gray-500">No recent opponents yet.</p>
+                          )}
+                          {recentOpponents.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => applyEditOpponentUser(opponent.id, user)}
+                              className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
+                            >
+                              {formatOpponentUserLabel(user)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {searchOpenIndex === opponentIndex && (
+                        <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
+                          <p className="text-xs text-gray-400 mb-2">Search results</p>
+                          {searchLoading && <p className="text-xs text-gray-400">Searching users...</p>}
+                          {searchError && <p className="text-xs text-red-400">{searchError}</p>}
+                          {!searchLoading && searchResults.length === 0 && (
+                            <p className="text-xs text-gray-500">No matching users found.</p>
+                          )}
+                          {searchResults.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => applyEditOpponentUser(opponent.id, user)}
+                              className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
+                            >
+                              {formatOpponentUserLabel(user)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {opponent.searchMessage && (
+                        <p
+                          className={`text-xs ${
+                            opponent.searchStatus === 'matched'
+                              ? 'text-emerald-300'
+                              : opponent.searchStatus === 'not-found'
+                                ? 'text-amber-300'
+                                : opponent.searchStatus === 'error'
+                                  ? 'text-red-400'
+                                  : 'text-gray-400'
+                          }`}
+                        >
+                          {opponent.searchMessage}
+                        </p>
+                      )}
                       <div className="flex flex-col gap-2">
                         <p className="text-xs text-gray-400">Commanders (0-2)</p>
                         {opponent.commanders.map((commander, cmdIndex) => (
@@ -759,6 +1008,11 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                               type="text"
                               value={commander.name}
                               onChange={(event) => updateEditOpponentCommander(opponentIndex, cmdIndex, event.target.value)}
+                              onFocus={() => {
+                                setRecentOpenIndex(null);
+                                setSearchOpenIndex(null);
+                                clearSearch();
+                              }}
                               placeholder={`Commander ${cmdIndex + 1}`}
                               className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                             />
@@ -943,7 +1197,12 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setEditTarget(null)}
+                  onClick={() => {
+                    setEditTarget(null);
+                    setRecentOpenIndex(null);
+                    setSearchOpenIndex(null);
+                    clearSearch();
+                  }}
                   className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
                 >
                   Cancel

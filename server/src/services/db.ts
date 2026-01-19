@@ -75,7 +75,15 @@ const schemaQueries = [
      END IF;
    END $$;`,
   `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx
-    ON game_logs (user_id, played_at DESC, created_at DESC);`
+    ON game_logs (user_id, played_at DESC, created_at DESC);`,
+  `CREATE TABLE IF NOT EXISTS recent_opponents (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    opponent_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_selected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, opponent_user_id)
+  );`,
+  `CREATE INDEX IF NOT EXISTS recent_opponents_user_idx
+    ON recent_opponents (user_id, last_selected_at DESC);`
 ];
 
 function getPoolConfig(): PoolConfig {

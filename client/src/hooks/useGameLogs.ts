@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
 
 export type GameLogOpponent = {
+  userId: string | null;
   name: string | null;
   commanderNames: string[];
   commanderLinks: Array<string | null>;
@@ -28,7 +29,7 @@ export type GameLogInput = {
   turns: number | null;
   durationMinutes: number | null;
   opponentsCount: number;
-  opponents: Array<{ name: string; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string }>;
+  opponents: Array<{ userId: string | null; name: string; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string }>;
   result: 'win' | 'loss' | null;
   tags: string[];
 };
