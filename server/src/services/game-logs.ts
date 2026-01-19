@@ -3,6 +3,7 @@ import { getPool } from './db';
 import { normalizeDateInput } from '../utils/date';
 
 export type GameLogOpponent = {
+  userId: string | null;
   name: string | null;
   commanderNames: string[];
   commanderLinks: Array<string | null>;
@@ -56,6 +57,8 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
     return null;
   }
   const record = entry as Record<string, unknown>;
+  const userId =
+    typeof record.userId === 'string' && record.userId.trim() ? record.userId.trim() : null;
   const name =
     typeof record.name === 'string' && record.name.trim()
       ? record.name.trim()
@@ -92,10 +95,11 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
   const colorIdentity = Array.isArray(record.colorIdentity)
     ? record.colorIdentity.filter((value): value is string => typeof value === 'string')
     : null;
-  if (!name && commanderNames.length === 0 && (!colorIdentity || colorIdentity.length === 0)) {
+  if (!userId && !name && commanderNames.length === 0 && (!colorIdentity || colorIdentity.length === 0)) {
     return null;
   }
   return {
+    userId,
     name,
     commanderNames,
     commanderLinks,

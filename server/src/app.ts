@@ -15,6 +15,8 @@ import {
 } from './services/deck-collection';
 import type { DeckStats, GameLogEntry, GameLogInput, GameLogUpdate } from './services/game-logs';
 import { createGameLog, getDeckStats, listGameLogs, removeGameLog, updateGameLog } from './services/game-logs';
+import type { OpponentUser } from './services/opponents';
+import { listRecentOpponents, recordRecentOpponents, searchOpponentUsers } from './services/opponents';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { normalizeDateInput } from './utils/date';
@@ -82,6 +84,9 @@ type AppDeps = {
   updateGameLog?: (userId: string, logId: string, log: GameLogUpdate) => Promise<GameLogEntry[]>;
   removeGameLog?: (userId: string, logId: string) => Promise<GameLogEntry[]>;
   getDeckStats?: (userId: string) => Promise<Map<string, DeckStats>>;
+  searchOpponentUsers?: (query: string, limit?: number) => Promise<OpponentUser[]>;
+  listRecentOpponents?: (userId: string, limit?: number) => Promise<OpponentUser[]>;
+  recordRecentOpponents?: (userId: string, opponentUserIds: string[]) => Promise<void>;
 };
 
 export function createApp(deps: AppDeps = {}) {
@@ -104,6 +109,9 @@ export function createApp(deps: AppDeps = {}) {
   const updateLog = deps.updateGameLog ?? updateGameLog;
   const deleteLog = deps.removeGameLog ?? removeGameLog;
   const fetchDeckStats = deps.getDeckStats ?? getDeckStats;
+  const searchUsers = deps.searchOpponentUsers ?? searchOpponentUsers;
+  const listRecent = deps.listRecentOpponents ?? listRecentOpponents;
+  const recordRecent = deps.recordRecentOpponents ?? recordRecentOpponents;
   const searchScryfallCardByName =
     deps.searchScryfallCardByName ?? ((name: string) => scryfallService.searchCardByName(name));
   const getErrorMessage = (error: unknown, fallback: string) => {
@@ -226,11 +234,13 @@ export function createApp(deps: AppDeps = {}) {
   };
   const parseOpponentEntry = (
     input: unknown
-  ): { name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } | null => {
+  ): { userId: string | null; name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } | null => {
     if (!input || typeof input !== 'object') {
       return null;
     }
     const record = input as Record<string, unknown>;
+    const userId =
+      typeof record.userId === 'string' && record.userId.trim() ? record.userId.trim() : null;
     const name =
       typeof record.name === 'string' && record.name.trim()
         ? record.name.trim()
@@ -271,10 +281,11 @@ export function createApp(deps: AppDeps = {}) {
           ? rawColorIdentity.length > 0
           : false;
     const parsedColorIdentity = hasColorInput ? parseColorIdentityInput(rawColorIdentity) : null;
-    if (!name && commanderNames.length === 0 && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
+    if (!userId && !name && commanderNames.length === 0 && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
       return null;
     }
     return {
+      userId,
       name,
       commanderNames,
       commanderLinks,
@@ -287,7 +298,7 @@ export function createApp(deps: AppDeps = {}) {
     }
     return input
       .map((entry) => parseOpponentEntry(entry))
-      .filter((entry): entry is { name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } => Boolean(entry));
+      .filter((entry): entry is { userId: string | null; name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } => Boolean(entry));
   };
   const parseOpponentsCount = (input: unknown, opponents: Array<{ commanderNames: string[] }>) => {
     if (typeof input === 'number' && Number.isFinite(input)) {
@@ -708,6 +719,31 @@ export function createApp(deps: AppDeps = {}) {
     res.json({ success: true, logs });
   });
 
+  app.get('/api/users/search', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
+    if (!query) {
+      res.status(400).json({
+        success: false,
+        error: 'query is required'
+      });
+      return;
+    }
+
+    const results = await searchUsers(query, 10);
+    res.json({ success: true, users: results });
+  });
+
+  app.get('/api/opponents/recent', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const opponents = await listRecent(user.id, 10);
+    res.json({ success: true, opponents });
+  });
+
   app.post('/api/game-logs', async (req, res) => {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
@@ -755,6 +791,12 @@ export function createApp(deps: AppDeps = {}) {
     };
 
     const logs = await createLog(user.id, logInput);
+    const opponentUserIds = parsedOpponents
+      .map((opponent) => opponent.userId)
+      .filter((value): value is string => Boolean(value));
+    if (opponentUserIds.length > 0) {
+      await recordRecent(user.id, opponentUserIds);
+    }
     res.json({ success: true, logs });
   });
 
@@ -786,6 +828,12 @@ export function createApp(deps: AppDeps = {}) {
     };
 
     const logs = await updateLog(user.id, logId, logUpdate);
+    const opponentUserIds = parsedOpponents
+      .map((opponent) => opponent.userId)
+      .filter((value): value is string => Boolean(value));
+    if (opponentUserIds.length > 0) {
+      await recordRecent(user.id, opponentUserIds);
+    }
     res.json({ success: true, logs });
   });
 

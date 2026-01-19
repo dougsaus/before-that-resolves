@@ -713,6 +713,42 @@ describe('app routes', () => {
     expect(response.body.logs).toHaveLength(1);
   });
 
+  it('searches users by name or email', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-111' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const searchOpponentUsers = vi.fn().mockResolvedValue([
+      { id: 'user-a', name: 'Alpha User', email: 'alpha@test.dev' }
+    ]);
+    const app = createApp({ verifyGoogleIdToken, upsertUser, searchOpponentUsers });
+
+    const response = await request(app)
+      .get('/api/users/search?query=alpha')
+      .set('authorization', 'Bearer token-111')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(searchOpponentUsers).toHaveBeenCalledWith('alpha', 10);
+    expect(response.body.users).toHaveLength(1);
+  });
+
+  it('lists recent opponents for a user', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-222' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const listRecentOpponents = vi.fn().mockResolvedValue([
+      { id: 'user-b', name: 'Bravo User', email: 'bravo@test.dev' }
+    ]);
+    const app = createApp({ verifyGoogleIdToken, upsertUser, listRecentOpponents });
+
+    const response = await request(app)
+      .get('/api/opponents/recent')
+      .set('authorization', 'Bearer token-222')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(listRecentOpponents).toHaveBeenCalledWith('user-222', 10);
+    expect(response.body.opponents).toHaveLength(1);
+  });
+
   it('creates a game log for a deck in the collection', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-888' });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
@@ -738,6 +774,7 @@ describe('app routes', () => {
         opponentsCount: 2,
         opponents: [
           {
+            userId: 'user-42',
             name: null,
             commanderNames: ['Ghave, Guru of Spores'],
             commanderLinks: [null],
@@ -748,11 +785,13 @@ describe('app routes', () => {
         createdAt: '2025-02-14T00:00:00.000Z'
       }
     ]);
+    const recordRecentOpponents = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
       upsertUser,
       listDeckCollection,
-      createGameLog
+      createGameLog,
+      recordRecentOpponents
     });
 
     const response = await request(app)
@@ -764,6 +803,7 @@ describe('app routes', () => {
         opponentsCount: 2,
         opponents: [
           {
+            userId: 'user-42',
             commanderNames: ['Ghave, Guru of Spores'],
             colorIdentity: 'WBG'
           }
@@ -773,6 +813,7 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
+    expect(recordRecentOpponents).toHaveBeenCalledWith('user-888', ['user-42']);
     expect(createGameLog).toHaveBeenCalledWith('user-888', expect.objectContaining({
       deckId: 'deck-1',
       deckName: 'Esper Knights',
@@ -780,6 +821,7 @@ describe('app routes', () => {
       opponentsCount: 2,
       opponents: [
         {
+          userId: 'user-42',
           name: null,
           commanderNames: ['Ghave, Guru of Spores'],
           commanderLinks: [null],
@@ -805,10 +847,12 @@ describe('app routes', () => {
         createdAt: '2025-02-14T00:00:00.000Z'
       }
     ]);
+    const recordRecentOpponents = vi.fn().mockResolvedValue(undefined);
     const app = createApp({
       verifyGoogleIdToken,
       upsertUser,
-      updateGameLog
+      updateGameLog,
+      recordRecentOpponents
     });
 
     const response = await request(app)
@@ -817,12 +861,13 @@ describe('app routes', () => {
       .send({
         datePlayed: '2025-02-15',
         opponentsCount: 3,
-        opponents: [],
+        opponents: [{ userId: 'user-77', name: 'Opponent', commanderNames: [], colorIdentity: null }],
         result: 'win'
       })
       .expect(200);
 
     expect(response.body.success).toBe(true);
+    expect(recordRecentOpponents).toHaveBeenCalledWith('user-999', ['user-77']);
     expect(updateGameLog).toHaveBeenCalledWith('user-999', 'log-5', expect.objectContaining({
       playedAt: '2025-02-15',
       opponentsCount: 3,

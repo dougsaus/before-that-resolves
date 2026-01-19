@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
+import { useOpponentUsers, type OpponentUser } from '../hooks/useOpponentUsers';
 import { buildApiUrl } from '../utils/api';
 import { parseLocalDate } from '../utils/date';
 
@@ -24,6 +25,13 @@ function formatLastPlayed(lastPlayed: string | null): string {
   if (!lastPlayed) return '—';
   const date = parseLocalDate(lastPlayed);
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatOpponentUserLabel(user: { name?: string | null; email?: string | null }): string {
+  const name = user.name?.trim() ?? '';
+  const email = user.email?.trim() ?? '';
+  if (name && email) return `${name} <${email}>`;
+  return name || email || 'Unknown user';
 }
 
 function getDeckSource(input: string): 'archidekt' | 'moxfield' | null {
@@ -106,6 +114,10 @@ type CommanderEntry = {
 };
 
 type OpponentForm = {
+  userId: string | null;
+  userLabel: string | null;
+  searchMessage: string | null;
+  searchStatus: 'matched' | 'not-found' | 'multiple' | 'error' | null;
   name: string;
   commanders: CommanderEntry[];
   colorIdentity: string;
@@ -185,6 +197,7 @@ export function DeckCollection({
   const popupRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
   const imageUrl = useMemo(() => (hoverCard ? getScryfallImageUrl(hoverCard.label) : null), [hoverCard]);
+  const opponentDropdownRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const sortLabels: Record<SortKey, string> = {
     name: 'Deck name',
@@ -201,6 +214,19 @@ export function DeckCollection({
     loading: logLoading,
     statusMessage: logStatusMessage
   } = useGameLogs(idToken, { autoLoad: false });
+  const {
+    recentOpponents,
+    recentError,
+    recentLoading,
+    searchResults,
+    searchError,
+    searchLoading,
+    loadRecentOpponents,
+    searchOpponents,
+    clearSearch
+  } = useOpponentUsers(idToken);
+  const [recentOpenIndex, setRecentOpenIndex] = useState<number | null>(null);
+  const [searchOpenIndex, setSearchOpenIndex] = useState<number | null>(null);
   useEffect(() => {
     const update = () => {
       setViewport({ width: window.innerWidth, height: window.innerHeight });
@@ -209,6 +235,37 @@ export function DeckCollection({
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
+  useEffect(() => {
+    if (recentOpenIndex === null && searchOpenIndex === null) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (opponentDropdownRef.current?.contains(target)) return;
+      setRecentOpenIndex(null);
+      setSearchOpenIndex(null);
+      clearSearch();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [clearSearch, recentOpenIndex, searchOpenIndex]);
+  useEffect(() => {
+    if (!logTarget || !idToken) return;
+    void loadRecentOpponents();
+  }, [logTarget, idToken, loadRecentOpponents]);
+
+  useEffect(() => {
+    if (searchOpenIndex === null || !searchError) return;
+    setLogOpponents((current) => {
+      const next = [...current];
+      if (next[searchOpenIndex]) {
+        next[searchOpenIndex] = {
+          ...next[searchOpenIndex],
+          searchMessage: searchError,
+          searchStatus: 'error'
+        };
+      }
+      return next;
+    });
+  }, [searchError, searchOpenIndex]);
 
   const hoverPosition = useMemo(() => {
     if (!hoverCard) return null;
@@ -417,6 +474,9 @@ export function DeckCollection({
     setLogTags([]);
     setLogCustomTagInput('');
     setLogFormError(null);
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
   };
 
   const toggleLogTag = (tag: string) => {
@@ -437,14 +497,24 @@ export function DeckCollection({
 
   const addLogOpponent = () => {
     setLogOpponents((current) => [...current, {
+      userId: null,
+      userLabel: null,
+      searchMessage: null,
+      searchStatus: null,
       name: '',
       commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
       colorIdentity: ''
     }]);
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
   };
 
   const removeLogOpponent = (index: number) => {
     setLogOpponents((current) => current.filter((_, i) => i !== index));
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
   };
 
   const openLogModal = (deck: DeckEntry) => {
@@ -578,10 +648,96 @@ export function DeckCollection({
     setLogOpponents((current) => {
       const next = [...current];
       if (next[opponentIndex]) {
-        next[opponentIndex] = { ...next[opponentIndex], [field]: value };
+        next[opponentIndex] = {
+          ...next[opponentIndex],
+          [field]: value,
+          ...(field === 'name'
+            ? { userId: null, userLabel: null, searchMessage: null, searchStatus: null }
+            : {})
+        };
       }
       return next;
     });
+  };
+
+  const applyLogOpponentUser = (opponentIndex: number, user: OpponentUser) => {
+    const label = formatOpponentUserLabel(user);
+    setLogOpponents((current) => {
+      const next = [...current];
+      if (next[opponentIndex]) {
+        next[opponentIndex] = {
+          ...next[opponentIndex],
+          userId: user.id,
+          name: (user.name ?? user.email ?? '').trim(),
+          userLabel: label,
+          searchMessage: `Matched user: ${label}`,
+          searchStatus: 'matched'
+        };
+      }
+      return next;
+    });
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
+  };
+
+  const handleLogOpponentSearch = async (opponentIndex: number) => {
+    if (!idToken) {
+      setLogFormError('Sign in with Google to search opponents.');
+      return;
+    }
+    const query = logOpponents[opponentIndex]?.name?.trim() ?? '';
+    if (!query) {
+      setLogFormError('Enter a name or email to search.');
+      return;
+    }
+    setLogFormError(null);
+    setSearchOpenIndex(opponentIndex);
+    setRecentOpenIndex(null);
+    setLogOpponents((current) => {
+      const next = [...current];
+      if (next[opponentIndex]) {
+        next[opponentIndex] = {
+          ...next[opponentIndex],
+          searchMessage: null,
+          searchStatus: null
+        };
+      }
+      return next;
+    });
+    const results = await searchOpponents(query);
+    if (results.length === 1) {
+      applyLogOpponentUser(opponentIndex, results[0]);
+      return;
+    }
+    setLogOpponents((current) => {
+      const next = [...current];
+      if (next[opponentIndex]) {
+        next[opponentIndex] = {
+          ...next[opponentIndex],
+          searchMessage: results.length === 0
+            ? 'No users found.'
+            : 'Multiple users found. Select one.',
+          searchStatus: results.length === 0 ? 'not-found' : 'multiple'
+        };
+      }
+      return next;
+    });
+  };
+
+  const openRecentOpponents = async (opponentIndex: number) => {
+    if (!idToken) {
+      setLogFormError('Sign in with Google to view recent opponents.');
+      return;
+    }
+    setLogFormError(null);
+    const nextIndex = opponentIndex;
+    setRecentOpenIndex(nextIndex);
+    setSearchOpenIndex(null);
+    clearSearch();
+    if (nextIndex !== null && recentOpponents.length === 0 && !recentLoading) {
+      await loadRecentOpponents();
+    }
   };
 
   const updateLogOpponentCommander = (opponentIndex: number, commanderIndex: number, value: string) => {
@@ -719,6 +875,7 @@ export function DeckCollection({
       durationMinutes: parseOptionalNumberInput(logDurationMinutes),
       opponentsCount: logOpponents.length,
       opponents: logOpponents.map((opponent) => ({
+        userId: opponent.userId,
         name: opponent.name.trim(),
         commanderNames: opponent.commanders
           .map((cmd) => cmd.name.trim())
@@ -1256,23 +1413,42 @@ export function DeckCollection({
                   <div
                     key={`${logTarget.id}-opponent-${opponentIndex}`}
                     className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
+                    ref={opponentIndex === recentOpenIndex || opponentIndex === searchOpenIndex ? opponentDropdownRef : null}
                   >
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="text"
-                          value={opponent.name}
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={opponent.name}
                           onChange={(event) => updateLogOpponentField(opponentIndex, 'name', event.target.value)}
+                          onFocus={() => openRecentOpponents(opponentIndex)}
                           placeholder="Name"
-                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          className="w-full min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                         />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleLogOpponentSearch(opponentIndex)}
+                            disabled={searchLoading && searchOpenIndex === opponentIndex}
+                            className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                          >
+                            {searchLoading && searchOpenIndex === opponentIndex ? 'Searching...' : 'Search'}
+                          </button>
+                        </div>
                         <div className="flex-1 min-w-0">
                           <ColorIdentitySelect
                             label=""
                             value={opponent.colorIdentity}
-                            onChange={(value) => updateLogOpponentField(opponentIndex, 'colorIdentity', value)}
-                          />
-                        </div>
+                          onChange={(value) => updateLogOpponentField(opponentIndex, 'colorIdentity', value)}
+                          onFocus={() => {
+                            setRecentOpenIndex(null);
+                            setSearchOpenIndex(null);
+                            clearSearch();
+                          }}
+                        />
+                      </div>
                         <button
                           type="button"
                           onClick={() => removeLogOpponent(opponentIndex)}
@@ -1284,6 +1460,61 @@ export function DeckCollection({
                           </svg>
                         </button>
                       </div>
+                      {recentOpenIndex === opponentIndex && (
+                        <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
+                          <p className="text-xs text-gray-400 mb-2">Recent opponents</p>
+                          {recentLoading && <p className="text-xs text-gray-400">Loading recent opponents...</p>}
+                          {recentError && <p className="text-xs text-red-400">{recentError}</p>}
+                          {!recentLoading && recentOpponents.length === 0 && (
+                            <p className="text-xs text-gray-500">No recent opponents yet.</p>
+                          )}
+                          {recentOpponents.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => applyLogOpponentUser(opponentIndex, user)}
+                              className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
+                            >
+                              {formatOpponentUserLabel(user)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {searchOpenIndex === opponentIndex && (
+                        <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
+                          <p className="text-xs text-gray-400 mb-2">Search results</p>
+                          {searchLoading && <p className="text-xs text-gray-400">Searching users...</p>}
+                          {searchError && <p className="text-xs text-red-400">{searchError}</p>}
+                          {!searchLoading && searchResults.length === 0 && (
+                            <p className="text-xs text-gray-500">No matching users found.</p>
+                          )}
+                          {searchResults.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => applyLogOpponentUser(opponentIndex, user)}
+                              className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
+                            >
+                              {formatOpponentUserLabel(user)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {opponent.searchMessage && (
+                        <p
+                          className={`text-xs ${
+                            opponent.searchStatus === 'matched'
+                              ? 'text-emerald-300'
+                              : opponent.searchStatus === 'not-found'
+                                ? 'text-amber-300'
+                                : opponent.searchStatus === 'error'
+                                  ? 'text-red-400'
+                                  : 'text-gray-400'
+                          }`}
+                        >
+                          {opponent.searchMessage}
+                        </p>
+                      )}
                       <div className="flex flex-col gap-2">
                         <p className="text-xs text-gray-400">Commanders (0-2)</p>
                         {opponent.commanders.map((commander, cmdIndex) => (
@@ -1292,6 +1523,11 @@ export function DeckCollection({
                               type="text"
                               value={commander.name}
                               onChange={(event) => updateLogOpponentCommander(opponentIndex, cmdIndex, event.target.value)}
+                              onFocus={() => {
+                                setRecentOpenIndex(null);
+                                setSearchOpenIndex(null);
+                                clearSearch();
+                              }}
                               placeholder={`Commander ${cmdIndex + 1}`}
                               className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                             />
