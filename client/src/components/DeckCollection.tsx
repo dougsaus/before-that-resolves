@@ -4,6 +4,7 @@ import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
 import { buildApiUrl } from '../utils/api';
+import { parseLocalDate } from '../utils/date';
 
 const PREDEFINED_TAGS = [
   'mulligan',
@@ -17,14 +18,6 @@ const PREDEFINED_TAGS = [
 function formatWinRate(winRate: number | null): string {
   if (winRate === null) return '—';
   return `${Math.round(winRate * 100)}%`;
-}
-
-function parseLocalDate(input: string): Date {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-  if (match) {
-    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  }
-  return new Date(input);
 }
 
 function formatLastPlayed(lastPlayed: string | null): string {

@@ -17,6 +17,7 @@ import type { DeckStats, GameLogEntry, GameLogInput, GameLogUpdate } from './ser
 import { createGameLog, getDeckStats, listGameLogs, removeGameLog, updateGameLog } from './services/game-logs';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
+import { normalizeDateInput } from './utils/date';
 import { generateChatPdf } from './services/pdf';
 import { scryfallService } from './services/scryfall';
 import type { Card } from './types/shared';
@@ -184,18 +185,6 @@ export function createApp(deps: AppDeps = {}) {
       return Array.from(new Set(colors)).sort((a, b) => order.indexOf(a) - order.indexOf(b));
     }
     return [];
-  };
-  const normalizeDateInput = (input: unknown): string => {
-    if (input instanceof Date) {
-      return input.toISOString().slice(0, 10);
-    }
-    if (typeof input === 'string') {
-      const parsed = new Date(input);
-      if (!Number.isNaN(parsed.valueOf())) {
-        return parsed.toISOString().slice(0, 10);
-      }
-    }
-    return new Date().toISOString().slice(0, 10);
   };
   const parseResultInput = (input: unknown): 'win' | 'loss' | null => {
     if (input === undefined || input === null || input === '') {
