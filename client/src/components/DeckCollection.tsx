@@ -34,6 +34,19 @@ function formatOpponentUserLabel(user: { name?: string | null; email?: string | 
   return name || email || 'Unknown user';
 }
 
+function createLogOpponent(): OpponentForm {
+  return {
+    id: crypto.randomUUID(),
+    userId: null,
+    userLabel: null,
+    searchMessage: null,
+    searchStatus: null,
+    name: '',
+    commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
+    colorIdentity: ''
+  };
+}
+
 function getDeckSource(input: string): 'archidekt' | 'moxfield' | null {
   if (!input.trim()) return null;
   try {
@@ -114,6 +127,7 @@ type CommanderEntry = {
 };
 
 type OpponentForm = {
+  id: string;
   userId: string | null;
   userLabel: string | null;
   searchMessage: string | null;
@@ -496,15 +510,7 @@ export function DeckCollection({
   };
 
   const addLogOpponent = () => {
-    setLogOpponents((current) => [...current, {
-      userId: null,
-      userLabel: null,
-      searchMessage: null,
-      searchStatus: null,
-      name: '',
-      commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
-      colorIdentity: ''
-    }]);
+    setLogOpponents((current) => [...current, createLogOpponent()]);
     setRecentOpenIndex(null);
     setSearchOpenIndex(null);
     clearSearch();
@@ -660,20 +666,20 @@ export function DeckCollection({
     });
   };
 
-  const applyLogOpponentUser = (opponentIndex: number, user: OpponentUser) => {
+  const applyLogOpponentUser = (opponentId: string, user: OpponentUser) => {
     const label = formatOpponentUserLabel(user);
     setLogOpponents((current) => {
       const next = [...current];
-      if (next[opponentIndex]) {
-        next[opponentIndex] = {
-          ...next[opponentIndex],
-          userId: user.id,
-          name: (user.name ?? user.email ?? '').trim(),
-          userLabel: label,
-          searchMessage: `Matched user: ${label}`,
-          searchStatus: 'matched'
-        };
-      }
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        userId: user.id,
+        name: (user.name ?? user.email ?? '').trim(),
+        userLabel: label,
+        searchMessage: `Matched user: ${label}`,
+        searchStatus: 'matched'
+      };
       return next;
     });
     setRecentOpenIndex(null);
@@ -686,6 +692,8 @@ export function DeckCollection({
       setLogFormError('Sign in with Google to search opponents.');
       return;
     }
+    const opponentId = logOpponents[opponentIndex]?.id;
+    if (!opponentId) return;
     const query = logOpponents[opponentIndex]?.name?.trim() ?? '';
     if (!query) {
       setLogFormError('Enter a name or email to search.');
@@ -696,31 +704,31 @@ export function DeckCollection({
     setRecentOpenIndex(null);
     setLogOpponents((current) => {
       const next = [...current];
-      if (next[opponentIndex]) {
-        next[opponentIndex] = {
-          ...next[opponentIndex],
-          searchMessage: null,
-          searchStatus: null
-        };
-      }
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        searchMessage: null,
+        searchStatus: null
+      };
       return next;
     });
     const results = await searchOpponents(query);
     if (results.length === 1) {
-      applyLogOpponentUser(opponentIndex, results[0]);
+      applyLogOpponentUser(opponentId, results[0]);
       return;
     }
     setLogOpponents((current) => {
       const next = [...current];
-      if (next[opponentIndex]) {
-        next[opponentIndex] = {
-          ...next[opponentIndex],
-          searchMessage: results.length === 0
-            ? 'No users found.'
-            : 'Multiple users found. Select one.',
-          searchStatus: results.length === 0 ? 'not-found' : 'multiple'
-        };
-      }
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        searchMessage: results.length === 0
+          ? 'No users found.'
+          : 'Multiple users found. Select one.',
+        searchStatus: results.length === 0 ? 'not-found' : 'multiple'
+      };
       return next;
     });
   };
@@ -1472,7 +1480,7 @@ export function DeckCollection({
                             <button
                               key={user.id}
                               type="button"
-                              onClick={() => applyLogOpponentUser(opponentIndex, user)}
+                              onClick={() => applyLogOpponentUser(opponent.id, user)}
                               className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
                             >
                               {formatOpponentUserLabel(user)}
@@ -1492,7 +1500,7 @@ export function DeckCollection({
                             <button
                               key={user.id}
                               type="button"
-                              onClick={() => applyLogOpponentUser(opponentIndex, user)}
+                              onClick={() => applyLogOpponentUser(opponent.id, user)}
                               className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
                             >
                               {formatOpponentUserLabel(user)}

@@ -61,6 +61,19 @@ function formatOpponentUserLabel(user: { name?: string | null; email?: string | 
   return name || email || 'Unknown user';
 }
 
+function createEditOpponent(): OpponentForm {
+  return {
+    id: crypto.randomUUID(),
+    userId: null,
+    userLabel: null,
+    searchMessage: null,
+    searchStatus: null,
+    name: '',
+    commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
+    colorIdentity: ''
+  };
+}
+
 type CommanderEntry = {
   name: string;
   link: string | null;
@@ -68,6 +81,7 @@ type CommanderEntry = {
 };
 
 type OpponentForm = {
+  id: string;
   userId: string | null;
   userLabel: string | null;
   searchMessage: string | null;
@@ -211,6 +225,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setEditDurationMinutes(log.durationMinutes ? String(log.durationMinutes) : '');
     setEditOpponents(
       log.opponents.map((opponent) => ({
+        id: crypto.randomUUID(),
         userId: opponent.userId ?? null,
         userLabel: null,
         searchMessage: null,
@@ -260,15 +275,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   };
 
   const addEditOpponent = () => {
-    setEditOpponents((current) => [...current, {
-      userId: null,
-      userLabel: null,
-      searchMessage: null,
-      searchStatus: null,
-      name: '',
-      commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
-      colorIdentity: ''
-    }]);
+    setEditOpponents((current) => [...current, createEditOpponent()]);
     setRecentOpenIndex(null);
     setSearchOpenIndex(null);
     clearSearch();
@@ -297,20 +304,20 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     });
   };
 
-  const applyEditOpponentUser = (opponentIndex: number, user: OpponentUser) => {
+  const applyEditOpponentUser = (opponentId: string, user: OpponentUser) => {
     const label = formatOpponentUserLabel(user);
     setEditOpponents((current) => {
       const next = [...current];
-      if (next[opponentIndex]) {
-        next[opponentIndex] = {
-          ...next[opponentIndex],
-          userId: user.id,
-          name: (user.name ?? user.email ?? '').trim(),
-          userLabel: label,
-          searchMessage: `Matched user: ${label}`,
-          searchStatus: 'matched'
-        };
-      }
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        userId: user.id,
+        name: (user.name ?? user.email ?? '').trim(),
+        userLabel: label,
+        searchMessage: `Matched user: ${label}`,
+        searchStatus: 'matched'
+      };
       return next;
     });
     setRecentOpenIndex(null);
@@ -323,6 +330,8 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
       setEditFormError('Sign in with Google to search opponents.');
       return;
     }
+    const opponentId = editOpponents[opponentIndex]?.id;
+    if (!opponentId) return;
     const query = editOpponents[opponentIndex]?.name?.trim() ?? '';
     if (!query) {
       setEditFormError('Enter a name or email to search.');
@@ -333,31 +342,31 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     setRecentOpenIndex(null);
     setEditOpponents((current) => {
       const next = [...current];
-      if (next[opponentIndex]) {
-        next[opponentIndex] = {
-          ...next[opponentIndex],
-          searchMessage: null,
-          searchStatus: null
-        };
-      }
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        searchMessage: null,
+        searchStatus: null
+      };
       return next;
     });
     const results = await searchOpponents(query);
     if (results.length === 1) {
-      applyEditOpponentUser(opponentIndex, results[0]);
+      applyEditOpponentUser(opponentId, results[0]);
       return;
     }
     setEditOpponents((current) => {
       const next = [...current];
-      if (next[opponentIndex]) {
-        next[opponentIndex] = {
-          ...next[opponentIndex],
-          searchMessage: results.length === 0
-            ? 'No users found.'
-            : 'Multiple users found. Select one.',
-          searchStatus: results.length === 0 ? 'not-found' : 'multiple'
-        };
-      }
+      const index = next.findIndex((opponent) => opponent.id === opponentId);
+      if (index === -1) return current;
+      next[index] = {
+        ...next[index],
+        searchMessage: results.length === 0
+          ? 'No users found.'
+          : 'Multiple users found. Select one.',
+        searchStatus: results.length === 0 ? 'not-found' : 'multiple'
+      };
       return next;
     });
   };
@@ -948,7 +957,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                             <button
                               key={user.id}
                               type="button"
-                              onClick={() => applyEditOpponentUser(opponentIndex, user)}
+                              onClick={() => applyEditOpponentUser(opponent.id, user)}
                               className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
                             >
                               {formatOpponentUserLabel(user)}
@@ -968,7 +977,7 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                             <button
                               key={user.id}
                               type="button"
-                              onClick={() => applyEditOpponentUser(opponentIndex, user)}
+                              onClick={() => applyEditOpponentUser(opponent.id, user)}
                               className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
                             >
                               {formatOpponentUserLabel(user)}
