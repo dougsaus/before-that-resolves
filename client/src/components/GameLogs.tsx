@@ -153,6 +153,7 @@ export function GameLogs({
     loading,
     error,
     statusMessage,
+    addLog,
     removeLog,
     updateLog,
     shareLog,
@@ -196,11 +197,18 @@ export function GameLogs({
   const initialSort = loadSortPrefs();
   const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'playedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'desc');
+  const today = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
   const [editTarget, setEditTarget] = useState<{
     id: string;
     deckName: string | null;
     deckId: string | null;
-    kind: 'log' | 'shared';
+    kind: 'log' | 'shared' | 'new';
   } | null>(null);
   const [editDate, setEditDate] = useState('');
   const [editDeckId, setEditDeckId] = useState('');
@@ -313,6 +321,26 @@ export function GameLogs({
     if (!hoverCard) return null;
     return getScryfallImageUrl(hoverCard.label);
   }, [hoverCard]);
+
+  const resetEditForm = () => {
+    setEditDate(today);
+    setEditDeckId('');
+    setEditTurns('');
+    setEditDurationMinutes('');
+    setEditOpponents([]);
+    setEditResult('pending');
+    setEditTags([]);
+    setCustomTagInput('');
+    setEditFormError(null);
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
+  };
+
+  const openCreateModal = () => {
+    resetEditForm();
+    setEditTarget({ id: 'new', deckName: null, deckId: null, kind: 'new' });
+  };
 
   const openEditModal = (log: (typeof logs)[number]) => {
     setEditTarget({ id: log.id, deckName: log.deckName, deckId: log.deckId, kind: 'log' });
@@ -817,6 +845,10 @@ export function GameLogs({
       setEditFormError('Choose a log to edit.');
       return;
     }
+    if (editTarget.kind === 'new' && !editDeckId) {
+      setEditFormError('Choose a deck to log.');
+      return;
+    }
     setEditFormError(null);
     const opponentsPayload = editOpponents.map((opponent) => ({
       userId: opponent.userId,
@@ -843,12 +875,18 @@ export function GameLogs({
       tags: editTags
     };
 
-    const success = editTarget.kind === 'shared'
-      ? await updateSharedLog(editTarget.id, {
+    const success = editTarget.kind === 'new'
+      ? await addLog({
+          deckId: editDeckId,
           ...payload,
-          deckId: editDeckId ? editDeckId : null
+          datePlayed: editDate || today
         })
-      : await updateLog(editTarget.id, payload);
+      : editTarget.kind === 'shared'
+        ? await updateSharedLog(editTarget.id, {
+            ...payload,
+            deckId: editDeckId ? editDeckId : null
+          })
+        : await updateLog(editTarget.id, payload);
     if (success) {
       setEditTarget(null);
       setRecentOpenIndex(null);
@@ -1118,6 +1156,11 @@ export function GameLogs({
     return list;
   }, [logs, sortDir, sortKey]);
 
+  const selectedDeck = useMemo(
+    () => decks.find((deck) => deck.id === editDeckId) ?? null,
+    [decks, editDeckId]
+  );
+
   if (!enabled) {
     return (
       <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
@@ -1271,7 +1314,17 @@ export function GameLogs({
               Review recent Commander games logged from your deck list.
             </p>
           </div>
-          {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
+          <div className="flex flex-wrap items-center gap-3">
+            {logs.length > 0 && <span className="text-xs text-gray-500">{logs.length} total</span>}
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-500 px-5 py-2 text-sm font-semibold text-gray-900 shadow hover:bg-cyan-400"
+            >
+              <span className="text-lg leading-none">+</span>
+              Game Log
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
@@ -1419,17 +1472,31 @@ export function GameLogs({
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
           <div className="w-full max-w-3xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
-              <div>
-                <h3 className="text-lg font-semibold">Edit game log</h3>
-                <p className="text-sm text-gray-400">{editTarget.deckName ?? 'Select deck'}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">
+                    {editTarget.kind === 'new' ? 'Log a game' : 'Edit game log'}
+                  </h3>
+                  <p className="text-sm text-gray-400">
+                    {editTarget.kind === 'new'
+                      ? selectedDeck?.name ?? 'Select deck'
+                      : editTarget.deckName ?? 'Select deck'}
+                  </p>
+                </div>
+                {editTarget.kind === 'new' && statusMessage && (
+                  <span className="text-xs text-emerald-300">{statusMessage}</span>
+                )}
               </div>
-              {editTarget.kind === 'shared' && (
+              {(editTarget.kind === 'shared' || editTarget.kind === 'new') && (
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm text-gray-300" htmlFor="shared-log-deck">
-                    Your deck
+                  <label
+                    className="text-sm text-gray-300"
+                    htmlFor={editTarget.kind === 'shared' ? 'shared-log-deck' : 'new-log-deck'}
+                  >
+                    {editTarget.kind === 'shared' ? 'Your deck' : 'Deck'}
                   </label>
                   <select
-                    id="shared-log-deck"
+                    id={editTarget.kind === 'shared' ? 'shared-log-deck' : 'new-log-deck'}
                     value={editDeckId}
                     onChange={(event) => setEditDeckId(event.target.value)}
                     className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
@@ -1445,8 +1512,13 @@ export function GameLogs({
                   {!decksLoading && decks.length === 0 && (
                     <p className="text-xs text-gray-500">No decks found in your collection.</p>
                   )}
+                  {editTarget.kind === 'new' && !editDeckId && (
+                    <p className="text-xs text-gray-500">Select a deck to continue.</p>
+                  )}
                 </div>
               )}
+              {(editTarget.kind !== 'new' || editDeckId) && (
+                <>
               <label className="flex flex-col gap-2 text-sm text-gray-300">
                 Date played
                 <input
@@ -1832,6 +1904,8 @@ export function GameLogs({
                   </button>
                 </div>
               </div>
+                </>
+              )}
               {editFormError && <p className="text-xs text-red-400">{editFormError}</p>}
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
@@ -1849,9 +1923,10 @@ export function GameLogs({
                 <button
                   type="button"
                   onClick={handleSaveEdit}
-                  className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400"
+                  disabled={editTarget.kind === 'new' && !editDeckId}
+                  className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
                 >
-                  Save changes
+                  {editTarget.kind === 'new' ? 'Save log' : 'Save changes'}
                 </button>
               </div>
             </div>

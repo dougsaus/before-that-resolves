@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GameLogs } from './GameLogs';
 import type { GameLogEntry } from '../hooks/useGameLogs';
@@ -90,6 +90,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -129,6 +130,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -151,6 +153,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -188,6 +191,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -207,6 +211,52 @@ describe('GameLogs', () => {
     expect(deckNames[0]).toBe('Loss Deck');
   });
 
+  it('creates a new game log after selecting a deck', async () => {
+    const user = userEvent.setup();
+    const addLog = vi.fn().mockResolvedValue(true);
+    mockUseGameLogs.mockReturnValue({
+      logs: [],
+      loading: false,
+      error: null,
+      statusMessage: null,
+      addLog,
+      removeLog: vi.fn(),
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
+    });
+
+    renderGameLogs({
+      decks: [
+        {
+          id: 'deck-1',
+          name: 'Alpha Deck',
+          url: null,
+          commanderNames: [],
+          commanderLinks: [],
+          colorIdentity: null,
+          source: 'manual',
+          addedAt: '2026-01-12T00:00:00.000Z',
+          stats: null
+        }
+      ]
+    });
+
+    await user.click(screen.getByRole('button', { name: /Game Log/ }));
+
+    expect(screen.queryByLabelText('Date played')).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Deck'), 'deck-1');
+
+    expect(screen.getByLabelText('Date played')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save log' }));
+
+    await waitFor(() => {
+      expect(addLog).toHaveBeenCalledWith(expect.objectContaining({ deckId: 'deck-1' }));
+    });
+  });
+
   it('sorts by game length minutes and turns', async () => {
     const user = userEvent.setup();
     mockUseGameLogs.mockReturnValue({
@@ -217,6 +267,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -246,6 +297,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -284,6 +336,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog,
       shareLog: vi.fn(),
@@ -359,6 +412,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
@@ -378,6 +432,7 @@ describe('GameLogs', () => {
       loading: false,
       error: null,
       statusMessage: null,
+      addLog: vi.fn(),
       removeLog: vi.fn(),
       updateLog: vi.fn(),
       shareLog: vi.fn(),
