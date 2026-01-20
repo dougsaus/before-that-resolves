@@ -5,7 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
-import { cacheDeckFromUrl, fetchDeckSummary as fetchDeckSummaryService, getDeckSourceFromUrl, resetDeckCache as resetDeckCacheService } from './services/deck';
+import {
+  cacheDeckFromUrl,
+  fetchDeckImportCandidates as fetchDeckImportCandidatesService,
+  fetchDeckSummary as fetchDeckSummaryService,
+  getDeckSourceFromUrl,
+  resetDeckCache as resetDeckCacheService
+} from './services/deck';
 import type { DeckCollectionInput } from './services/deck-collection';
 import {
   listDeckCollection,
@@ -61,6 +67,13 @@ type AppDeps = {
     colorIdentity: string[];
     source: 'archidekt' | 'moxfield';
   }>;
+  fetchDeckImportCandidates?: (profileUrl: string) => Promise<Array<{
+    id: string;
+    name: string;
+    format: string | null;
+    url: string;
+    source: 'archidekt' | 'moxfield';
+  }>>;
   searchScryfallCardByName?: (name: string) => Promise<Card | null>;
   listDeckCollection?: (userId: string) => Promise<Array<{
     id: string;
@@ -189,6 +202,7 @@ export function createApp(deps: AppDeps = {}) {
   const exportChatPdf = deps.generateChatPdf ?? generateChatPdf;
   const verifyGoogleToken = deps.verifyGoogleIdToken ?? verifyGoogleIdToken;
   const fetchDeckSummary = deps.fetchDeckSummary ?? fetchDeckSummaryService;
+  const fetchDeckImportCandidates = deps.fetchDeckImportCandidates ?? fetchDeckImportCandidatesService;
   const listUserDecks = deps.listDeckCollection ?? listDeckCollection;
   const listOpponentDecks = deps.listOpponentDecks ?? listDeckCollection;
   const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
@@ -693,6 +707,85 @@ export function createApp(deps: AppDeps = {}) {
         error: getErrorMessage(error, 'Failed to load deck')
       });
     }
+  });
+
+  app.post('/api/decks/bulk/preview', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { profileUrl } = req.body;
+    if (!profileUrl || typeof profileUrl !== 'string' || !profileUrl.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'profileUrl is required'
+      });
+      return;
+    }
+
+    try {
+      const decks = await fetchDeckImportCandidates(profileUrl);
+      res.json({ success: true, decks });
+    } catch (error: unknown) {
+      res.status(400).json({
+        success: false,
+        error: getErrorMessage(error, 'Failed to load decks')
+      });
+    }
+  });
+
+  app.post('/api/decks/bulk', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { deckUrls } = req.body;
+    if (!Array.isArray(deckUrls) || deckUrls.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'deckUrls is required'
+      });
+      return;
+    }
+
+    const normalizedUrls = deckUrls
+      .filter((value) => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (normalizedUrls.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'deckUrls is required'
+      });
+      return;
+    }
+
+    const failures: Array<{ deckUrl: string; error: string }> = [];
+    for (const deckUrl of normalizedUrls) {
+      try {
+        const summary = await fetchDeckSummary(deckUrl);
+        const { commanderNames: resolvedCommanderNames, commanderLinks } = await resolveCommanderEntries(
+          summary.commanderNames,
+          true
+        );
+        await addDeckToCollection(user.id, {
+          ...summary,
+          url: summary.url,
+          format: summary.format,
+          commanderNames: resolvedCommanderNames,
+          commanderLinks,
+          colorIdentity: summary.colorIdentity,
+          source: summary.source
+        });
+      } catch (error: unknown) {
+        failures.push({
+          deckUrl,
+          error: getErrorMessage(error, 'Failed to import deck')
+        });
+      }
+    }
+
+    const decks = await listUserDecks(user.id);
+    const decksWithStats = await attachDeckStats(user.id, decks);
+    res.json({ success: true, decks: decksWithStats, failures });
   });
 
   app.post('/api/scryfall/lookup', async (req, res) => {

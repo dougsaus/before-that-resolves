@@ -3,6 +3,7 @@ import {
   buildArchidektDeckData,
   buildMoxfieldDeckData,
   cacheDeckFromUrl,
+  fetchDeckImportCandidates,
   fetchDeckSummary,
   getLastCachedDeck
 } from './deck';
@@ -197,5 +198,69 @@ describe('deck service', () => {
     expect(summary.commanderNames).toEqual(['Satoru Umezawa']);
     expect(summary.colorIdentity).toEqual(['U', 'B']);
     expect(summary.source).toBe('moxfield');
+  });
+
+  it('lists Archidekt decks for a profile URL', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: [{ id: 123, username: 'DeckOwner' }]
+        })
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          decks: [{ id: 987, name: 'Bulk Deck', private: false }]
+        })
+      } as unknown as Response);
+
+    const result = await fetchDeckImportCandidates('https://archidekt.com/u/DeckOwner');
+
+    expect(result).toEqual([
+      {
+        id: '987',
+        name: 'Bulk Deck',
+        format: null,
+        url: 'https://archidekt.com/decks/987',
+        source: 'archidekt'
+      }
+    ]);
+  });
+
+  it('lists Moxfield decks for a profile URL', async () => {
+    vi.stubEnv('MOXFIELD_USER_AGENT', 'test-agent');
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [
+          {
+            publicId: 'abc123',
+            name: 'Mox Bulk',
+            format: 'commander',
+            publicUrl: 'https://moxfield.com/decks/abc123'
+          }
+        ],
+        totalPages: 1
+      })
+    } as unknown as Response);
+
+    const result = await fetchDeckImportCandidates('https://moxfield.com/users/TestUser');
+
+    expect(result).toEqual([
+      {
+        id: 'abc123',
+        name: 'Mox Bulk',
+        format: 'commander',
+        url: 'https://moxfield.com/decks/abc123',
+        source: 'moxfield'
+      }
+    ]);
   });
 });
