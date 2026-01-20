@@ -56,6 +56,24 @@ type GameLogResponse = {
   error?: string;
 };
 
+type ShareLogResponse = {
+  success: boolean;
+  sharedCount?: number;
+  reopenedCount?: number;
+  skippedCount?: number;
+  needsConfirm?: boolean;
+  rejectedCount?: number;
+  acceptedCount?: number;
+  pendingCount?: number;
+  nonUserCount?: number;
+  opponents?: Array<{
+    userId: string;
+    name: string | null;
+    status: 'pending' | 'accepted' | 'rejected' | null;
+  }>;
+  error?: string;
+};
+
 export function useGameLogs(
   idToken: string | null,
   options: { autoLoad?: boolean } = {}
@@ -195,6 +213,65 @@ export function useGameLogs(
     }
   }, [headers]);
 
+  const shareLog = useCallback(async (
+    logId: string,
+    options: { confirmReshare?: boolean; reshareRecipientIds?: string[] } = {}
+  ): Promise<ShareLogResponse | null> => {
+    if (!headers) {
+      setError('Sign in with Google to share game logs.');
+      return null;
+    }
+    setLoading(true);
+    setError(null);
+    setStatusMessage(null);
+    try {
+      const response = await fetch(buildApiUrl(`/api/game-logs/${logId}/share`), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          confirmReshare: options.confirmReshare ?? false,
+          reshareRecipientIds: options.reshareRecipientIds ?? null
+        })
+      });
+      const payload = (await response.json()) as ShareLogResponse;
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to share game log.');
+      }
+      if (!payload.needsConfirm) {
+        const acceptedCount = payload.acceptedCount ?? 0;
+        const pendingCount = payload.pendingCount ?? 0;
+        const rejectedCount = payload.rejectedCount ?? 0;
+        const nonUserCount = payload.nonUserCount ?? 0;
+        const sharedParts: string[] = [];
+        if (pendingCount > 0) sharedParts.push(`${pendingCount} pending`);
+        if (rejectedCount > 0) sharedParts.push(`${rejectedCount} rejected`);
+        if (acceptedCount > 0) sharedParts.push(`${acceptedCount} accepted`);
+        const sharedMessage = sharedParts.length > 0
+          ? `Game log shared: ${sharedParts.join(', ')}.`
+          : null;
+        const notSharedMessage =
+          nonUserCount > 0 ? ` Not shared: ${nonUserCount} (not users)` : '';
+        if (sharedMessage) {
+          setStatusMessage(`${sharedMessage}${notSharedMessage}`);
+          return payload;
+        }
+        if (nonUserCount > 0) {
+          setStatusMessage('All opponents are non-users');
+          return payload;
+        }
+        setStatusMessage('No opponents to share log');
+        return payload;
+      }
+      return payload;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to share game log.';
+      setError(message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [headers]);
+
   return {
     logs,
     loading,
@@ -203,6 +280,7 @@ export function useGameLogs(
     addLog,
     removeLog,
     updateLog,
+    shareLog,
     refreshLogs: loadLogs
   };
 }

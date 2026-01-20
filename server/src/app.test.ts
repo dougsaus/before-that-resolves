@@ -905,4 +905,233 @@ describe('app routes', () => {
       result: 'win'
     }));
   });
+
+  it('shares a game log with opponents', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({
+      id: 'user-101',
+      name: 'Sharer',
+      email: 'sharer@test.dev'
+    });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getGameLogById = vi.fn().mockResolvedValue({
+      id: 'log-22',
+      deckId: 'deck-22',
+      deckName: 'Mono Blue',
+      playedAt: '2025-03-10',
+      turns: 7,
+      durationMinutes: 55,
+      opponentsCount: 2,
+      opponents: [
+        {
+          userId: 'user-202',
+          name: 'Opponent One',
+          email: 'opp@test.dev',
+          deckId: 'deck-77',
+          deckName: 'Gruul Smash',
+          deckUrl: 'https://moxfield.com/decks/opp',
+          commanderNames: ['Xenagos, God of Revels'],
+          commanderLinks: [null],
+          colorIdentity: ['R', 'G']
+        }
+      ],
+      result: 'win',
+      tags: ['mulligan'],
+      createdAt: '2025-03-10T00:00:00.000Z'
+    });
+    const listDeckCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-22',
+        name: 'Mono Blue',
+        url: 'https://archidekt.com/decks/22/mono-blue',
+        format: 'commander',
+        commanderNames: ['Talrand, Sky Summoner'],
+        commanderLinks: ['https://scryfall.com/card/m13/72/talrand-sky-summoner'],
+        colorIdentity: ['U'],
+        source: 'archidekt',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const createSharedGameLog = vi.fn().mockResolvedValue(true);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertUser,
+      getGameLogById,
+      listDeckCollection,
+      createSharedGameLog
+    });
+
+    const response = await request(app)
+      .post('/api/game-logs/log-22/share')
+      .set('authorization', 'Bearer token-101')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(createSharedGameLog).toHaveBeenCalledWith(expect.objectContaining({
+      recipientUserId: 'user-202',
+      sharedByUserId: 'user-101',
+      sourceLogId: 'log-22',
+      deckId: 'deck-77',
+      deckName: 'Gruul Smash',
+      deckUrl: 'https://moxfield.com/decks/opp',
+      result: 'loss',
+      tags: [],
+      opponents: expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'user-101',
+          name: 'Sharer',
+          email: 'sharer@test.dev',
+          deckId: 'deck-22',
+          deckName: 'Mono Blue',
+          deckUrl: 'https://archidekt.com/decks/22/mono-blue',
+          commanderNames: ['Talrand, Sky Summoner'],
+          commanderLinks: ['https://scryfall.com/card/m13/72/talrand-sky-summoner'],
+          colorIdentity: ['U']
+        })
+      ])
+    }));
+  });
+
+  it('prompts to reshare when opponents rejected a shared log', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({
+      id: 'user-101',
+      name: 'Sharer',
+      email: 'sharer@test.dev'
+    });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getGameLogById = vi.fn().mockResolvedValue({
+      id: 'log-22',
+      deckId: 'deck-22',
+      deckName: 'Mono Blue',
+      playedAt: '2025-03-10',
+      turns: null,
+      durationMinutes: null,
+      opponentsCount: 1,
+      opponents: [
+        {
+          userId: 'user-202',
+          name: 'Opponent One',
+          email: null,
+          deckId: null,
+          deckName: null,
+          deckUrl: null,
+          commanderNames: [],
+          commanderLinks: [],
+          colorIdentity: null
+        }
+      ],
+      result: null,
+      tags: [],
+      createdAt: '2025-03-10T00:00:00.000Z'
+    });
+    const listDeckCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-22',
+        name: 'Mono Blue',
+        url: 'https://archidekt.com/decks/22/mono-blue',
+        format: 'commander',
+        commanderNames: ['Talrand, Sky Summoner'],
+        commanderLinks: [],
+        colorIdentity: ['U'],
+        source: 'archidekt',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const listSharedLogStatuses = vi.fn().mockResolvedValue(new Map([['user-202', 'rejected']]));
+    const createSharedGameLog = vi.fn().mockResolvedValue(false);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertUser,
+      getGameLogById,
+      listDeckCollection,
+      listSharedLogStatuses,
+      createSharedGameLog
+    });
+
+    const response = await request(app)
+      .post('/api/game-logs/log-22/share')
+      .set('authorization', 'Bearer token-101')
+      .send({ confirmReshare: false })
+      .expect(200);
+
+    expect(response.body.needsConfirm).toBe(true);
+    expect(response.body.rejectedCount).toBe(1);
+    expect(response.body.pendingCount).toBe(0);
+    expect(response.body.acceptedCount).toBe(0);
+  });
+
+  it('accepts a shared game log', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-333' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const getSharedGameLogById = vi.fn().mockResolvedValue({
+      id: 'shared-1',
+      recipientUserId: 'user-333',
+      sharedByUserId: 'user-444',
+      sourceLogId: 'log-55',
+      deckId: 'deck-99',
+      deckName: 'Izzet Spells',
+      deckUrl: 'https://moxfield.com/decks/izzet',
+      playedAt: '2025-04-01',
+      turns: 6,
+      durationMinutes: 50,
+      opponentsCount: 2,
+      opponents: [
+        {
+          userId: 'user-444',
+          name: 'Sharer',
+          email: null,
+          deckId: 'deck-1',
+          deckName: 'Sharer Deck',
+          deckUrl: null,
+          commanderNames: ['Mizzix of the Izmagnus'],
+          commanderLinks: [null],
+          colorIdentity: ['U', 'R']
+        }
+      ],
+      result: null,
+      tags: [],
+      status: 'pending',
+      createdAt: '2025-04-01T00:00:00.000Z',
+      updatedAt: '2025-04-01T00:00:00.000Z'
+    });
+    const listDeckCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-99',
+        name: 'Izzet Spells',
+        url: 'https://moxfield.com/decks/izzet',
+        format: 'commander',
+        commanderNames: ['Mizzix of the Izmagnus'],
+        commanderLinks: [],
+        colorIdentity: ['U', 'R'],
+        source: 'moxfield',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const createGameLog = vi.fn().mockResolvedValue([]);
+    const setSharedGameLogStatus = vi.fn().mockResolvedValue(true);
+    const listSharedGameLogs = vi.fn().mockResolvedValue([]);
+    const recordRecentOpponents = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({
+      verifyGoogleIdToken,
+      upsertUser,
+      getSharedGameLogById,
+      listDeckCollection,
+      createGameLog,
+      setSharedGameLogStatus,
+      listSharedGameLogs,
+      recordRecentOpponents
+    });
+
+    const response = await request(app)
+      .post('/api/game-logs/shared/shared-1/accept')
+      .set('authorization', 'Bearer token-333')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(createGameLog).toHaveBeenCalledWith('user-333', expect.objectContaining({
+      deckId: 'deck-99',
+      deckName: 'Izzet Spells',
+      playedAt: '2025-04-01'
+    }));
+    expect(setSharedGameLogStatus).toHaveBeenCalledWith('user-333', 'shared-1', 'accepted');
+  });
 });

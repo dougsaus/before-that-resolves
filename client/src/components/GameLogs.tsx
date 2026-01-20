@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
-import { useGameLogs } from '../hooks/useGameLogs';
+import { useGameLogs, type GameLogEntry } from '../hooks/useGameLogs';
+import type { SharedGameLogEntry, SharedGameLogUpdate } from '../hooks/useSharedGameLogs';
 import { useOpponentDecks, type OpponentDeck } from '../hooks/useOpponentDecks';
 import { useOpponentUsers, type OpponentUser } from '../hooks/useOpponentUsers';
 import { buildApiUrl } from '../utils/api';
 import { sortColorsForDisplay } from '../utils/color-identity';
 import { parseLocalDate } from '../utils/date';
+import type { DeckEntry } from './DeckCollection';
 
 const PREDEFINED_TAGS = [
   'mulligan',
@@ -25,6 +27,15 @@ function getScryfallImageUrl(cardName: string) {
 type GameLogsProps = {
   enabled: boolean;
   idToken: string | null;
+  decks: DeckEntry[];
+  decksLoading: boolean;
+  sharedLogs: SharedGameLogEntry[];
+  sharedLoading: boolean;
+  sharedError: string | null;
+  refreshSharedLogs: () => Promise<void>;
+  updateSharedLog: (logId: string, input: SharedGameLogUpdate) => Promise<boolean>;
+  acceptSharedLog: (logId: string) => Promise<boolean>;
+  rejectSharedLog: (logId: string) => Promise<boolean>;
 };
 
 function formatDate(value: string): string {
@@ -124,8 +135,29 @@ type OpponentForm = {
   colorIdentity: string;
 };
 
-export function GameLogs({ enabled, idToken }: GameLogsProps) {
-  const { logs, loading, error, removeLog, updateLog } = useGameLogs(idToken);
+export function GameLogs({
+  enabled,
+  idToken,
+  decks,
+  decksLoading,
+  sharedLogs,
+  sharedLoading,
+  sharedError,
+  refreshSharedLogs,
+  updateSharedLog,
+  acceptSharedLog,
+  rejectSharedLog
+}: GameLogsProps) {
+  const {
+    logs,
+    loading,
+    error,
+    statusMessage,
+    removeLog,
+    updateLog,
+    shareLog,
+    refreshLogs
+  } = useGameLogs(idToken);
   const {
     recentOpponents,
     recentError,
@@ -166,9 +198,12 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'desc');
   const [editTarget, setEditTarget] = useState<{
     id: string;
-    deckName: string;
+    deckName: string | null;
+    deckId: string | null;
+    kind: 'log' | 'shared';
   } | null>(null);
   const [editDate, setEditDate] = useState('');
+  const [editDeckId, setEditDeckId] = useState('');
   const [editTurns, setEditTurns] = useState('');
   const [editDurationMinutes, setEditDurationMinutes] = useState('');
   const [editOpponents, setEditOpponents] = useState<OpponentForm[]>([]);
@@ -176,6 +211,13 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
   const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
+  const [shareConfirmTarget, setShareConfirmTarget] = useState<{
+    logId: string;
+    rejectedCount: number;
+    rejectedOpponents: Array<{ userId: string; name: string | null }>;
+  } | null>(null);
+  const [shareSelectedOpponentIds, setShareSelectedOpponentIds] = useState<string[]>([]);
   const [hoverCard, setHoverCard] = useState<{ label: string; rect: DOMRect } | null>(null);
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
@@ -205,6 +247,12 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
     if (!editTarget || !idToken) return;
     void loadRecentOpponents();
   }, [editTarget, idToken, loadRecentOpponents]);
+
+  useEffect(() => {
+    if (!idToken) return;
+    void refreshLogs();
+    void refreshSharedLogs();
+  }, [idToken, refreshLogs, refreshSharedLogs]);
 
   useEffect(() => {
     if (!editTarget) return;
@@ -267,7 +315,47 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   }, [hoverCard]);
 
   const openEditModal = (log: (typeof logs)[number]) => {
-    setEditTarget({ id: log.id, deckName: log.deckName });
+    setEditTarget({ id: log.id, deckName: log.deckName, deckId: log.deckId, kind: 'log' });
+    setEditDeckId(log.deckId);
+    setEditDate(log.playedAt);
+    setEditTurns(log.turns ? String(log.turns) : '');
+    setEditDurationMinutes(log.durationMinutes ? String(log.durationMinutes) : '');
+    setEditOpponents(
+      log.opponents.map((opponent) => ({
+        id: crypto.randomUUID(),
+        userId: opponent.userId ?? null,
+        userLabel: opponent.userId
+          ? formatOpponentUserLabel({ name: opponent.name, email: opponent.email })
+          : null,
+        searchMessage: null,
+        searchStatus: null,
+        name: opponent.name ?? '',
+        email: opponent.email ?? null,
+        deckId: opponent.deckId ?? null,
+        deckName: opponent.deckName ?? null,
+        deckUrl: opponent.deckUrl ?? null,
+        commanders: opponent.commanderNames.length > 0
+          ? opponent.commanderNames.map((cmdName, idx) => ({
+              name: cmdName,
+              link: opponent.commanderLinks[idx] ?? null,
+              lookupStatus: opponent.commanderLinks[idx] ? 'found' as const : 'idle' as const
+            }))
+          : [{ name: '', link: null, lookupStatus: 'idle' as const }],
+        colorIdentity: formatColorIdentityValue(opponent.colorIdentity ?? null)
+      }))
+    );
+    setEditResult(log.result ?? 'pending');
+    setEditTags(log.tags ?? []);
+    setCustomTagInput('');
+    setEditFormError(null);
+    setRecentOpenIndex(null);
+    setSearchOpenIndex(null);
+    clearSearch();
+  };
+
+  const openSharedEditModal = (log: SharedGameLogEntry) => {
+    setEditTarget({ id: log.id, deckName: log.deckName, deckId: log.deckId, kind: 'shared' });
+    setEditDeckId(log.deckId ?? '');
     setEditDate(log.playedAt);
     setEditTurns(log.turns ? String(log.turns) : '');
     setEditDurationMinutes(log.durationMinutes ? String(log.durationMinutes) : '');
@@ -730,35 +818,238 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
       return;
     }
     setEditFormError(null);
-    const success = await updateLog(editTarget.id, {
+    const opponentsPayload = editOpponents.map((opponent) => ({
+      userId: opponent.userId,
+      name: opponent.name.trim(),
+      email: opponent.email,
+      deckId: opponent.deckId,
+      deckName: opponent.deckName,
+      deckUrl: opponent.deckUrl,
+      commanderNames: opponent.commanders
+        .map((cmd) => cmd.name.trim())
+        .filter((name) => name.length > 0),
+      commanderLinks: opponent.commanders
+        .filter((cmd) => cmd.name.trim().length > 0)
+        .map((cmd) => cmd.link),
+      colorIdentity: opponent.colorIdentity.trim()
+    }));
+    const payload = {
       datePlayed: editDate,
       turns: parseOptionalNumberInput(editTurns),
       durationMinutes: parseOptionalNumberInput(editDurationMinutes),
       opponentsCount: editOpponents.length,
-      opponents: editOpponents.map((opponent) => ({
-        userId: opponent.userId,
-        name: opponent.name.trim(),
-        email: opponent.email,
-        deckId: opponent.deckId,
-        deckName: opponent.deckName,
-        deckUrl: opponent.deckUrl,
-        commanderNames: opponent.commanders
-          .map((cmd) => cmd.name.trim())
-          .filter((name) => name.length > 0),
-        commanderLinks: opponent.commanders
-          .filter((cmd) => cmd.name.trim().length > 0)
-          .map((cmd) => cmd.link),
-        colorIdentity: opponent.colorIdentity.trim()
-      })),
+      opponents: opponentsPayload,
       result: editResult === 'pending' ? null : editResult,
       tags: editTags
-    });
+    };
+
+    const success = editTarget.kind === 'shared'
+      ? await updateSharedLog(editTarget.id, {
+          ...payload,
+          deckId: editDeckId ? editDeckId : null
+        })
+      : await updateLog(editTarget.id, payload);
     if (success) {
       setEditTarget(null);
       setRecentOpenIndex(null);
       setSearchOpenIndex(null);
       clearSearch();
     }
+  };
+
+  const handleShareLog = async (logId: string) => {
+    const response = await shareLog(logId);
+    if (response?.needsConfirm && (response.rejectedCount ?? 0) > 0) {
+      const rejectedOpponents = (response.opponents ?? [])
+        .filter((opponent) => opponent.status === 'rejected')
+        .map((opponent) => ({
+          userId: opponent.userId,
+          name: opponent.name
+        }));
+      setShareConfirmTarget({
+        logId,
+        rejectedCount: response.rejectedCount ?? 0,
+        rejectedOpponents
+      });
+      setShareSelectedOpponentIds(rejectedOpponents.map((opponent) => opponent.userId));
+    }
+  };
+
+  const confirmReshareLog = async () => {
+    if (!shareConfirmTarget) return;
+    await shareLog(shareConfirmTarget.logId, {
+      confirmReshare: true,
+      reshareRecipientIds: shareSelectedOpponentIds
+    });
+    setShareConfirmTarget(null);
+    setShareSelectedOpponentIds([]);
+  };
+
+  const handleAcceptSharedLog = async (logId: string) => {
+    const success = await acceptSharedLog(logId);
+    if (success) {
+      await refreshLogs();
+    }
+  };
+
+  const handleRejectSharedLog = async (logId: string) => {
+    setRejectTargetId(logId);
+  };
+
+  const confirmRejectSharedLog = async () => {
+    if (!rejectTargetId) return;
+    await rejectSharedLog(rejectTargetId);
+    setRejectTargetId(null);
+  };
+
+  const handleRefreshLogs = async () => {
+    await Promise.all([refreshLogs(), refreshSharedLogs()]);
+  };
+
+  const renderLogRow = (
+    log: {
+      id: string;
+      deckName: string | null;
+      playedAt: string;
+      opponents: GameLogEntry['opponents'];
+      tags: string[];
+      result: GameLogEntry['result'];
+      durationMinutes: number | null;
+      turns: number | null;
+    },
+    actions: ReactNode,
+    keyPrefix: string
+  ) => {
+    const deckLabel = log.deckName ?? 'Select deck';
+    const deckLabelClass = log.deckName ? 'text-white' : 'text-gray-400 italic';
+    return (
+      <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
+              Date
+            </span>
+            <span className="text-xs text-gray-400">{formatDate(log.playedAt)}</span>
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
+              Deck
+            </span>
+            <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
+              {deckLabel}
+            </h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
+              Result
+            </span>
+            <span
+              className={`text-xs font-semibold uppercase tracking-wide ${
+              log.result === 'win'
+                ? 'text-emerald-300'
+                : log.result === 'loss'
+                    ? 'text-rose-300'
+                    : 'text-gray-300'
+              }`}
+            >
+              {log.result ?? 'pending'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-300">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
+              Game Length
+            </span>
+            <span>{formatGameLength(log.durationMinutes, log.turns)}</span>
+          </div>
+          <div className="flex items-center justify-start gap-1 sm:justify-end">
+            {actions}
+          </div>
+        </div>
+
+        {log.opponents.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {log.opponents.map((opponent, index) => (
+              <div
+                key={`${keyPrefix}-${log.id}-opponent-${index}`}
+                className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_12ch_5.5rem_minmax(10rem,1fr)] sm:items-center"
+              >
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+                  {index === 0 ? 'Opponents:' : ''}
+                </span>
+                <span className="truncate font-medium" title={opponent.name || undefined}>
+                  {opponent.name
+                    ? truncateLabel(getOpponentDisplayName(opponent.name))
+                    : `Opponent ${index + 1}`}
+                </span>
+                <div className="flex items-center justify-start">
+                  {opponent.colorIdentity ? (
+                    <ColorIdentityIcons colors={opponent.colorIdentity} />
+                  ) : null}
+                </div>
+                <span className="text-gray-400">
+                  {opponent.deckName ? (
+                    <>
+                      {opponent.deckUrl ? (
+                        <a
+                          href={opponent.deckUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-cyan-200 hover:text-cyan-100"
+                        >
+                          {opponent.deckName}
+                        </a>
+                      ) : (
+                        opponent.deckName
+                      )}
+                      {opponent.commanderNames.length > 0 && ' — '}
+                    </>
+                  ) : null}
+                  {opponent.commanderNames.length > 0
+                    ? opponent.commanderNames.map((cmdName, cmdIndex) => (
+                      <span key={cmdIndex}>
+                        {cmdIndex > 0 && ' / '}
+                        {opponent.commanderLinks[cmdIndex] ? (
+                          <a
+                            href={opponent.commanderLinks[cmdIndex]!}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-cyan-200 hover:text-cyan-100"
+                            onMouseEnter={(event) => {
+                              anchorRef.current = event.currentTarget;
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setHoverCard({ label: cmdName, rect });
+                            }}
+                          >
+                            {cmdName}
+                          </a>
+                        ) : (
+                          cmdName
+                        )}
+                      </span>
+                    ))
+                    : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {log.tags.length > 0 && (
+          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+              Tags:
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {log.tags.map((tag) => (
+                <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const sortLabels: Record<SortKey, string> = {
@@ -852,6 +1143,126 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
   return (
     <div className="w-full max-w-6xl mx-auto flex h-full min-h-0 flex-col gap-6">
       {error && <p className="text-red-400">{error}</p>}
+      {sharedLogs.length > 0 && (
+        <div className="flex flex-col overflow-hidden bg-gray-900/70 border border-cyan-700/40 rounded-2xl p-6 sm:p-8 max-h-[50vh]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Shared Logs</h3>
+              <p className="text-sm text-gray-400">Review games shared by your opponents.</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{sharedLogs.length} pending</span>
+              <button
+                type="button"
+                onClick={handleRefreshLogs}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-700 text-gray-200 hover:border-cyan-400 hover:text-cyan-200"
+                aria-label="Refresh shared logs"
+                title="Refresh shared logs"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12a9 9 0 11-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col overflow-hidden">
+            {sharedLoading && <p className="text-gray-400">Loading shared logs...</p>}
+            {sharedError && <p className="text-red-400">{sharedError}</p>}
+            {!sharedLoading && sharedLogs.length > 0 && (
+              <div className="flex flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950/60">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-2">
+                  <span className="text-xs uppercase tracking-wide text-gray-500">Pending</span>
+                </div>
+                <div className="overflow-y-auto divide-y divide-gray-800">
+                  {sharedLogs.map((log) =>
+                    renderLogRow(
+                      log,
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openSharedEditModal(log)}
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-cyan-300"
+                          aria-label={`Edit shared log`}
+                          title="Edit log"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptSharedLog(log.id)}
+                          disabled={!log.deckId}
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-emerald-300 disabled:opacity-40 disabled:hover:text-gray-300"
+                          aria-label="Accept shared log"
+                          title={log.deckId ? 'Accept log' : 'Select a deck before accepting'}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectSharedLog(log.id)}
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-red-300"
+                          aria-label="Reject shared log"
+                          title="Reject log"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M15 9l-6 6" />
+                            <path d="M9 9l6 6" />
+                          </svg>
+                        </button>
+                      </>,
+                      'shared'
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {statusMessage && <p className="text-emerald-300">{statusMessage}</p>}
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -897,55 +1308,41 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                   >
                     {sortDir === 'asc' ? '^' : 'v'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleRefreshLogs}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-700 text-gray-200 hover:border-cyan-400 hover:text-cyan-200"
+                    aria-label="Refresh logs"
+                    title="Refresh logs"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M21 12a9 9 0 11-2.64-6.36" />
+                      <path d="M21 3v6h-6" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <div className="flex-1 min-h-0 overflow-y-scroll divide-y divide-gray-800">
-                {sortedLogs.map((log) => (
-                  <div key={log.id} className="flex flex-col gap-1 px-4 py-2">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-                          Date
-                        </span>
-                        <span className="text-xs text-gray-400">{formatDate(log.playedAt)}</span>
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-                          Deck
-                        </span>
-                        <h4 className="truncate text-sm font-semibold text-white sm:text-base">
-                          {log.deckName}
-                        </h4>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-                          Result
-                        </span>
-                        <span
-                          className={`text-xs font-semibold uppercase tracking-wide ${
-                            log.result === 'win'
-                              ? 'text-emerald-300'
-                              : log.result === 'loss'
-                                ? 'text-rose-300'
-                                : 'text-gray-300'
-                          }`}
-                        >
-                          {log.result ?? 'pending'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-300">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-                          Game Length
-                        </span>
-                        <span>{formatGameLength(log.durationMinutes, log.turns)}</span>
-                      </div>
-                      <div className="flex items-center justify-start gap-1 sm:justify-end">
+                {sortedLogs.map((log) =>
+                  renderLogRow(
+                    log,
+                    <>
+                      {log.opponents.some((opponent) => opponent.userId) && (
                         <button
                           type="button"
-                          onClick={() => openEditModal(log)}
-                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-cyan-300"
-                          aria-label={`Edit ${log.deckName}`}
-                          title="Edit log"
+                          onClick={() => handleShareLog(log.id)}
+                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-emerald-300"
+                          aria-label={`Share ${log.deckName} log`}
+                          title="Share log"
                         >
                           <svg
                             viewBox="0 0 24 24"
@@ -957,121 +1354,61 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                             strokeLinejoin="round"
                             aria-hidden="true"
                           >
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                            <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
+                            <path d="M16 6l-4-4-4 4" />
+                            <path d="M12 2v14" />
                           </svg>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => removeLog(log.id)}
-                          className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-red-300"
-                          aria-label={`Delete ${log.deckName} log`}
-                          title="Delete log"
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(log)}
+                        className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-cyan-300"
+                        aria-label={`Edit ${log.deckName}`}
+                        title="Edit log"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
                         >
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                          >
-                            <path d="M3 6h18" />
-                            <path d="M8 6V4h8v2" />
-                            <path d="M19 6l-1 14H6L5 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-
-                    {log.opponents.length > 0 && (
-                      <div className="flex flex-col gap-1">
-                        {log.opponents.map((opponent, index) => (
-                          <div
-                            key={`${log.id}-opponent-${index}`}
-                            className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_12ch_5.5rem_minmax(10rem,1fr)] sm:items-center"
-                          >
-                            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
-                              {index === 0 ? 'Opponents:' : ''}
-                            </span>
-                            <span className="truncate font-medium" title={opponent.name || undefined}>
-                              {opponent.name
-                                ? truncateLabel(getOpponentDisplayName(opponent.name))
-                                : `Opponent ${index + 1}`}
-                            </span>
-                            <div className="flex items-center justify-start">
-                              {opponent.colorIdentity ? (
-                                <ColorIdentityIcons colors={opponent.colorIdentity} />
-                              ) : null}
-                            </div>
-                            <span className="text-gray-400">
-                              {opponent.deckName ? (
-                                <>
-                                  {opponent.deckUrl ? (
-                                    <a
-                                      href={opponent.deckUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-cyan-200 hover:text-cyan-100"
-                                    >
-                                      {opponent.deckName}
-                                    </a>
-                                  ) : (
-                                    opponent.deckName
-                                  )}
-                                  {opponent.commanderNames.length > 0 && ' — '}
-                                </>
-                              ) : null}
-                              {opponent.commanderNames.length > 0
-                                ? opponent.commanderNames.map((cmdName, cmdIndex) => (
-                                  <span key={cmdIndex}>
-                                    {cmdIndex > 0 && ' / '}
-                                    {opponent.commanderLinks[cmdIndex] ? (
-                                      <a
-                                        href={opponent.commanderLinks[cmdIndex]!}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-cyan-200 hover:text-cyan-100"
-                                        onMouseEnter={(event) => {
-                                          anchorRef.current = event.currentTarget;
-                                          const rect = event.currentTarget.getBoundingClientRect();
-                                          setHoverCard({ label: cmdName, rect });
-                                        }}
-                                      >
-                                        {cmdName}
-                                      </a>
-                                    ) : (
-                                      cmdName
-                                    )}
-                                  </span>
-                                ))
-                                : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {log.tags.length > 0 && (
-                      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
-                          Tags:
-                        </span>
-                        <div className="flex flex-wrap gap-1">
-                          {log.tags.map((tag) => (
-                            <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeLog(log.id)}
+                        className="inline-flex h-7 w-7 items-center justify-center text-gray-300 hover:text-red-300"
+                        aria-label={`Delete ${log.deckName} log`}
+                        title="Delete log"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                    </>,
+                    'log'
+                  )
+                )}
               </div>
             </div>
           )}
@@ -1084,8 +1421,32 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
             <div className="flex flex-col gap-4">
               <div>
                 <h3 className="text-lg font-semibold">Edit game log</h3>
-                <p className="text-sm text-gray-400">{editTarget.deckName}</p>
+                <p className="text-sm text-gray-400">{editTarget.deckName ?? 'Select deck'}</p>
               </div>
+              {editTarget.kind === 'shared' && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm text-gray-300" htmlFor="shared-log-deck">
+                    Your deck
+                  </label>
+                  <select
+                    id="shared-log-deck"
+                    value={editDeckId}
+                    onChange={(event) => setEditDeckId(event.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+                  >
+                    <option value="">Select deck...</option>
+                    {decks.map((deck) => (
+                      <option key={deck.id} value={deck.id}>
+                        {deck.name} — {formatCommanderList(deck.commanderNames)}
+                      </option>
+                    ))}
+                  </select>
+                  {decksLoading && <p className="text-xs text-gray-400">Loading decks...</p>}
+                  {!decksLoading && decks.length === 0 && (
+                    <p className="text-xs text-gray-500">No decks found in your collection.</p>
+                  )}
+                </div>
+              )}
               <label className="flex flex-col gap-2 text-sm text-gray-300">
                 Date played
                 <input
@@ -1491,6 +1852,100 @@ export function GameLogs({ enabled, idToken }: GameLogsProps) {
                   className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400"
                 >
                   Save changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectTargetId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 px-4 py-6">
+          <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Reject shared log?</h3>
+                <p className="text-sm text-gray-400">
+                  This removes the shared log from your queue. You can’t undo this action.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setRejectTargetId(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRejectSharedLog}
+                  className="px-4 py-2 rounded-lg bg-red-500/90 text-white font-semibold hover:bg-red-500"
+                >
+                  Reject log
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shareConfirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 px-4 py-6">
+          <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Reshare rejected logs?</h3>
+                <p className="text-sm text-gray-400">
+                  {shareConfirmTarget.rejectedCount === 1
+                    ? '1 opponent rejected this log. Reshare it now?'
+                    : `${shareConfirmTarget.rejectedCount} opponents rejected this log. Reshare it now?`}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {shareConfirmTarget.rejectedOpponents.map((opponent) => {
+                  const label = opponent.name?.trim() || 'Unknown opponent';
+                  const checked = shareSelectedOpponentIds.includes(opponent.userId);
+                  return (
+                    <label
+                      key={opponent.userId}
+                      className="flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-950/40 px-3 py-2 text-sm text-gray-200"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          setShareSelectedOpponentIds((current) => {
+                            if (event.target.checked) {
+                              return current.includes(opponent.userId)
+                                ? current
+                                : [...current, opponent.userId];
+                            }
+                            return current.filter((id) => id !== opponent.userId);
+                          });
+                        }}
+                        className="h-4 w-4 accent-emerald-400"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShareConfirmTarget(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmReshareLog}
+                  disabled={shareSelectedOpponentIds.length === 0}
+                  className="px-4 py-2 rounded-lg bg-emerald-500/90 text-white font-semibold hover:bg-emerald-500 disabled:opacity-60"
+                >
+                  Reshare
                 </button>
               </div>
             </div>

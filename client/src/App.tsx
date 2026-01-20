@@ -6,6 +6,7 @@ import { GameLogs } from './components/GameLogs';
 import { DevModeProvider } from './contexts/DevModeContext';
 import { DevPanel } from './components/DevPanel';
 import { useDeckCollection } from './hooks/useDeckCollection';
+import { useSharedGameLogs } from './hooks/useSharedGameLogs';
 
 const reasoningOptions = {
   'gpt-5': ['low', 'medium', 'high'],
@@ -52,6 +53,7 @@ function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [pendingDeckUrl, setPendingDeckUrl] = useState<string | undefined>(undefined);
   const deckCollection = useDeckCollection();
+  const sharedLogsState = useSharedGameLogs(deckCollection.idToken);
   const mainRef = useRef<HTMLElement | null>(null);
   const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
   const supportsVerbosity = models.find((model) => model.id === selectedModel)?.verbosity ?? false;
@@ -221,6 +223,7 @@ function App() {
               <nav className="flex flex-col gap-3">
                 {navItems.map((item) => {
                   const isActive = view === item.id;
+                  const hasSharedLogs = item.id === 'logs' && sharedLogsState.sharedLogs.length > 0;
                   return (
                     <button
                       key={item.id}
@@ -232,8 +235,11 @@ function App() {
                           : 'border-gray-800 bg-gray-900/60 text-gray-200 hover:border-gray-600'
                       } ${navCollapsed ? 'lg:px-2 lg:py-3 lg:text-center' : ''}`}
                     >
-                      <div className={`text-sm font-semibold ${navCollapsed ? 'lg:text-xs' : ''}`}>
-                        {navCollapsed ? item.shortLabel.slice(0, 1) : item.label}
+                      <div className={`flex items-center gap-2 text-sm font-semibold ${navCollapsed ? 'lg:text-xs lg:justify-center' : ''}`}>
+                        <span>{navCollapsed ? item.shortLabel.slice(0, 1) : item.label}</span>
+                        {hasSharedLogs && (
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400" aria-label="New shared logs" />
+                        )}
                       </div>
                       <div className={`text-xs text-gray-400 ${navCollapsed ? 'lg:hidden' : ''}`}>
                         {item.description}
@@ -325,6 +331,15 @@ function App() {
                 <GameLogs
                   enabled={decksEnabled}
                   idToken={deckCollection.idToken}
+                  decks={deckCollection.decks}
+                  decksLoading={deckCollection.loading}
+                  sharedLogs={sharedLogsState.sharedLogs}
+                  sharedLoading={sharedLogsState.loading}
+                  sharedError={sharedLogsState.error}
+                  refreshSharedLogs={sharedLogsState.refreshSharedLogs}
+                  updateSharedLog={sharedLogsState.updateSharedLog}
+                  acceptSharedLog={sharedLogsState.acceptSharedLog}
+                  rejectSharedLog={sharedLogsState.rejectSharedLog}
                 />
               )}
               {view === 'profile' && (
