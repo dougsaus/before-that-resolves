@@ -50,7 +50,7 @@ function formatDate(value: string): string {
   });
 }
 
-function truncateLabel(value: string, maxLength = 12): string {
+function truncateLabel(value: string, maxLength = 18): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength)}...`;
 }
@@ -971,7 +971,7 @@ export function GameLogs({
             {log.opponents.map((opponent, index) => (
               <div
                 key={`${keyPrefix}-${log.id}-opponent-${index}`}
-                className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_12ch_5.5rem_minmax(10rem,1fr)] sm:items-center"
+                className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10ch,18ch)_5.5rem_minmax(10rem,1fr)] sm:items-center"
               >
                 <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
                   {index === 0 ? 'Opponents:' : ''}
