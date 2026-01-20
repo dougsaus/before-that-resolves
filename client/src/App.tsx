@@ -317,6 +317,7 @@ function App() {
                       setView('oracle');
                     }}
                     onRefreshDecks={deckCollection.refreshDecks}
+                    onLogSaved={() => setView('logs')}
                   />
                 </div>
               )}
