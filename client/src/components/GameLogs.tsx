@@ -197,7 +197,13 @@ export function GameLogs({
   const initialSort = loadSortPrefs();
   const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'playedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'desc');
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
   const [editTarget, setEditTarget] = useState<{
     id: string;
     deckName: string | null;
