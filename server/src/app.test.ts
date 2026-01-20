@@ -951,12 +951,14 @@ describe('app routes', () => {
         addedAt: '2025-01-01T00:00:00.000Z'
       }
     ]);
+    const listSharedLogStatuses = vi.fn().mockResolvedValue(new Map());
     const createSharedGameLog = vi.fn().mockResolvedValue(true);
     const app = createApp({
       verifyGoogleIdToken,
       upsertUser,
       getGameLogById,
       listDeckCollection,
+      listSharedLogStatuses,
       createSharedGameLog
     });
 
