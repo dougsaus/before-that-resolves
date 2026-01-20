@@ -56,6 +56,14 @@ type AppDeps = {
     source: 'archidekt' | 'moxfield' | 'manual';
     addedAt: string;
   }>>;
+  listOpponentDecks?: (userId: string) => Promise<Array<{
+    id: string;
+    name: string;
+    url: string | null;
+    commanderNames: string[];
+    commanderLinks: Array<string | null>;
+    colorIdentity: string[] | null;
+  }>>;
   upsertDeckInCollection?: (userId: string, deck: DeckCollectionInput) => Promise<Array<{
     id: string;
     name: string;
@@ -101,6 +109,7 @@ export function createApp(deps: AppDeps = {}) {
   const verifyGoogleToken = deps.verifyGoogleIdToken ?? verifyGoogleIdToken;
   const fetchDeckSummary = deps.fetchDeckSummary ?? fetchDeckSummaryService;
   const listUserDecks = deps.listDeckCollection ?? listDeckCollection;
+  const listOpponentDecks = deps.listOpponentDecks ?? listDeckCollection;
   const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
   const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
   const saveUser = deps.upsertUser ?? upsertUser;
@@ -135,10 +144,8 @@ export function createApp(deps: AppDeps = {}) {
         .filter(Boolean);
     }
     if (typeof input === 'string') {
-      return input
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean);
+      const trimmed = input.trim();
+      return trimmed ? [trimmed] : [];
     }
     return [];
   };
@@ -234,13 +241,21 @@ export function createApp(deps: AppDeps = {}) {
   };
   const parseOpponentEntry = (
     input: unknown
-  ): { userId: string | null; name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } | null => {
+  ): { userId: string | null; email: string | null; deckId: string | null; deckName: string | null; deckUrl: string | null; name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } | null => {
     if (!input || typeof input !== 'object') {
       return null;
     }
     const record = input as Record<string, unknown>;
     const userId =
       typeof record.userId === 'string' && record.userId.trim() ? record.userId.trim() : null;
+    const email =
+      typeof record.email === 'string' && record.email.trim() ? record.email.trim() : null;
+    const deckId =
+      typeof record.deckId === 'string' && record.deckId.trim() ? record.deckId.trim() : null;
+    const deckName =
+      typeof record.deckName === 'string' && record.deckName.trim() ? record.deckName.trim() : null;
+    const deckUrl =
+      typeof record.deckUrl === 'string' && record.deckUrl.trim() ? record.deckUrl.trim() : null;
     const name =
       typeof record.name === 'string' && record.name.trim()
         ? record.name.trim()
@@ -281,11 +296,15 @@ export function createApp(deps: AppDeps = {}) {
           ? rawColorIdentity.length > 0
           : false;
     const parsedColorIdentity = hasColorInput ? parseColorIdentityInput(rawColorIdentity) : null;
-    if (!userId && !name && commanderNames.length === 0 && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
+    if (!userId && !email && !deckId && !deckName && !name && commanderNames.length === 0 && (!parsedColorIdentity || parsedColorIdentity.length === 0)) {
       return null;
     }
     return {
       userId,
+      email,
+      deckId,
+      deckName,
+      deckUrl,
       name,
       commanderNames,
       commanderLinks,
@@ -298,7 +317,7 @@ export function createApp(deps: AppDeps = {}) {
     }
     return input
       .map((entry) => parseOpponentEntry(entry))
-      .filter((entry): entry is { userId: string | null; name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } => Boolean(entry));
+      .filter((entry): entry is { userId: string | null; email: string | null; deckId: string | null; deckName: string | null; deckUrl: string | null; name: string | null; commanderNames: string[]; commanderLinks: Array<string | null>; colorIdentity: string[] | null } => Boolean(entry));
   };
   const parseOpponentsCount = (input: unknown, opponents: Array<{ commanderNames: string[] }>) => {
     if (typeof input === 'number' && Number.isFinite(input)) {
@@ -742,6 +761,31 @@ export function createApp(deps: AppDeps = {}) {
 
     const opponents = await listRecent(user.id, 10);
     res.json({ success: true, opponents });
+  });
+
+  app.get('/api/opponents/:userId/decks', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { userId } = req.params;
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        error: 'userId is required'
+      });
+      return;
+    }
+
+    const decks = await listOpponentDecks(userId);
+    const opponentDecks = decks.map((deck) => ({
+      id: deck.id,
+      name: deck.name,
+      url: deck.url ?? null,
+      commanderNames: deck.commanderNames,
+      commanderLinks: deck.commanderLinks,
+      colorIdentity: deck.colorIdentity ?? null
+    }));
+    res.json({ success: true, decks: opponentDecks });
   });
 
   app.post('/api/game-logs', async (req, res) => {

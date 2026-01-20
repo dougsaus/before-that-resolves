@@ -506,21 +506,13 @@ describe('app routes', () => {
         addedAt: '2025-01-05T00:00:00.000Z'
       }
     ]);
-    const searchScryfallCardByName = vi.fn()
-      .mockResolvedValueOnce({
-        id: 'tymna',
-        name: 'Tymna the Weaver',
-        type_line: 'Legendary Creature',
-        color_identity: ['W', 'B'],
-        scryfall_uri: 'https://scryfall.com/card/tymna/tymna-the-weaver'
-      })
-      .mockResolvedValueOnce({
-        id: 'kraum',
-        name: 'Kraum',
-        type_line: 'Legendary Creature',
-        color_identity: ['U', 'R'],
-        scryfall_uri: 'https://scryfall.com/card/kraum/kraum'
-      });
+    const searchScryfallCardByName = vi.fn().mockResolvedValue({
+      id: 'tymna',
+      name: 'Tymna the Weaver',
+      type_line: 'Legendary Creature',
+      color_identity: ['W', 'B'],
+      scryfall_uri: 'https://scryfall.com/card/tymna/tymna-the-weaver'
+    });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
     const getDeckStats = vi.fn().mockResolvedValue(
       new Map([
@@ -557,17 +549,15 @@ describe('app routes', () => {
       .expect(200);
 
     expect(response.body.success).toBe(true);
-    expect(searchScryfallCardByName).toHaveBeenCalledWith('Tymna the Weaver');
-    expect(searchScryfallCardByName).toHaveBeenCalledWith('Kraum');
+    expect(searchScryfallCardByName).toHaveBeenCalledWith('Tymna the Weaver, Kraum');
     expect(upsertDeckInCollection).toHaveBeenCalledWith('user-202', {
       id: 'deck-202',
       name: 'Updated Deck',
       url: 'https://archidekt.com/decks/202/updated',
       format: null,
-      commanderNames: ['Tymna the Weaver', 'Kraum'],
+      commanderNames: ['Tymna the Weaver'],
       commanderLinks: [
-        'https://scryfall.com/card/tymna/tymna-the-weaver',
-        'https://scryfall.com/card/kraum/kraum'
+        'https://scryfall.com/card/tymna/tymna-the-weaver'
       ],
       colorIdentity: ['W', 'U', 'B', 'R'],
       source: 'archidekt'
@@ -749,6 +739,43 @@ describe('app routes', () => {
     expect(response.body.opponents).toHaveLength(1);
   });
 
+  it('lists decks for an opponent user', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-333' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const listOpponentDecks = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-22',
+        name: 'Grixis Control',
+        format: 'commander',
+        url: 'https://moxfield.com/decks/example',
+        commanderNames: ['Nicol Bolas, the Ravager'],
+        commanderLinks: ['https://scryfall.com/card/xln/218/nicol-bolas-the-ravager'],
+        colorIdentity: ['U', 'B', 'R'],
+        source: 'moxfield',
+        addedAt: '2025-01-01T00:00:00.000Z'
+      }
+    ]);
+    const app = createApp({ verifyGoogleIdToken, upsertUser, listOpponentDecks });
+
+    const response = await request(app)
+      .get('/api/opponents/user-777/decks')
+      .set('authorization', 'Bearer token-333')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(listOpponentDecks).toHaveBeenCalledWith('user-777');
+    expect(response.body.decks).toEqual([
+      {
+        id: 'deck-22',
+        name: 'Grixis Control',
+        url: 'https://moxfield.com/decks/example',
+        commanderNames: ['Nicol Bolas, the Ravager'],
+        commanderLinks: ['https://scryfall.com/card/xln/218/nicol-bolas-the-ravager'],
+        colorIdentity: ['U', 'B', 'R']
+      }
+    ]);
+  });
+
   it('creates a game log for a deck in the collection', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-888' });
     const upsertUser = vi.fn().mockResolvedValue(undefined);
@@ -819,14 +846,18 @@ describe('app routes', () => {
       deckName: 'Esper Knights',
       playedAt: '2025-02-14',
       opponentsCount: 2,
-      opponents: [
-        {
-          userId: 'user-42',
-          name: null,
-          commanderNames: ['Ghave, Guru of Spores'],
-          commanderLinks: [null],
-          colorIdentity: ['W', 'B', 'G']
-        }
+        opponents: [
+          {
+            userId: 'user-42',
+            name: null,
+            email: null,
+            deckId: null,
+            deckName: null,
+            deckUrl: null,
+            commanderNames: ['Ghave, Guru of Spores'],
+            commanderLinks: [null],
+            colorIdentity: ['W', 'B', 'G']
+          }
       ],
       result: null
     }));

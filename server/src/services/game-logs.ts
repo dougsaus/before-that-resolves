@@ -5,6 +5,10 @@ import { normalizeDateInput } from '../utils/date';
 export type GameLogOpponent = {
   userId: string | null;
   name: string | null;
+  email: string | null;
+  deckId: string | null;
+  deckName: string | null;
+  deckUrl: string | null;
   commanderNames: string[];
   commanderLinks: Array<string | null>;
   colorIdentity: string[] | null;
@@ -63,6 +67,16 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
     typeof record.name === 'string' && record.name.trim()
       ? record.name.trim()
       : null;
+  const email =
+    typeof record.email === 'string' && record.email.trim()
+      ? record.email.trim()
+      : null;
+  const deckId =
+    typeof record.deckId === 'string' && record.deckId.trim() ? record.deckId.trim() : null;
+  const deckName =
+    typeof record.deckName === 'string' && record.deckName.trim() ? record.deckName.trim() : null;
+  const deckUrl =
+    typeof record.deckUrl === 'string' && record.deckUrl.trim() ? record.deckUrl.trim() : null;
 
   // Support both old format (commander/commanderLink) and new format (commanderNames/commanderLinks)
   let commanderNames: string[] = [];
@@ -95,12 +109,16 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
   const colorIdentity = Array.isArray(record.colorIdentity)
     ? record.colorIdentity.filter((value): value is string => typeof value === 'string')
     : null;
-  if (!userId && !name && commanderNames.length === 0 && (!colorIdentity || colorIdentity.length === 0)) {
+  if (!userId && !name && !email && !deckId && !deckName && commanderNames.length === 0 && (!colorIdentity || colorIdentity.length === 0)) {
     return null;
   }
   return {
     userId,
     name,
+    email,
+    deckId,
+    deckName,
+    deckUrl,
     commanderNames,
     commanderLinks,
     colorIdentity: colorIdentity && colorIdentity.length > 0 ? colorIdentity : null

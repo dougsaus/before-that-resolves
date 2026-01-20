@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
+import { useOpponentDecks, type OpponentDeck } from '../hooks/useOpponentDecks';
 import { useOpponentUsers, type OpponentUser } from '../hooks/useOpponentUsers';
 import { buildApiUrl } from '../utils/api';
 import { parseLocalDate } from '../utils/date';
@@ -42,6 +43,10 @@ function createLogOpponent(): OpponentForm {
     searchMessage: null,
     searchStatus: null,
     name: '',
+    email: null,
+    deckId: null,
+    deckName: null,
+    deckUrl: null,
     commanders: [{ name: '', link: null, lookupStatus: 'idle' }],
     colorIdentity: ''
   };
@@ -71,6 +76,15 @@ function formatColorValue(colors: string[] | null): string {
   if (!colors) return '';
   if (colors.length === 0) return 'C';
   return sortColorsForDisplay(colors).join('');
+}
+
+function formatCommanderList(commanders: string[]): string {
+  if (commanders.length === 0) return 'No commander';
+  return commanders.join(' / ');
+}
+
+function formatOpponentDeckLabel(deck: OpponentDeck): string {
+  return `${deck.name} — ${formatCommanderList(deck.commanderNames)}`;
 }
 
 function getScryfallImageUrl(cardName: string) {
@@ -133,6 +147,10 @@ type OpponentForm = {
   searchMessage: string | null;
   searchStatus: 'matched' | 'not-found' | 'multiple' | 'error' | null;
   name: string;
+  email: string | null;
+  deckId: string | null;
+  deckName: string | null;
+  deckUrl: string | null;
   commanders: CommanderEntry[];
   colorIdentity: string;
 };
@@ -149,6 +167,7 @@ type DeckCollectionProps = {
   onRemoveDeck: (deckId: string) => Promise<void>;
   onOpenInOracle?: (deckUrl: string) => void;
   onRefreshDecks?: () => Promise<void>;
+  onLogSaved?: () => void;
 };
 
 export function DeckCollection({
@@ -162,7 +181,8 @@ export function DeckCollection({
   onPreviewDeck,
   onRemoveDeck,
   onOpenInOracle,
-  onRefreshDecks
+  onRefreshDecks,
+  onLogSaved
 }: DeckCollectionProps) {
   type SortKey = 'name' | 'commander' | 'color' | 'games' | 'wins' | 'lastPlayed';
   const sortStorageKey = 'btr:deck-sort';
@@ -239,6 +259,12 @@ export function DeckCollection({
     searchOpponents,
     clearSearch
   } = useOpponentUsers(idToken);
+  const {
+    decksByUserId,
+    loadingByUserId: decksLoadingByUserId,
+    errorByUserId: decksErrorByUserId,
+    loadOpponentDecks
+  } = useOpponentDecks(idToken);
   const [recentOpenIndex, setRecentOpenIndex] = useState<number | null>(null);
   const [searchOpenIndex, setSearchOpenIndex] = useState<number | null>(null);
   useEffect(() => {
@@ -265,6 +291,15 @@ export function DeckCollection({
     if (!logTarget || !idToken) return;
     void loadRecentOpponents();
   }, [logTarget, idToken, loadRecentOpponents]);
+
+  useEffect(() => {
+    if (!logTarget) return;
+    logOpponents.forEach((opponent) => {
+      if (opponent.userId) {
+        void loadOpponentDecks(opponent.userId);
+      }
+    });
+  }, [logOpponents, logTarget, loadOpponentDecks]);
 
   useEffect(() => {
     if (searchOpenIndex === null || !searchError) return;
@@ -658,7 +693,7 @@ export function DeckCollection({
           ...next[opponentIndex],
           [field]: value,
           ...(field === 'name'
-            ? { userId: null, userLabel: null, searchMessage: null, searchStatus: null }
+            ? { userId: null, userLabel: null, searchMessage: null, searchStatus: null, deckId: null, email: null }
             : {})
         };
       }
@@ -668,6 +703,7 @@ export function DeckCollection({
 
   const applyLogOpponentUser = (opponentId: string, user: OpponentUser) => {
     const label = formatOpponentUserLabel(user);
+    const displayName = (user.name ?? user.email ?? '').trim();
     setLogOpponents((current) => {
       const next = [...current];
       const index = next.findIndex((opponent) => opponent.id === opponentId);
@@ -675,13 +711,18 @@ export function DeckCollection({
       next[index] = {
         ...next[index],
         userId: user.id,
-        name: (user.name ?? user.email ?? '').trim(),
+        name: displayName,
+        email: user.email ?? null,
         userLabel: label,
         searchMessage: `Matched user: ${label}`,
-        searchStatus: 'matched'
+        searchStatus: 'matched',
+        deckId: null,
+        deckName: null,
+        deckUrl: null
       };
       return next;
     });
+    void loadOpponentDecks(user.id);
     setRecentOpenIndex(null);
     setSearchOpenIndex(null);
     clearSearch();
@@ -759,6 +800,56 @@ export function DeckCollection({
       }
       return next;
     });
+  };
+
+  const selectLogOpponentDeck = (opponentIndex: number, deckId: string) => {
+    const currentOpponent = logOpponents[opponentIndex];
+    const currentDeck = currentOpponent?.userId
+      ? (decksByUserId[currentOpponent.userId] ?? []).find((entry) => entry.id === deckId)
+      : null;
+    setLogOpponents((current) => {
+      const next = [...current];
+      const opponent = next[opponentIndex];
+      if (!opponent) return current;
+      if (!deckId) {
+        next[opponentIndex] = { ...opponent, deckId: null, deckName: null, deckUrl: null };
+        return next;
+      }
+      const userId = opponent.userId;
+      const decks = userId ? decksByUserId[userId] ?? [] : [];
+      const deck = decks.find((entry) => entry.id === deckId);
+      if (!deck) {
+        next[opponentIndex] = { ...opponent, deckId };
+        return next;
+      }
+      const commanders = deck.commanderNames.length > 0
+        ? deck.commanderNames.map((name, idx) => ({
+            name,
+            link: deck.commanderLinks[idx] ?? null,
+            lookupStatus: deck.commanderLinks[idx] ? 'found' as const : idToken ? 'loading' as const : 'idle' as const
+          }))
+        : [{ name: '', link: null, lookupStatus: 'idle' as const }];
+      next[opponentIndex] = {
+        ...opponent,
+        deckId: deck.id,
+        deckName: deck.name,
+        deckUrl: deck.url ?? null,
+        commanders,
+        colorIdentity: formatColorValue(deck.colorIdentity)
+      };
+      return next;
+    });
+    const opponentId = logOpponents[opponentIndex]?.id;
+    if (opponentId && currentDeck) {
+      const commandersToResolve = currentDeck.commanderNames.map((name, idx) => ({
+        name,
+        link: currentDeck.commanderLinks[idx] ?? null
+      }));
+      void resolveCommanderLinks(opponentId, commandersToResolve);
+      if (currentDeck.url) {
+        void refreshOpponentDeckSummary(opponentId, currentDeck.url);
+      }
+    }
   };
 
   const addLogOpponentCommander = (opponentIndex: number) => {
@@ -862,6 +953,119 @@ export function DeckCollection({
       setLogFormError(message);
     }
   };
+
+  const resolveCommanderLinks = async (
+    opponentId: string,
+    commanders: Array<{ name: string; link: string | null }>
+  ) => {
+    if (!idToken) return;
+    const missing = commanders
+      .map((commander, index) => ({ ...commander, index }))
+      .filter((commander) => commander.name.trim().length > 0 && !commander.link);
+    if (missing.length === 0) return;
+    try {
+      const resolved = await Promise.all(
+        missing.map(async (commander) => {
+          const response = await fetch(buildApiUrl('/api/scryfall/lookup'), {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name: commander.name })
+          });
+          const payload = await response.json() as {
+            success?: boolean;
+            error?: string;
+            card?: { name: string; scryfallUrl: string | null } | null;
+          };
+          if (!response.ok || !payload.success) {
+            return { index: commander.index, name: commander.name, link: null, status: 'error' as const };
+          }
+          if (!payload.card) {
+            return { index: commander.index, name: commander.name, link: null, status: 'not-found' as const };
+          }
+          return {
+            index: commander.index,
+            name: payload.card.name || commander.name,
+            link: payload.card.scryfallUrl ?? null,
+            status: payload.card.scryfallUrl ? 'found' as const : 'idle' as const
+          };
+        })
+      );
+      setLogOpponents((current) => {
+        const next = [...current];
+        const index = next.findIndex((opponent) => opponent.id === opponentId);
+        if (index === -1) return current;
+        const opponent = next[index];
+        const updated = [...opponent.commanders];
+        resolved.forEach((result) => {
+          if (!updated[result.index]) return;
+          updated[result.index] = {
+            ...updated[result.index],
+            name: result.name,
+            link: result.link,
+            lookupStatus: result.status
+          };
+        });
+        next[index] = { ...opponent, commanders: updated };
+        return next;
+      });
+    } catch {
+      // Ignore lookup failures; manual Scryfall button still available.
+    }
+  };
+
+  const refreshOpponentDeckSummary = async (opponentId: string, deckUrl: string) => {
+    if (!idToken || !deckUrl.trim()) return;
+    try {
+      const response = await fetch(buildApiUrl('/api/decks/preview'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ deckUrl })
+      });
+      const payload = await response.json() as {
+        success?: boolean;
+        error?: string;
+        deck?: { commanderNames?: string[]; colorIdentity?: string[] } | null;
+      };
+      if (!response.ok || !payload.success || !payload.deck) return;
+      const commanderNames = Array.isArray(payload.deck.commanderNames)
+        ? payload.deck.commanderNames
+        : [];
+      const colorIdentity = Array.isArray(payload.deck.colorIdentity)
+        ? payload.deck.colorIdentity
+        : null;
+      if (commanderNames.length === 0 && !colorIdentity) return;
+      setLogOpponents((current) => {
+        const next = [...current];
+        const index = next.findIndex((opponent) => opponent.id === opponentId);
+        if (index === -1) return current;
+        const opponent = next[index];
+        const commanders = commanderNames.length > 0
+          ? commanderNames.map((name) => ({
+              name,
+              link: null,
+              lookupStatus: idToken ? 'loading' as const : 'idle' as const
+            }))
+          : opponent.commanders;
+        next[index] = {
+          ...opponent,
+          commanders,
+          colorIdentity: colorIdentity ? formatColorValue(colorIdentity) : opponent.colorIdentity
+        };
+        return next;
+      });
+      if (commanderNames.length > 0) {
+        void resolveCommanderLinks(opponentId, commanderNames.map((name) => ({ name, link: null })));
+      }
+    } catch {
+      // Ignore preview failures and keep existing opponent data.
+    }
+  };
   const parseOptionalNumberInput = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return null;
@@ -885,6 +1089,10 @@ export function DeckCollection({
       opponents: logOpponents.map((opponent) => ({
         userId: opponent.userId,
         name: opponent.name.trim(),
+        email: opponent.email,
+        deckId: opponent.deckId,
+        deckName: opponent.deckName,
+        deckUrl: opponent.deckUrl,
         commanderNames: opponent.commanders
           .map((cmd) => cmd.name.trim())
           .filter((name) => name.length > 0),
@@ -902,6 +1110,7 @@ export function DeckCollection({
       if (onRefreshDecks) {
         await onRefreshDecks();
       }
+      onLogSaved?.();
     }
   };
 
@@ -931,7 +1140,7 @@ export function DeckCollection({
           ) : (
             <span>{name}</span>
           )}
-          {index < deck.commanderNames.length - 1 && <span className="text-gray-500">, </span>}
+          {index < deck.commanderNames.length - 1 && <span className="text-gray-500"> / </span>}
         </span>
       );
     });
@@ -1417,191 +1626,225 @@ export function DeckCollection({
                 {logOpponents.length === 0 && (
                   <p className="text-xs text-gray-500">No opponents added yet.</p>
                 )}
-                {logOpponents.map((opponent, opponentIndex) => (
-                  <div
-                    key={`${logTarget.id}-opponent-${opponentIndex}`}
-                    className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
-                    ref={opponentIndex === recentOpenIndex || opponentIndex === searchOpenIndex ? opponentDropdownRef : null}
-                  >
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                        <div className="flex-1 min-w-0">
-                          <input
-                            type="text"
-                            value={opponent.name}
-                          onChange={(event) => updateLogOpponentField(opponentIndex, 'name', event.target.value)}
-                          onFocus={() => openRecentOpponents(opponentIndex)}
-                          placeholder="Name"
-                          className="w-full min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        />
-                        </div>
-                        <div className="flex items-center gap-2">
+                {logOpponents.map((opponent, opponentIndex) => {
+                  const opponentDecks = opponent.userId ? decksByUserId[opponent.userId] ?? [] : [];
+                  const decksLoading = opponent.userId ? decksLoadingByUserId[opponent.userId] : false;
+                  const decksError = opponent.userId ? decksErrorByUserId[opponent.userId] : null;
+                  return (
+                    <div
+                      key={`${logTarget.id}-opponent-${opponentIndex}`}
+                      className="rounded-lg border border-gray-700 bg-gray-800/50 p-3"
+                      ref={opponentIndex === recentOpenIndex || opponentIndex === searchOpenIndex ? opponentDropdownRef : null}
+                    >
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={opponent.name}
+                              onChange={(event) => updateLogOpponentField(opponentIndex, 'name', event.target.value)}
+                              onFocus={() => openRecentOpponents(opponentIndex)}
+                              placeholder="Name"
+                              className="w-full min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleLogOpponentSearch(opponentIndex)}
+                              disabled={searchLoading && searchOpenIndex === opponentIndex}
+                              className="w-full sm:w-auto rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                            >
+                              {searchLoading && searchOpenIndex === opponentIndex ? 'Searching...' : 'Search'}
+                            </button>
+                          </div>
                           <button
                             type="button"
-                            onClick={() => handleLogOpponentSearch(opponentIndex)}
-                            disabled={searchLoading && searchOpenIndex === opponentIndex}
-                            className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                            onClick={() => removeLogOpponent(opponentIndex)}
+                            className="text-gray-500 hover:text-red-400 p-1"
+                            aria-label={`Remove opponent ${opponentIndex + 1}`}
                           >
-                            {searchLoading && searchOpenIndex === opponentIndex ? 'Searching...' : 'Search'}
+                            <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
                           </button>
                         </div>
-                        <div className="flex-1 min-w-0">
+                        {recentOpenIndex === opponentIndex && (
+                          <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
+                            <p className="text-xs text-gray-400 mb-2">Recent opponents</p>
+                            {recentLoading && <p className="text-xs text-gray-400">Loading recent opponents...</p>}
+                            {recentError && <p className="text-xs text-red-400">{recentError}</p>}
+                            {!recentLoading && recentOpponents.length === 0 && (
+                              <p className="text-xs text-gray-500">No recent opponents yet.</p>
+                            )}
+                            {recentOpponents.map((user) => (
+                              <button
+                                key={user.id}
+                                type="button"
+                                onClick={() => applyLogOpponentUser(opponent.id, user)}
+                                className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
+                              >
+                                {formatOpponentUserLabel(user)}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {searchOpenIndex === opponentIndex && (
+                          <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
+                            <p className="text-xs text-gray-400 mb-2">Search results</p>
+                            {searchLoading && <p className="text-xs text-gray-400">Searching users...</p>}
+                            {searchError && <p className="text-xs text-red-400">{searchError}</p>}
+                            {!searchLoading && searchResults.length === 0 && (
+                              <p className="text-xs text-gray-500">No matching users found.</p>
+                            )}
+                            {searchResults.map((user) => (
+                              <button
+                                key={user.id}
+                                type="button"
+                                onClick={() => applyLogOpponentUser(opponent.id, user)}
+                                className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
+                              >
+                                {formatOpponentUserLabel(user)}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {opponent.searchMessage && (
+                          <p
+                            className={`text-xs ${
+                              opponent.searchStatus === 'matched'
+                                ? 'text-emerald-300'
+                                : opponent.searchStatus === 'not-found'
+                                  ? 'text-amber-300'
+                                  : opponent.searchStatus === 'error'
+                                    ? 'text-red-400'
+                                    : 'text-gray-400'
+                            }`}
+                          >
+                            {opponent.searchMessage}
+                          </p>
+                        )}
+                        {opponent.userId && opponent.userLabel && (
+                          <p className="text-xs text-emerald-300">Selected user: {opponent.userLabel}</p>
+                        )}
+                        {opponent.userId && (
+                          <div className="flex flex-col gap-2">
+                            <label className="text-xs text-gray-400" htmlFor={`log-opponent-deck-${opponent.id}`}>
+                              Opponent deck
+                            </label>
+                            <select
+                              id={`log-opponent-deck-${opponent.id}`}
+                              value={opponent.deckId ?? ''}
+                              onChange={(event) => selectLogOpponentDeck(opponentIndex, event.target.value)}
+                              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+                            >
+                              <option value="">Select deck...</option>
+                              {opponentDecks.map((deck) => (
+                                <option key={deck.id} value={deck.id}>
+                                  {formatOpponentDeckLabel(deck)}
+                                </option>
+                              ))}
+                            </select>
+                            {decksLoading && <p className="text-xs text-gray-400">Loading decks...</p>}
+                            {!decksLoading && opponentDecks.length === 0 && !decksError && (
+                              <p className="text-xs text-gray-500">No decks found for this user.</p>
+                            )}
+                            {decksError && <p className="text-xs text-red-400">{decksError}</p>}
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <p className="text-xs text-gray-400">Commanders (0-2)</p>
+                          {opponent.commanders.map((commander, cmdIndex) => (
+                            <div key={cmdIndex} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                              <input
+                                type="text"
+                                value={commander.name}
+                                onChange={(event) => updateLogOpponentCommander(opponentIndex, cmdIndex, event.target.value)}
+                                onFocus={() => {
+                                  setRecentOpenIndex(null);
+                                  setSearchOpenIndex(null);
+                                  clearSearch();
+                                }}
+                                placeholder={`Commander ${cmdIndex + 1}`}
+                                className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => lookupLogOpponentCommander(opponentIndex, cmdIndex)}
+                                disabled={!commander.name.trim() || commander.lookupStatus === 'loading'}
+                                className="w-full sm:w-auto rounded-lg border border-gray-700 px-2 py-2 sm:py-1 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                                aria-label="Lookup commander"
+                                title="Lookup commander on Scryfall"
+                              >
+                                {commander.lookupStatus === 'loading' ? '...' : 'Scryfall'}
+                              </button>
+                              {opponent.commanders.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeLogOpponentCommander(opponentIndex, cmdIndex)}
+                                  className="self-start sm:self-auto text-gray-500 hover:text-red-400 p-1"
+                                  aria-label={`Remove commander ${cmdIndex + 1}`}
+                                >
+                                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {opponent.commanders.some((cmd) => cmd.lookupStatus === 'not-found') && (
+                            <p className="text-xs text-amber-300">Card not found on Scryfall.</p>
+                          )}
+                          {opponent.commanders.some((cmd) => cmd.lookupStatus === 'error') && (
+                            <p className="text-xs text-red-400">Lookup failed.</p>
+                          )}
+                          {opponent.commanders.some((cmd) => cmd.link) && (
+                            <div className="flex flex-wrap gap-2">
+                              {opponent.commanders
+                                .filter((cmd) => cmd.link)
+                                .map((cmd, i) => (
+                                  <a
+                                    key={i}
+                                    href={cmd.link!}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-cyan-300 hover:text-cyan-200"
+                                  >
+                                    {cmd.name} on Scryfall
+                                  </a>
+                                ))}
+                            </div>
+                          )}
+                          {opponent.commanders.length < 2 && (
+                            <button
+                              type="button"
+                              onClick={() => addLogOpponentCommander(opponentIndex)}
+                              className="flex items-center gap-1 text-xs text-gray-400 hover:text-cyan-300"
+                            >
+                              <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                                <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+                              </svg>
+                              Add partner commander
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <p className="text-xs text-gray-400">Color identity</p>
                           <ColorIdentitySelect
                             label=""
                             value={opponent.colorIdentity}
-                          onChange={(value) => updateLogOpponentField(opponentIndex, 'colorIdentity', value)}
-                          onFocus={() => {
-                            setRecentOpenIndex(null);
-                            setSearchOpenIndex(null);
-                            clearSearch();
-                          }}
-                        />
-                      </div>
-                        <button
-                          type="button"
-                          onClick={() => removeLogOpponent(opponentIndex)}
-                          className="text-gray-500 hover:text-red-400 p-1"
-                          aria-label={`Remove opponent ${opponentIndex + 1}`}
-                        >
-                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                      {recentOpenIndex === opponentIndex && (
-                        <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
-                          <p className="text-xs text-gray-400 mb-2">Recent opponents</p>
-                          {recentLoading && <p className="text-xs text-gray-400">Loading recent opponents...</p>}
-                          {recentError && <p className="text-xs text-red-400">{recentError}</p>}
-                          {!recentLoading && recentOpponents.length === 0 && (
-                            <p className="text-xs text-gray-500">No recent opponents yet.</p>
-                          )}
-                          {recentOpponents.map((user) => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              onClick={() => applyLogOpponentUser(opponent.id, user)}
-                              className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
-                            >
-                              {formatOpponentUserLabel(user)}
-                            </button>
-                          ))}
+                            onChange={(value) => updateLogOpponentField(opponentIndex, 'colorIdentity', value)}
+                            onFocus={() => {
+                              setRecentOpenIndex(null);
+                              setSearchOpenIndex(null);
+                              clearSearch();
+                            }}
+                          />
                         </div>
-                      )}
-                      {searchOpenIndex === opponentIndex && (
-                        <div className="rounded-lg border border-gray-700 bg-gray-900 p-2">
-                          <p className="text-xs text-gray-400 mb-2">Search results</p>
-                          {searchLoading && <p className="text-xs text-gray-400">Searching users...</p>}
-                          {searchError && <p className="text-xs text-red-400">{searchError}</p>}
-                          {!searchLoading && searchResults.length === 0 && (
-                            <p className="text-xs text-gray-500">No matching users found.</p>
-                          )}
-                          {searchResults.map((user) => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              onClick={() => applyLogOpponentUser(opponent.id, user)}
-                              className="block w-full rounded-md px-2 py-1 text-left text-xs text-gray-200 hover:bg-gray-800"
-                            >
-                              {formatOpponentUserLabel(user)}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {opponent.searchMessage && (
-                        <p
-                          className={`text-xs ${
-                            opponent.searchStatus === 'matched'
-                              ? 'text-emerald-300'
-                              : opponent.searchStatus === 'not-found'
-                                ? 'text-amber-300'
-                                : opponent.searchStatus === 'error'
-                                  ? 'text-red-400'
-                                  : 'text-gray-400'
-                          }`}
-                        >
-                          {opponent.searchMessage}
-                        </p>
-                      )}
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs text-gray-400">Commanders (0-2)</p>
-                        {opponent.commanders.map((commander, cmdIndex) => (
-                          <div key={cmdIndex} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={commander.name}
-                              onChange={(event) => updateLogOpponentCommander(opponentIndex, cmdIndex, event.target.value)}
-                              onFocus={() => {
-                                setRecentOpenIndex(null);
-                                setSearchOpenIndex(null);
-                                clearSearch();
-                              }}
-                              placeholder={`Commander ${cmdIndex + 1}`}
-                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => lookupLogOpponentCommander(opponentIndex, cmdIndex)}
-                              disabled={!commander.name.trim() || commander.lookupStatus === 'loading'}
-                              className="rounded-lg border border-gray-700 px-2 py-1 text-xs font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-60"
-                              aria-label="Lookup commander"
-                              title="Lookup commander on Scryfall"
-                            >
-                              {commander.lookupStatus === 'loading' ? '...' : 'Scryfall'}
-                            </button>
-                            {opponent.commanders.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeLogOpponentCommander(opponentIndex, cmdIndex)}
-                                className="text-gray-500 hover:text-red-400 p-1"
-                                aria-label={`Remove commander ${cmdIndex + 1}`}
-                              >
-                                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        {opponent.commanders.some((cmd) => cmd.lookupStatus === 'not-found') && (
-                          <p className="text-xs text-amber-300">Card not found on Scryfall.</p>
-                        )}
-                        {opponent.commanders.some((cmd) => cmd.lookupStatus === 'error') && (
-                          <p className="text-xs text-red-400">Lookup failed.</p>
-                        )}
-                        {opponent.commanders.some((cmd) => cmd.link) && (
-                          <div className="flex flex-wrap gap-2">
-                            {opponent.commanders
-                              .filter((cmd) => cmd.link)
-                              .map((cmd, i) => (
-                                <a
-                                  key={i}
-                                  href={cmd.link!}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-xs text-cyan-300 hover:text-cyan-200"
-                                >
-                                  {cmd.name} on Scryfall
-                                </a>
-                              ))}
-                          </div>
-                        )}
-                        {opponent.commanders.length < 2 && (
-                          <button
-                            type="button"
-                            onClick={() => addLogOpponentCommander(opponentIndex)}
-                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-cyan-300"
-                          >
-                            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
-                              <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-                            </svg>
-                            Add partner commander
-                          </button>
-                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {logOpponents.length > 0 && (
                   <button
                     type="button"
