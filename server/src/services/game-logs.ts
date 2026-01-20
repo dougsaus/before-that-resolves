@@ -125,14 +125,14 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
   };
 }
 
-function normalizeOpponents(input: unknown): GameLogOpponent[] {
+export function normalizeOpponents(input: unknown): GameLogOpponent[] {
   if (!Array.isArray(input)) return [];
   return input
     .map((entry) => normalizeOpponent(entry))
     .filter((entry): entry is GameLogOpponent => Boolean(entry));
 }
 
-function normalizeTags(input: unknown): string[] {
+export function normalizeTags(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   return input
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
@@ -168,6 +168,21 @@ export async function listGameLogs(userId: string): Promise<GameLogEntry[]> {
     [userId]
   );
   return result.rows.map(mapGameLogRow);
+}
+
+export async function getGameLogById(
+  userId: string,
+  logId: string
+): Promise<GameLogEntry | null> {
+  const db = getPool();
+  const result = await db.query<GameLogRow>(
+    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, tags, created_at
+     FROM game_logs
+     WHERE user_id = $1 AND id = $2`,
+    [userId, logId]
+  );
+  if (result.rows.length === 0) return null;
+  return mapGameLogRow(result.rows[0]);
 }
 
 export async function createGameLog(userId: string, input: GameLogInput): Promise<GameLogEntry[]> {

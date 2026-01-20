@@ -35,6 +35,25 @@ const baseLog = (overrides: Partial<GameLogEntry> = {}): GameLogEntry => ({
   ...overrides
 });
 
+const renderGameLogs = (overrides: Partial<Parameters<typeof GameLogs>[0]> = {}) => {
+  return render(
+    <GameLogs
+      enabled
+      idToken="token-123"
+      decks={[]}
+      decksLoading={false}
+      sharedLogs={[]}
+      sharedLoading={false}
+      sharedError={null}
+      refreshSharedLogs={vi.fn()}
+      updateSharedLog={vi.fn()}
+      acceptSharedLog={vi.fn()}
+      rejectSharedLog={vi.fn()}
+      {...overrides}
+    />
+  );
+};
+
 describe('GameLogs', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -70,8 +89,11 @@ describe('GameLogs', () => {
       logs: [],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
     mockUseOpponentUsers.mockReturnValue({
       recentOpponents: [],
@@ -106,11 +128,14 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     const deckNames = screen.getAllByText(/Older Deck|Newer Deck/).map((node) => node.textContent);
     expect(deckNames[0]).toBe('Newer Deck');
@@ -125,11 +150,14 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     const sortSelect = screen.getByLabelText('Sort');
     await user.selectOptions(sortSelect, 'deckName');
@@ -159,11 +187,14 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     const sortSelect = screen.getByLabelText('Sort');
     await user.selectOptions(sortSelect, 'result');
@@ -185,11 +216,14 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     const sortSelect = screen.getByLabelText('Sort');
     await user.selectOptions(sortSelect, 'durationMinutes');
@@ -211,11 +245,14 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     const sortSelect = screen.getByLabelText('Sort') as HTMLSelectElement;
     expect(sortSelect.value).toBe('deckName');
@@ -246,8 +283,11 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog
+      updateLog,
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
     const searchOpponents = vi.fn().mockResolvedValue([{ id: 'user-42', name: 'Opponent', email: 'opp@test.dev' }]);
     mockUseOpponentUsers.mockReturnValue({
@@ -279,7 +319,7 @@ describe('GameLogs', () => {
       loadOpponentDecks: vi.fn().mockResolvedValue([])
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     await user.click(screen.getByRole('button', { name: /Edit Alpha Deck/i }));
 
@@ -318,14 +358,58 @@ describe('GameLogs', () => {
       ],
       loading: false,
       error: null,
+      statusMessage: null,
       removeLog: vi.fn(),
-      updateLog: vi.fn()
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
     });
 
-    render(<GameLogs enabled idToken="token-123" />);
+    renderGameLogs();
 
     const deckLink = screen.getByRole('link', { name: 'Chaos Brew' });
     expect(deckLink).toHaveAttribute('href', 'https://archidekt.com/decks/7/chaos-brew');
     expect(screen.getByText('Norin the Wary')).toBeInTheDocument();
+  });
+
+  it('renders shared logs with accept disabled when deck is missing', () => {
+    mockUseGameLogs.mockReturnValue({
+      logs: [],
+      loading: false,
+      error: null,
+      statusMessage: null,
+      removeLog: vi.fn(),
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
+    });
+
+    renderGameLogs({
+      sharedLogs: [
+        {
+          id: 'shared-1',
+          recipientUserId: 'user-1',
+          sharedByUserId: 'user-2',
+          sourceLogId: 'log-1',
+          deckId: null,
+          deckName: null,
+          deckUrl: null,
+          playedAt: '2026-01-12',
+          turns: null,
+          durationMinutes: null,
+          opponentsCount: 0,
+          opponents: [],
+          result: null,
+          tags: [],
+          status: 'pending',
+          createdAt: '2026-01-12T00:00:00.000Z',
+          updatedAt: '2026-01-12T00:00:00.000Z'
+        }
+      ]
+    });
+
+    expect(screen.getByText('Shared Logs')).toBeInTheDocument();
+    const acceptButton = screen.getByLabelText('Accept shared log');
+    expect(acceptButton).toBeDisabled();
   });
 });

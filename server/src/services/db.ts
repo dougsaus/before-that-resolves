@@ -76,6 +76,29 @@ const schemaQueries = [
    END $$;`,
   `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx
     ON game_logs (user_id, played_at DESC, created_at DESC);`,
+  `CREATE TABLE IF NOT EXISTS shared_game_logs (
+    id TEXT PRIMARY KEY,
+    recipient_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    shared_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source_log_id TEXT NOT NULL,
+    deck_id TEXT,
+    deck_name TEXT,
+    deck_url TEXT,
+    played_at DATE NOT NULL,
+    turns INTEGER,
+    duration_minutes INTEGER,
+    opponents_count INTEGER NOT NULL DEFAULT 0,
+    opponents JSONB NOT NULL DEFAULT '[]'::jsonb,
+    result TEXT CHECK (result IN ('win', 'loss')),
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS shared_game_logs_recipient_source_idx
+    ON shared_game_logs (recipient_user_id, source_log_id);`,
+  `CREATE INDEX IF NOT EXISTS shared_game_logs_recipient_status_idx
+    ON shared_game_logs (recipient_user_id, status, created_at DESC);`,
   `CREATE TABLE IF NOT EXISTS recent_opponents (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     opponent_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

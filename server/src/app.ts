@@ -14,7 +14,24 @@ import {
   upsertUser
 } from './services/deck-collection';
 import type { DeckStats, GameLogEntry, GameLogInput, GameLogUpdate } from './services/game-logs';
-import { createGameLog, getDeckStats, listGameLogs, removeGameLog, updateGameLog } from './services/game-logs';
+import {
+  createGameLog,
+  getDeckStats,
+  getGameLogById,
+  listGameLogs,
+  removeGameLog,
+  updateGameLog
+} from './services/game-logs';
+import type { SharedGameLogEntry, SharedGameLogUpdate } from './services/shared-game-logs';
+import {
+  createSharedGameLog,
+  getSharedGameLogById,
+  listSharedGameLogs,
+  listSharedLogStatuses,
+  reopenSharedGameLog,
+  setSharedGameLogStatus,
+  updateSharedGameLog
+} from './services/shared-game-logs';
 import type { OpponentUser } from './services/opponents';
 import { listRecentOpponents, recordRecentOpponents, searchOpponentUsers } from './services/opponents';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
@@ -88,9 +105,73 @@ type AppDeps = {
   }>>;
   upsertUser?: (user: GoogleUser) => Promise<void>;
   listGameLogs?: (userId: string) => Promise<GameLogEntry[]>;
+  getGameLogById?: (userId: string, logId: string) => Promise<GameLogEntry | null>;
   createGameLog?: (userId: string, log: GameLogInput) => Promise<GameLogEntry[]>;
   updateGameLog?: (userId: string, logId: string, log: GameLogUpdate) => Promise<GameLogEntry[]>;
   removeGameLog?: (userId: string, logId: string) => Promise<GameLogEntry[]>;
+  listSharedGameLogs?: (userId: string) => Promise<SharedGameLogEntry[]>;
+  getSharedGameLogById?: (userId: string, logId: string) => Promise<SharedGameLogEntry | null>;
+  createSharedGameLog?: (input: {
+    recipientUserId: string;
+    sharedByUserId: string;
+    sourceLogId: string;
+    deckId: string | null;
+    deckName: string | null;
+    deckUrl: string | null;
+    playedAt: string;
+    turns: number | null;
+    durationMinutes: number | null;
+    opponentsCount: number;
+    opponents: Array<{
+      userId: string | null;
+      name: string | null;
+      email: string | null;
+      deckId: string | null;
+      deckName: string | null;
+      deckUrl: string | null;
+      commanderNames: string[];
+      commanderLinks: Array<string | null>;
+      colorIdentity: string[] | null;
+    }>;
+    result: 'win' | 'loss' | null;
+    tags: string[];
+  }) => Promise<boolean>;
+  listSharedLogStatuses?: (recipientUserIds: string[], sourceLogId: string) => Promise<Map<string, 'pending' | 'accepted' | 'rejected'>>;
+  reopenSharedGameLog?: (input: {
+    recipientUserId: string;
+    sharedByUserId: string;
+    sourceLogId: string;
+    deckId: string | null;
+    deckName: string | null;
+    deckUrl: string | null;
+    playedAt: string;
+    turns: number | null;
+    durationMinutes: number | null;
+    opponentsCount: number;
+    opponents: Array<{
+      userId: string | null;
+      name: string | null;
+      email: string | null;
+      deckId: string | null;
+      deckName: string | null;
+      deckUrl: string | null;
+      commanderNames: string[];
+      commanderLinks: Array<string | null>;
+      colorIdentity: string[] | null;
+    }>;
+    result: 'win' | 'loss' | null;
+    tags: string[];
+  }) => Promise<boolean>;
+  updateSharedGameLog?: (
+    userId: string,
+    logId: string,
+    log: SharedGameLogUpdate
+  ) => Promise<SharedGameLogEntry | null>;
+  setSharedGameLogStatus?: (
+    userId: string,
+    logId: string,
+    status: 'pending' | 'accepted' | 'rejected'
+  ) => Promise<boolean>;
   getDeckStats?: (userId: string) => Promise<Map<string, DeckStats>>;
   searchOpponentUsers?: (query: string, limit?: number) => Promise<OpponentUser[]>;
   listRecentOpponents?: (userId: string, limit?: number) => Promise<OpponentUser[]>;
@@ -114,9 +195,17 @@ export function createApp(deps: AppDeps = {}) {
   const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
   const saveUser = deps.upsertUser ?? upsertUser;
   const listLogs = deps.listGameLogs ?? listGameLogs;
+  const getLogById = deps.getGameLogById ?? getGameLogById;
   const createLog = deps.createGameLog ?? createGameLog;
   const updateLog = deps.updateGameLog ?? updateGameLog;
   const deleteLog = deps.removeGameLog ?? removeGameLog;
+  const listSharedLogs = deps.listSharedGameLogs ?? listSharedGameLogs;
+  const getSharedLogById = deps.getSharedGameLogById ?? getSharedGameLogById;
+  const createSharedLog = deps.createSharedGameLog ?? createSharedGameLog;
+  const listSharedStatuses = deps.listSharedLogStatuses ?? listSharedLogStatuses;
+  const reopenSharedLog = deps.reopenSharedGameLog ?? reopenSharedGameLog;
+  const updateSharedLog = deps.updateSharedGameLog ?? updateSharedGameLog;
+  const setSharedStatus = deps.setSharedGameLogStatus ?? setSharedGameLogStatus;
   const fetchDeckStats = deps.getDeckStats ?? getDeckStats;
   const searchUsers = deps.searchOpponentUsers ?? searchOpponentUsers;
   const listRecent = deps.listRecentOpponents ?? listRecentOpponents;
@@ -219,6 +308,11 @@ export function createApp(deps: AppDeps = {}) {
     return input
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
       .map((value) => value.trim());
+  };
+  const parseDeckIdInput = (input: unknown): string | null => {
+    if (typeof input !== 'string') return null;
+    const trimmed = input.trim();
+    return trimmed ? trimmed : null;
   };
   const parseOptionalNumber = (input: unknown): number | null => {
     if (input === undefined || input === null || input === '') {
@@ -738,6 +832,14 @@ export function createApp(deps: AppDeps = {}) {
     res.json({ success: true, logs });
   });
 
+  app.get('/api/game-logs/shared', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const sharedLogs = await listSharedLogs(user.id);
+    res.json({ success: true, sharedLogs });
+  });
+
   app.get('/api/users/search', async (req, res) => {
     const user = await requireGoogleUser(req, res);
     if (!user) return;
@@ -786,6 +888,155 @@ export function createApp(deps: AppDeps = {}) {
       colorIdentity: deck.colorIdentity ?? null
     }));
     res.json({ success: true, decks: opponentDecks });
+  });
+
+  app.post('/api/game-logs/:logId/share', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { logId } = req.params;
+    if (!logId) {
+      res.status(400).json({
+        success: false,
+        error: 'logId is required'
+      });
+      return;
+    }
+
+    const log = await getLogById(user.id, logId);
+    if (!log) {
+      res.status(404).json({
+        success: false,
+        error: 'Game log not found'
+      });
+      return;
+    }
+
+    const recipientIds = Array.from(
+      new Set(
+        log.opponents
+          .map((opponent) => opponent.userId)
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+    if (recipientIds.length === 0) {
+      res.json({
+        success: true,
+        sharedCount: 0,
+        skippedCount: 0,
+        acceptedCount: 0,
+        pendingCount: 0,
+        rejectedCount: 0,
+        nonUserCount: log.opponents.filter((opponent) => !opponent.userId).length,
+        opponents: []
+      });
+      return;
+    }
+
+    const decks = await listUserDecks(user.id);
+    const deck = decks.find((entry) => entry.id === log.deckId) ?? null;
+    const sharingOpponent = {
+      userId: user.id,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      deckId: deck?.id ?? log.deckId,
+      deckName: deck?.name ?? log.deckName,
+      deckUrl: deck?.url ?? null,
+      commanderNames: deck?.commanderNames ?? [],
+      commanderLinks: deck?.commanderLinks ?? [],
+      colorIdentity: deck?.colorIdentity ?? null
+    };
+    const sharedResult: 'win' | 'loss' | null = log.result === 'win' ? 'loss' : null;
+
+    const confirmReshare =
+      typeof req.body?.confirmReshare === 'boolean' ? req.body.confirmReshare : false;
+    const reshareRecipientIds = Array.isArray(req.body?.reshareRecipientIds)
+      ? req.body.reshareRecipientIds.filter((value: unknown): value is string => typeof value === 'string')
+      : null;
+    const statusByRecipient = await listSharedStatuses(recipientIds, log.id);
+    const rejectedRecipients = recipientIds.filter(
+      (recipientId) => statusByRecipient.get(recipientId) === 'rejected'
+    );
+    const acceptedCount = recipientIds.filter(
+      (recipientId) => statusByRecipient.get(recipientId) === 'accepted'
+    ).length;
+    const pendingCount = recipientIds.filter(
+      (recipientId) => statusByRecipient.get(recipientId) === 'pending'
+    ).length;
+    const nonUserCount = log.opponents.filter((opponent) => !opponent.userId).length;
+    let sharedCount = 0;
+    let reopenedCount = 0;
+    let skippedCount = 0;
+    for (const recipientId of recipientIds) {
+      const status = statusByRecipient.get(recipientId);
+      if (status === 'accepted' || status === 'pending') {
+        skippedCount += 1;
+        continue;
+      }
+      if (status === 'rejected' && !confirmReshare) {
+        skippedCount += 1;
+        continue;
+      }
+      if (status === 'rejected' && confirmReshare && reshareRecipientIds && !reshareRecipientIds.includes(recipientId)) {
+        skippedCount += 1;
+        continue;
+      }
+      const recipientOpponent = log.opponents.find((opponent) => opponent.userId === recipientId);
+      const sharedOpponents = log.opponents.filter((opponent) => opponent.userId !== recipientId);
+      sharedOpponents.push(sharingOpponent);
+
+      const input = {
+        recipientUserId: recipientId,
+        sharedByUserId: user.id,
+        sourceLogId: log.id,
+        deckId: recipientOpponent?.deckId ?? null,
+        deckName: recipientOpponent?.deckName ?? null,
+        deckUrl: recipientOpponent?.deckUrl ?? null,
+        playedAt: log.playedAt,
+        turns: log.turns,
+        durationMinutes: log.durationMinutes,
+        opponentsCount: sharedOpponents.length,
+        opponents: sharedOpponents,
+        result: sharedResult,
+        tags: [] as string[]
+      };
+      if (status === 'rejected') {
+        const reopened = await reopenSharedLog(input);
+        if (reopened) {
+          reopenedCount += 1;
+        } else {
+          skippedCount += 1;
+        }
+        continue;
+      }
+      const inserted = await createSharedLog(input);
+      if (inserted) {
+        sharedCount += 1;
+      } else {
+        skippedCount += 1;
+      }
+    }
+
+    const finalPendingCount = pendingCount + sharedCount + reopenedCount;
+    const finalRejectedCount = Math.max(0, rejectedRecipients.length - reopenedCount);
+    res.json({
+      success: true,
+      sharedCount,
+      reopenedCount,
+      skippedCount,
+      needsConfirm: rejectedRecipients.length > 0 && !confirmReshare,
+      rejectedCount: finalRejectedCount,
+      acceptedCount,
+      pendingCount: finalPendingCount,
+      nonUserCount,
+      opponents: log.opponents
+        .filter((opponent) => opponent.userId)
+        .map((opponent) => ({
+          userId: opponent.userId as string,
+          name: opponent.name ?? null,
+          status: statusByRecipient.get(opponent.userId as string) ?? null
+        }))
+    });
   });
 
   app.post('/api/game-logs', async (req, res) => {
@@ -896,6 +1147,165 @@ export function createApp(deps: AppDeps = {}) {
 
     const logs = await deleteLog(user.id, logId);
     res.json({ success: true, logs });
+  });
+
+  app.patch('/api/game-logs/shared/:logId', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { logId } = req.params;
+    if (!logId) {
+      res.status(400).json({
+        success: false,
+        error: 'logId is required'
+      });
+      return;
+    }
+
+    const {
+      deckId,
+      datePlayed,
+      opponentsCount,
+      opponents,
+      result,
+      turns,
+      durationMinutes,
+      tags
+    } = req.body ?? {};
+    const parsedDeckId = parseDeckIdInput(deckId);
+    const decks = parsedDeckId ? await listUserDecks(user.id) : [];
+    const selectedDeck = parsedDeckId ? decks.find((deck) => deck.id === parsedDeckId) ?? null : null;
+    if (parsedDeckId && !selectedDeck) {
+      res.status(400).json({
+        success: false,
+        error: 'Deck not found in your collection'
+      });
+      return;
+    }
+
+    const parsedOpponents = parseOpponentEntries(opponents);
+    const normalizedOpponentsCount = parseOpponentsCount(opponentsCount, parsedOpponents);
+    const logUpdate: SharedGameLogUpdate = {
+      deckId: parsedDeckId,
+      deckName: selectedDeck?.name ?? null,
+      deckUrl: selectedDeck?.url ?? null,
+      playedAt: normalizeDateInput(datePlayed),
+      turns: parseOptionalNumber(turns),
+      durationMinutes: parseOptionalNumber(durationMinutes),
+      opponentsCount: normalizedOpponentsCount,
+      opponents: parsedOpponents,
+      result: parseResultInput(result),
+      tags: parseTagsInput(tags)
+    };
+
+    const updated = await updateSharedLog(user.id, logId, logUpdate);
+    if (!updated) {
+      res.status(404).json({
+        success: false,
+        error: 'Shared game log not found'
+      });
+      return;
+    }
+
+    const opponentUserIds = parsedOpponents
+      .map((opponent) => opponent.userId)
+      .filter((value): value is string => Boolean(value));
+    if (opponentUserIds.length > 0) {
+      await recordRecent(user.id, opponentUserIds);
+    }
+
+    const sharedLogs = await listSharedLogs(user.id);
+    res.json({ success: true, sharedLogs });
+  });
+
+  app.post('/api/game-logs/shared/:logId/accept', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { logId } = req.params;
+    if (!logId) {
+      res.status(400).json({
+        success: false,
+        error: 'logId is required'
+      });
+      return;
+    }
+
+    const sharedLog = await getSharedLogById(user.id, logId);
+    if (!sharedLog || sharedLog.status !== 'pending') {
+      res.status(404).json({
+        success: false,
+        error: 'Shared game log not found'
+      });
+      return;
+    }
+
+    if (!sharedLog.deckId) {
+      res.status(400).json({
+        success: false,
+        error: 'Select a deck before accepting this shared log'
+      });
+      return;
+    }
+
+    const decks = await listUserDecks(user.id);
+    const deck = decks.find((entry) => entry.id === sharedLog.deckId);
+    if (!deck) {
+      res.status(400).json({
+        success: false,
+        error: 'Deck not found in your collection'
+      });
+      return;
+    }
+
+    await createLog(user.id, {
+      deckId: deck.id,
+      deckName: deck.name,
+      playedAt: sharedLog.playedAt,
+      turns: sharedLog.turns,
+      durationMinutes: sharedLog.durationMinutes,
+      opponentsCount: sharedLog.opponentsCount,
+      opponents: sharedLog.opponents,
+      result: sharedLog.result,
+      tags: sharedLog.tags
+    });
+
+    const opponentUserIds = sharedLog.opponents
+      .map((opponent) => opponent.userId)
+      .filter((value): value is string => Boolean(value));
+    if (opponentUserIds.length > 0) {
+      await recordRecent(user.id, opponentUserIds);
+    }
+
+    await setSharedStatus(user.id, logId, 'accepted');
+    const sharedLogs = await listSharedLogs(user.id);
+    res.json({ success: true, sharedLogs });
+  });
+
+  app.post('/api/game-logs/shared/:logId/reject', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+
+    const { logId } = req.params;
+    if (!logId) {
+      res.status(400).json({
+        success: false,
+        error: 'logId is required'
+      });
+      return;
+    }
+
+    const updated = await setSharedStatus(user.id, logId, 'rejected');
+    if (!updated) {
+      res.status(404).json({
+        success: false,
+        error: 'Shared game log not found'
+      });
+      return;
+    }
+
+    const sharedLogs = await listSharedLogs(user.id);
+    res.json({ success: true, sharedLogs });
   });
 
   app.post('/api/chat/export-pdf', async (req, res) => {
