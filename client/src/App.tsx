@@ -317,7 +317,9 @@ function App() {
                     onCreateDeck={deckCollection.createDeck}
                     onUpdateDeck={deckCollection.updateDeck}
                     onPreviewDeck={deckCollection.previewDeck}
+                    onPreviewBulkDecks={deckCollection.previewBulkDecks}
                     onRemoveDeck={deckCollection.removeDeck}
+                    onBulkImportDecks={deckCollection.importBulkDecks}
                     onOpenInOracle={(deckUrl) => {
                       setPendingDeckUrl(deckUrl);
                       setView('oracle');

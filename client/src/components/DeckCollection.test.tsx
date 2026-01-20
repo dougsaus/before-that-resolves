@@ -26,7 +26,9 @@ const defaultProps = {
   onCreateDeck: vi.fn().mockResolvedValue(true),
   onUpdateDeck: vi.fn().mockResolvedValue(true),
   onPreviewDeck: vi.fn().mockResolvedValue({ deck: undefined, error: 'Not found' }),
-  onRemoveDeck: vi.fn()
+  onPreviewBulkDecks: vi.fn().mockResolvedValue({ decks: [] }),
+  onRemoveDeck: vi.fn(),
+  onBulkImportDecks: vi.fn().mockResolvedValue({ success: true, failures: [] })
 };
 
 describe('DeckCollection', () => {
@@ -219,6 +221,54 @@ describe('DeckCollection', () => {
 
     expect(screen.getByLabelText('Deck name (required)')).toHaveValue('Deck Preview');
     expect(screen.getByLabelText('Commander(s) (optional)')).toHaveValue('Giada, Font of Hope');
+  });
+
+  it('loads bulk import candidates and submits selected decks', async () => {
+    const user = userEvent.setup();
+    const onPreviewBulkDecks = vi.fn().mockResolvedValue({
+      decks: [
+        {
+          id: 'deck-1',
+          name: 'Bulk One',
+          url: 'https://archidekt.com/decks/1',
+          format: null,
+          source: 'archidekt'
+        },
+        {
+          id: 'deck-2',
+          name: 'Bulk Two',
+          url: 'https://moxfield.com/decks/2',
+          format: 'commander',
+          source: 'moxfield'
+        }
+      ]
+    });
+    const onBulkImportDecks = vi.fn().mockResolvedValue({ success: true, failures: [] });
+
+    render(
+      <DeckCollection
+        {...defaultProps}
+        onPreviewBulkDecks={onPreviewBulkDecks}
+        onBulkImportDecks={onBulkImportDecks}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Bulk import' }));
+    await user.type(screen.getByLabelText('Profile link'), 'https://archidekt.com/u/bulk');
+    await user.click(screen.getByRole('button', { name: 'Load decks' }));
+
+    await waitFor(() => {
+      expect(onPreviewBulkDecks).toHaveBeenCalledWith('https://archidekt.com/u/bulk');
+    });
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    await user.click(checkboxes[1]);
+
+    await user.click(screen.getByRole('button', { name: 'Import selected' }));
+
+    await waitFor(() => {
+      expect(onBulkImportDecks).toHaveBeenCalledWith(['https://archidekt.com/decks/1']);
+    });
   });
 
   it('loads deck details from a Moxfield link', async () => {

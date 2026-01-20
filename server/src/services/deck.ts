@@ -24,6 +24,14 @@ export type DeckSummary = {
   source: DeckSource;
 };
 
+export type DeckImportCandidate = {
+  id: string;
+  name: string;
+  format: string | null;
+  url: string;
+  source: DeckSource;
+};
+
 export type RawDeck = {
   source: DeckSource;
   deck: ArchidektDeck | MoxfieldDeck;
@@ -57,6 +65,25 @@ type ArchidektDeck = {
   deckFormat?: string;
 };
 
+type ArchidektUser = {
+  id?: number;
+  username?: string;
+};
+
+type ArchidektUserSearchResponse = {
+  results?: ArchidektUser[];
+};
+
+type ArchidektUserDeckEntry = {
+  id?: number;
+  name?: string;
+  private?: boolean;
+};
+
+type ArchidektUserDecksResponse = {
+  decks?: ArchidektUserDeckEntry[];
+};
+
 type MoxfieldBoardCard = {
   boardType?: string;
   card?: {
@@ -88,6 +115,24 @@ type MoxfieldDeck = {
     colorIdentity?: unknown;
     colors?: unknown;
   };
+};
+
+type MoxfieldDeckSearchEntry = {
+  id?: string;
+  publicId?: string;
+  name?: string;
+  format?: string;
+  publicUrl?: string;
+  isPrivate?: boolean;
+};
+
+type MoxfieldDeckSearchResponse = {
+  data?: MoxfieldDeckSearchEntry[];
+  decks?: MoxfieldDeckSearchEntry[];
+  results?: MoxfieldDeckSearchEntry[];
+  totalPages?: number;
+  pageNumber?: number;
+  pageSize?: number;
 };
 
 const COLOR_NAME_MAP: Record<string, string> = {
@@ -286,6 +331,31 @@ function parseDeckId(url: string, expectedHost: string): string | null {
   }
 }
 
+function parseDeckOwnerFromUrl(input: string): { source: DeckSource; owner: string } | null {
+  if (!input.trim()) return null;
+  try {
+    const parsed = new URL(input);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (parsed.host.includes('archidekt.com')) {
+      if (segments.includes('decks')) return null;
+      const ownerIndex = segments.findIndex((segment) => segment === 'u');
+      const owner = ownerIndex >= 0 ? segments[ownerIndex + 1] : segments[0];
+      if (!owner) return null;
+      return { source: 'archidekt', owner };
+    }
+    if (parsed.host.includes('moxfield.com')) {
+      if (segments.includes('decks')) return null;
+      const ownerIndex = segments.findIndex((segment) => segment === 'users' || segment === 'user');
+      const owner = ownerIndex >= 0 ? segments[ownerIndex + 1] : segments[0];
+      if (!owner) return null;
+      return { source: 'moxfield', owner };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function buildCacheKey(source: DeckSource, deckId: string): string {
   return `${source}:${deckId}`;
 }
@@ -304,6 +374,87 @@ export function getDeckSourceFromUrl(input: string | null): DeckSource | null {
   } catch {
     return null;
   }
+}
+
+async function fetchArchidektUserId(username: string): Promise<number> {
+  const apiUrl = `https://archidekt.com/api/users/?username=${encodeURIComponent(username)}`;
+  const result = await fetchJson(apiUrl);
+  if (!result.ok || !result.json) {
+    throw new Error(result.error || 'Failed to load Archidekt user');
+  }
+  const payload = result.json as ArchidektUserSearchResponse;
+  const user = Array.isArray(payload.results)
+    ? payload.results.find((entry) => entry.username?.toLowerCase() === username.toLowerCase())
+    : null;
+  if (!user?.id) {
+    throw new Error('Archidekt user not found');
+  }
+  return user.id;
+}
+
+async function fetchArchidektUserDecks(username: string): Promise<DeckImportCandidate[]> {
+  const userId = await fetchArchidektUserId(username);
+  const apiUrl = `https://archidekt.com/api/users/${userId}/decks/`;
+  const result = await fetchJson(apiUrl);
+  if (!result.ok || !result.json) {
+    throw new Error(result.error || 'Failed to load Archidekt decks');
+  }
+  const payload = result.json as ArchidektUserDecksResponse;
+  const decks = Array.isArray(payload.decks) ? payload.decks : [];
+  return decks
+    .filter((deck) => deck.private !== true)
+    .map((deck) => ({
+      id: deck.id ? String(deck.id) : '',
+      name: deck.name || 'Untitled Deck',
+      format: null,
+      url: deck.id ? `https://archidekt.com/decks/${deck.id}` : '',
+      source: 'archidekt' as const
+    }))
+    .filter((deck) => deck.id && deck.url);
+}
+
+async function fetchMoxfieldUserDecks(username: string): Promise<DeckImportCandidate[]> {
+  const userAgent = process.env.MOXFIELD_USER_AGENT;
+  if (!userAgent) {
+    throw new Error('Moxfield API access not configured. Set MOXFIELD_USER_AGENT environment variable.');
+  }
+  const decks: DeckImportCandidate[] = [];
+  let pageNumber = 1;
+  let totalPages = 1;
+  while (pageNumber <= totalPages) {
+    const apiUrl = `https://api2.moxfield.com/v2/decks/search?authorUserNames=${encodeURIComponent(username)}&pageNumber=${pageNumber}&pageSize=100`;
+    const result = await fetchJson(apiUrl, {
+      headers: {
+        'user-agent': userAgent
+      }
+    });
+    if (!result.ok || !result.json) {
+      throw new Error(result.error || 'Failed to load Moxfield decks');
+    }
+    const payload = result.json as MoxfieldDeckSearchResponse;
+    const entries = Array.isArray(payload.data)
+      ? payload.data
+      : Array.isArray(payload.decks)
+        ? payload.decks
+        : Array.isArray(payload.results)
+          ? payload.results
+          : [];
+    entries.forEach((deck) => {
+      if (deck?.isPrivate) return;
+      const deckId = deck.publicId || deck.id;
+      if (!deckId) return;
+      decks.push({
+        id: deckId,
+        name: deck.name || 'Untitled Deck',
+        format: deck.format ?? null,
+        url: deck.publicUrl || `https://moxfield.com/decks/${deckId}`,
+        source: 'moxfield'
+      });
+    });
+    totalPages = payload.totalPages ?? totalPages;
+    pageNumber += 1;
+  }
+  return decks;
 }
 
 async function fetchArchidektDeckById(deckId: string): Promise<ArchidektDeck> {
@@ -395,6 +546,17 @@ export async function fetchDeckSummary(deckUrl: string): Promise<DeckSummary> {
     return fetchMoxfieldDeckSummary(deckUrl);
   }
   throw new Error('Invalid deck URL. Expected an Archidekt or Moxfield deck link.');
+}
+
+export async function fetchDeckImportCandidates(profileUrl: string): Promise<DeckImportCandidate[]> {
+  const owner = parseDeckOwnerFromUrl(profileUrl);
+  if (!owner) {
+    throw new Error('Invalid user URL. Expected an Archidekt or Moxfield profile link.');
+  }
+  if (owner.source === 'archidekt') {
+    return fetchArchidektUserDecks(owner.owner);
+  }
+  return fetchMoxfieldUserDecks(owner.owner);
 }
 
 export async function cacheDeckFromUrl(

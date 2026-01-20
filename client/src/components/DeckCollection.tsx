@@ -72,6 +72,29 @@ function isSupportedDeckUrl(input: string): boolean {
   return getDeckSource(input) !== null;
 }
 
+function getProfileSource(input: string): 'archidekt' | 'moxfield' | null {
+  if (!input.trim()) return null;
+  try {
+    const parsed = new URL(input);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (parsed.host.includes('archidekt.com')) {
+      if (segments.includes('decks')) return null;
+      return segments.includes('u') ? 'archidekt' : null;
+    }
+    if (parsed.host.includes('moxfield.com')) {
+      if (segments.includes('decks')) return null;
+      return segments.includes('users') || segments.includes('user') ? 'moxfield' : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isSupportedProfileUrl(input: string): boolean {
+  return getProfileSource(input) !== null;
+}
+
 function formatColorValue(colors: string[] | null): string {
   if (!colors) return '';
   if (colors.length === 0) return 'C';
@@ -134,6 +157,30 @@ export type DeckPreviewResult = {
   error?: string;
 };
 
+export type DeckImportCandidate = {
+  id: string;
+  name: string;
+  format: string | null;
+  url: string;
+  source: 'archidekt' | 'moxfield';
+};
+
+export type DeckImportPreviewResult = {
+  decks?: DeckImportCandidate[];
+  error?: string;
+};
+
+export type DeckImportFailure = {
+  deckUrl: string;
+  error: string;
+};
+
+export type DeckImportResult = {
+  success: boolean;
+  failures?: DeckImportFailure[];
+  error?: string;
+};
+
 type CommanderEntry = {
   name: string;
   link: string | null;
@@ -164,7 +211,9 @@ type DeckCollectionProps = {
   onCreateDeck: (input: DeckFormInput) => Promise<boolean>;
   onUpdateDeck: (deckId: string, input: DeckFormInput) => Promise<boolean>;
   onPreviewDeck: (deckUrl: string) => Promise<DeckPreviewResult>;
+  onPreviewBulkDecks: (profileUrl: string) => Promise<DeckImportPreviewResult>;
   onRemoveDeck: (deckId: string) => Promise<void>;
+  onBulkImportDecks: (deckUrls: string[]) => Promise<DeckImportResult>;
   onOpenInOracle?: (deckUrl: string) => void;
   onRefreshDecks?: () => Promise<void>;
   onLogSaved?: () => void;
@@ -179,7 +228,9 @@ export function DeckCollection({
   onCreateDeck,
   onUpdateDeck,
   onPreviewDeck,
+  onPreviewBulkDecks,
   onRemoveDeck,
+  onBulkImportDecks,
   onOpenInOracle,
   onRefreshDecks,
   onLogSaved
@@ -212,6 +263,15 @@ export function DeckCollection({
   const [deckPreviewError, setDeckPreviewError] = useState<string | null>(null);
   const [deckModalOpen, setDeckModalOpen] = useState(false);
   const [deckPreviewLoading, setDeckPreviewLoading] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkProfileUrl, setBulkProfileUrl] = useState('');
+  const [bulkDecks, setBulkDecks] = useState<DeckImportCandidate[]>([]);
+  const [bulkSelection, setBulkSelection] = useState<Record<string, boolean>>({});
+  const [bulkPreviewError, setBulkPreviewError] = useState<string | null>(null);
+  const [bulkImportError, setBulkImportError] = useState<string | null>(null);
+  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkFailures, setBulkFailures] = useState<DeckImportFailure[]>([]);
   const [editTarget, setEditTarget] = useState<DeckEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeckEntry | null>(null);
   const [logTarget, setLogTarget] = useState<DeckEntry | null>(null);
@@ -459,6 +519,17 @@ export function DeckCollection({
     setDeckPreviewLoading(false);
   };
 
+  const resetBulkForm = () => {
+    setBulkProfileUrl('');
+    setBulkDecks([]);
+    setBulkSelection({});
+    setBulkPreviewError(null);
+    setBulkImportError(null);
+    setBulkPreviewLoading(false);
+    setBulkImporting(false);
+    setBulkFailures([]);
+  };
+
   const addCommanderInput = () => {
     setCommanderInputs((current) => (current.length >= 2 ? current : [...current, '']));
     setCommanderLookupLinks((current) => (current.length >= 2 ? current : [...current, null]));
@@ -495,6 +566,11 @@ export function DeckCollection({
     setDeckModalOpen(true);
   };
 
+  const openBulkModal = () => {
+    resetBulkForm();
+    setBulkModalOpen(true);
+  };
+
   const openEditModal = (deck: DeckEntry) => {
     setEditTarget(deck);
     setDeckId(deck.id);
@@ -512,6 +588,10 @@ export function DeckCollection({
     setDeckModalOpen(false);
     setEditTarget(null);
     setDeckPreviewLoading(false);
+  };
+
+  const closeBulkModal = () => {
+    setBulkModalOpen(false);
   };
 
   const resetLogForm = () => {
@@ -583,6 +663,90 @@ export function DeckCollection({
       setDeckId(deck.id);
     }
   };
+
+  const handleBulkPreview = async () => {
+    const trimmedUrl = bulkProfileUrl.trim();
+    if (!isSupportedProfileUrl(trimmedUrl)) return;
+    setBulkPreviewLoading(true);
+    setBulkPreviewError(null);
+    setBulkImportError(null);
+    setBulkFailures([]);
+    const result = await onPreviewBulkDecks(trimmedUrl);
+    setBulkPreviewLoading(false);
+    if (result.error) {
+      setBulkPreviewError(result.error);
+      setBulkDecks([]);
+      setBulkSelection({});
+      return;
+    }
+    const decks = result.decks ?? [];
+    setBulkDecks(decks);
+    setBulkSelection(
+      decks.reduce<Record<string, boolean>>((acc, deck) => {
+        acc[deck.url] = true;
+        return acc;
+      }, {})
+    );
+    if (decks.length === 0) {
+      setBulkPreviewError('No decks found for that profile.');
+    }
+  };
+
+  const handleBulkImport = async () => {
+    const selectedUrls = bulkDecks
+      .filter((deck) => bulkSelection[deck.url])
+      .map((deck) => deck.url);
+    if (selectedUrls.length === 0) {
+      setBulkImportError('Select at least one deck to import.');
+      return;
+    }
+    setBulkImporting(true);
+    setBulkImportError(null);
+    const result = await onBulkImportDecks(selectedUrls);
+    if (!result.success) {
+      setBulkImportError(result.error || 'Unable to import decks.');
+      setBulkImporting(false);
+      return;
+    }
+    const failures = result.failures ?? [];
+    setBulkFailures(failures);
+    if (failures.length === 0) {
+      resetBulkForm();
+      closeBulkModal();
+      setBulkImporting(false);
+      return;
+    }
+    const failedUrls = new Set(failures.map((failure) => failure.deckUrl));
+    setBulkSelection(
+      bulkDecks.reduce<Record<string, boolean>>((acc, deck) => {
+        acc[deck.url] = failedUrls.has(deck.url);
+        return acc;
+      }, {})
+    );
+    setBulkImportError(`Imported ${selectedUrls.length - failures.length} deck(s). ${failures.length} failed.`);
+    setBulkImporting(false);
+  };
+
+  const toggleBulkSelection = (deckUrl: string) => {
+    setBulkSelection((current) => ({
+      ...current,
+      [deckUrl]: !current[deckUrl]
+    }));
+  };
+
+  const setBulkSelectionAll = (checked: boolean) => {
+    setBulkSelection(
+      bulkDecks.reduce<Record<string, boolean>>((acc, deck) => {
+        acc[deck.url] = checked;
+        return acc;
+      }, {})
+    );
+  };
+
+  const bulkSelectedCount = useMemo(
+    () => bulkDecks.filter((deck) => bulkSelection[deck.url]).length,
+    [bulkDecks, bulkSelection]
+  );
 
   const handleSaveDeck = async () => {
     if (!deckName.trim()) {
@@ -1179,14 +1343,23 @@ export function DeckCollection({
               Save decks, track stats, and launch Oracle tools from a single list.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-500 px-5 py-2 text-sm font-semibold text-gray-900 shadow hover:bg-cyan-400"
-          >
-            <span className="text-lg leading-none">+</span>
-            Deck
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-500 px-5 py-2 text-sm font-semibold text-gray-900 shadow hover:bg-cyan-400"
+            >
+              <span className="text-lg leading-none">+</span>
+              Deck
+            </button>
+            <button
+              type="button"
+              onClick={openBulkModal}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-400/60 px-5 py-2 text-sm font-semibold text-cyan-100 hover:border-cyan-300 hover:text-cyan-50"
+            >
+              Bulk import
+            </button>
+          </div>
         </div>
         <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
           {loading && <p className="text-gray-400">Loading...</p>}
@@ -1424,7 +1597,7 @@ export function DeckCollection({
                     setDeckUrl(event.target.value);
                     setDeckPreviewError(null);
                   }}
-                  placeholder="https://..."
+                  placeholder="https://archidekt.com/u/username or https://moxfield.com/users/username"
                   className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
                 <button
@@ -1554,6 +1727,133 @@ export function DeckCollection({
                   className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
                 >
                   {loading ? 'Saving...' : editTarget ? 'Save Deck' : 'Add Deck'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
+          <div className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-lg font-semibold">Bulk import decks</h3>
+                <p className="text-sm text-gray-400">
+                  Paste an Archidekt or Moxfield profile link to load every public deck.
+                </p>
+              </div>
+              <label className="text-sm text-gray-300" htmlFor="bulk-profile-input">
+                Profile link
+              </label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="bulk-profile-input"
+                  type="url"
+                  value={bulkProfileUrl}
+                  onChange={(event) => {
+                    setBulkProfileUrl(event.target.value);
+                    setBulkPreviewError(null);
+                    setBulkImportError(null);
+                    setBulkDecks([]);
+                    setBulkSelection({});
+                    setBulkFailures([]);
+                  }}
+                  placeholder="https://..."
+                  className="flex-1 px-4 py-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleBulkPreview}
+                  disabled={!isSupportedProfileUrl(bulkProfileUrl) || bulkPreviewLoading}
+                  className="px-4 py-3 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                >
+                  {bulkPreviewLoading ? 'Loading...' : 'Load decks'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Examples: https://archidekt.com/u/username, https://moxfield.com/users/username
+              </p>
+              {bulkPreviewError && <p className="text-red-400">{bulkPreviewError}</p>}
+              {bulkDecks.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
+                    <span>
+                      {bulkSelectedCount} of {bulkDecks.length} selected
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBulkSelectionAll(true)}
+                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:border-cyan-400 hover:text-cyan-100"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBulkSelectionAll(false)}
+                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:border-cyan-400 hover:text-cyan-100"
+                      >
+                        Select none
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto rounded-xl border border-gray-800 bg-gray-950/60">
+                    {bulkDecks.map((deck) => (
+                      <label
+                        key={deck.id}
+                        className="flex items-start gap-3 border-b border-gray-800 px-4 py-3 last:border-b-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={bulkSelection[deck.url] ?? false}
+                          onChange={() => toggleBulkSelection(deck.url)}
+                          className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-900 text-cyan-400 focus:ring-cyan-500"
+                        />
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm text-gray-100">{deck.name}</span>
+                          <span className="text-xs text-gray-500">
+                            {deck.source === 'archidekt' ? 'Archidekt' : 'Moxfield'}
+                            {deck.format ? ` • ${deck.format}` : ''}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bulkFailures.length > 0 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+                  <p className="font-semibold">Some decks failed to import:</p>
+                  <ul className="mt-2 space-y-1">
+                    {bulkFailures.map((failure) => (
+                      <li key={failure.deckUrl}>
+                        {failure.deckUrl} — {failure.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {bulkImportError && <p className="text-red-400">{bulkImportError}</p>}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetBulkForm();
+                    closeBulkModal();
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkImport}
+                  disabled={bulkImporting || bulkSelectedCount === 0}
+                  className="px-4 py-2 rounded-lg bg-cyan-500 text-gray-900 font-semibold hover:bg-cyan-400 disabled:opacity-60"
+                >
+                  {bulkImporting ? 'Importing...' : 'Import selected'}
                 </button>
               </div>
             </div>

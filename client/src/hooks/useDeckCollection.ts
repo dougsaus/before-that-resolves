@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
-import type { DeckEntry, DeckFormInput, DeckPreview, DeckPreviewResult } from '../components/DeckCollection';
+import type {
+  DeckEntry,
+  DeckFormInput,
+  DeckImportCandidate,
+  DeckImportPreviewResult,
+  DeckImportResult,
+  DeckPreview,
+  DeckPreviewResult
+} from '../components/DeckCollection';
 
 type GoogleUser = {
   id: string;
@@ -244,6 +252,63 @@ export function useDeckCollection() {
     }
   };
 
+  const previewBulkDecks = async (profileUrl: string): Promise<DeckImportPreviewResult> => {
+    if (!headers) {
+      const message = 'Sign in with Google to load decks.';
+      setDeckError(message);
+      return { error: message };
+    }
+    try {
+      const response = await fetch(buildApiUrl('/api/decks/bulk/preview'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ profileUrl })
+      });
+      const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckImportCandidate[] }>(response);
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to load decks.');
+      }
+      return { decks: payload.decks ?? [] };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to load decks.';
+      return { error: message };
+    }
+  };
+
+  const importBulkDecks = async (deckUrls: string[]): Promise<DeckImportResult> => {
+    if (!headers) {
+      const message = 'Sign in with Google to import decks.';
+      setDeckError(message);
+      return { success: false, error: message };
+    }
+    setLoading(true);
+    resetDeckMessages();
+    try {
+      const response = await fetch(buildApiUrl('/api/decks/bulk'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ deckUrls })
+      });
+      const payload = await readPayload<{
+        success?: boolean;
+        error?: string;
+        decks?: DeckEntry[];
+        failures?: Array<{ deckUrl: string; error: string }>;
+      }>(response);
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to import decks.');
+      }
+      setDecks(Array.isArray(payload.decks) ? payload.decks : []);
+      return { success: true, failures: payload.failures ?? [] };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to import decks.';
+      setDeckError(message);
+      return { success: false, error: message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const createDeck = async (input: DeckFormInput): Promise<boolean> => {
     if (!headers) {
       setDeckError('Sign in with Google to add decks.');
@@ -357,9 +422,11 @@ export function useDeckCollection() {
     statusMessage,
     buttonRef,
     previewDeck,
+    previewBulkDecks,
     createDeck,
     updateDeck,
     removeDeck,
+    importBulkDecks,
     signOut,
     refreshDecks
   };

@@ -407,6 +407,110 @@ describe('app routes', () => {
     });
   });
 
+  it('previews bulk deck imports from a profile URL', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-777' });
+    const fetchDeckImportCandidates = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-99',
+        name: 'Bulk Deck',
+        url: 'https://archidekt.com/decks/99',
+        format: null,
+        source: 'archidekt'
+      }
+    ]);
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({ verifyGoogleIdToken, fetchDeckImportCandidates, upsertUser });
+
+    const response = await request(app)
+      .post('/api/decks/bulk/preview')
+      .set('authorization', 'Bearer token-777')
+      .send({ profileUrl: 'https://archidekt.com/u/bulk' })
+      .expect(200);
+
+    expect(fetchDeckImportCandidates).toHaveBeenCalledWith('https://archidekt.com/u/bulk');
+    expect(response.body.decks).toEqual([
+      {
+        id: 'deck-99',
+        name: 'Bulk Deck',
+        url: 'https://archidekt.com/decks/99',
+        format: null,
+        source: 'archidekt'
+      }
+    ]);
+  });
+
+  it('imports decks in bulk', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-888' });
+    const fetchDeckSummary = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'deck-1',
+        name: 'Deck One',
+        url: 'https://archidekt.com/decks/1',
+        format: 'commander',
+        commanderNames: [],
+        colorIdentity: ['W'],
+        source: 'archidekt'
+      })
+      .mockResolvedValueOnce({
+        id: 'deck-2',
+        name: 'Deck Two',
+        url: 'https://moxfield.com/decks/2',
+        format: 'commander',
+        commanderNames: [],
+        colorIdentity: ['U'],
+        source: 'moxfield'
+      });
+    const upsertDeckInCollection = vi.fn().mockResolvedValue([]);
+    const listDeckCollection = vi.fn().mockResolvedValue([
+      {
+        id: 'deck-2',
+        name: 'Deck Two',
+        url: 'https://moxfield.com/decks/2',
+        format: 'commander',
+        commanderNames: [],
+        commanderLinks: [],
+        colorIdentity: ['U'],
+        source: 'moxfield',
+        addedAt: '2025-01-04T00:00:00.000Z'
+      }
+    ]);
+    const getDeckStats = vi.fn().mockResolvedValue(new Map());
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({
+      verifyGoogleIdToken,
+      fetchDeckSummary,
+      upsertDeckInCollection,
+      listDeckCollection,
+      upsertUser,
+      getDeckStats
+    });
+
+    const response = await request(app)
+      .post('/api/decks/bulk')
+      .set('authorization', 'Bearer token-888')
+      .send({ deckUrls: ['https://archidekt.com/decks/1', 'https://moxfield.com/decks/2'] })
+      .expect(200);
+
+    expect(fetchDeckSummary).toHaveBeenCalledTimes(2);
+    expect(upsertDeckInCollection).toHaveBeenCalledTimes(2);
+    expect(listDeckCollection).toHaveBeenCalledWith('user-888');
+    expect(response.body.failures).toEqual([]);
+    expect(response.body.decks).toEqual([
+      {
+        id: 'deck-2',
+        name: 'Deck Two',
+        url: 'https://moxfield.com/decks/2',
+        format: 'commander',
+        commanderNames: [],
+        commanderLinks: [],
+        colorIdentity: ['U'],
+        source: 'moxfield',
+        addedAt: '2025-01-04T00:00:00.000Z',
+        stats: null
+      }
+    ]);
+  });
+
   it('looks up a commander card by name', async () => {
     const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-555' });
     const searchScryfallCardByName = vi.fn().mockResolvedValue({
