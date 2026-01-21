@@ -93,6 +93,37 @@ function formatOpponentUserLabel(user: { name?: string | null; email?: string | 
   return name || email || 'Unknown user';
 }
 
+function renderCommanderInline(deck: DeckEntry | null) {
+  if (!deck) return null;
+  if (deck.commanderNames.length === 0) {
+    return <span className="truncate text-xs text-gray-400 sm:text-sm">—</span>;
+  }
+  return (
+    <span className="truncate text-xs text-gray-400 sm:text-sm">
+      {deck.commanderNames.map((name, index) => {
+        const link = deck.commanderLinks?.[index] ?? null;
+        return (
+          <span key={`${deck.id}-commander-${index}`} className="inline-flex items-center">
+            {link ? (
+              <a
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className="text-cyan-200 hover:text-cyan-100"
+              >
+                {name}
+              </a>
+            ) : (
+              <span>{name}</span>
+            )}
+            {index < deck.commanderNames.length - 1 && <span className="text-gray-500"> / </span>}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function getOpponentDisplayName(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
@@ -190,6 +221,7 @@ export function GameLogs({
   type SortKey = 'playedAt' | 'deckName' | 'result' | 'durationMinutes' | 'turns';
   const sortStorageKey = 'btr:game-logs-sort';
   const sortKeys: SortKey[] = ['playedAt', 'deckName', 'result', 'durationMinutes', 'turns'];
+  const deckById = useMemo(() => new Map(decks.map((deck) => [deck.id, deck])), [decks]);
   const loadSortPrefs = (): { key: SortKey; dir: 'asc' | 'desc' } | null => {
     try {
       const raw = localStorage.getItem(sortStorageKey);
@@ -976,6 +1008,7 @@ export function GameLogs({
     log: {
       id: string;
       deckName: string | null;
+      deckId: string | null;
       playedAt: string;
       opponents: GameLogEntry['opponents'];
       tags: string[];
@@ -988,6 +1021,7 @@ export function GameLogs({
   ) => {
     const deckLabel = log.deckName ?? 'Select deck';
     const deckLabelClass = log.deckName ? 'text-white' : 'text-gray-400 italic';
+    const deckCommander = log.deckId ? deckById.get(log.deckId) ?? null : null;
     return (
       <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
@@ -1001,9 +1035,12 @@ export function GameLogs({
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Deck
             </span>
-            <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
-              {deckLabel}
-            </h4>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
+                {deckLabel}
+              </h4>
+              {renderCommanderInline(deckCommander)}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
