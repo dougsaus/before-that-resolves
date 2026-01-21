@@ -1402,8 +1402,7 @@ export function DeckCollection({
               onClick={openAddModal}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-500 px-5 py-2 text-sm font-semibold text-gray-900 shadow hover:bg-cyan-400"
             >
-              <span className="flex h-5 w-5 items-center justify-center text-lg leading-none">+</span>
-              Deck
+              + Deck
             </button>
             <button
               type="button"
