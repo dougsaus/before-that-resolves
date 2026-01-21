@@ -77,13 +77,20 @@ function formatColorIdentityValue(colors: string[] | null): string {
 function formatGameLength(durationMinutes: number | null, turns: number | null): string {
   const parts: string[] = [];
   if (durationMinutes) {
-    parts.push(`${durationMinutes}m`);
+    const hours = Math.floor(durationMinutes / 60);
+    const minutes = durationMinutes % 60;
+    if (hours > 0) {
+      parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+    }
+    if (minutes > 0 || hours === 0) {
+      parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+    }
   }
   if (turns) {
     parts.push(`${turns} turns`);
   }
   if (parts.length === 0) return '';
-  return `Game Length: ${parts.join(', ')}`;
+  return parts.join(', ');
 }
 
 function formatOpponentUserLabel(user: { name?: string | null; email?: string | null }): string {
@@ -91,6 +98,39 @@ function formatOpponentUserLabel(user: { name?: string | null; email?: string | 
   const email = user.email?.trim() ?? '';
   if (name && email) return `${name} <${email}>`;
   return name || email || 'Unknown user';
+}
+
+function renderCommanderInline(
+  commanderNames: string[] | undefined,
+  commanderLinks: Array<string | null> | undefined
+) {
+  if (!commanderNames || commanderNames.length === 0) {
+    return null;
+  }
+  return (
+    <span className="truncate text-xs text-gray-400 sm:text-sm">
+      {commanderNames.map((name, index) => {
+        const link = commanderLinks?.[index] ?? null;
+        return (
+          <span key={`${name}-${index}`} className="inline-flex items-center">
+            {link ? (
+              <a
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className="text-cyan-200 hover:text-cyan-100"
+              >
+                {name}
+              </a>
+            ) : (
+              <span>{name}</span>
+            )}
+            {index < commanderNames.length - 1 && <span className="text-gray-500"> / </span>}
+          </span>
+        );
+      })}
+    </span>
+  );
 }
 
 function getOpponentDisplayName(value: string): string {
@@ -190,6 +230,7 @@ export function GameLogs({
   type SortKey = 'playedAt' | 'deckName' | 'result' | 'durationMinutes' | 'turns';
   const sortStorageKey = 'btr:game-logs-sort';
   const sortKeys: SortKey[] = ['playedAt', 'deckName', 'result', 'durationMinutes', 'turns'];
+  const deckById = useMemo(() => new Map(decks.map((deck) => [deck.id, deck])), [decks]);
   const loadSortPrefs = (): { key: SortKey; dir: 'asc' | 'desc' } | null => {
     try {
       const raw = localStorage.getItem(sortStorageKey);
@@ -976,6 +1017,9 @@ export function GameLogs({
     log: {
       id: string;
       deckName: string | null;
+      deckId: string | null;
+      commanderNames?: string[];
+      commanderLinks?: Array<string | null>;
       playedAt: string;
       opponents: GameLogEntry['opponents'];
       tags: string[];
@@ -986,12 +1030,16 @@ export function GameLogs({
     actions: ReactNode,
     keyPrefix: string
   ) => {
-    const deckLabel = log.deckName ?? 'Select deck';
-    const deckLabelClass = log.deckName ? 'text-white' : 'text-gray-400 italic';
+    const fallbackDeckName = log.deckId ? deckById.get(log.deckId)?.name : null;
+    const snapshotDeckName =
+      typeof log.deckName === 'string' && log.deckName.trim().length > 0 ? log.deckName : null;
+    const deckLabel = snapshotDeckName ?? fallbackDeckName ?? 'Select deck';
+    const hasDeckLabel = Boolean(snapshotDeckName ?? fallbackDeckName);
+    const deckLabelClass = hasDeckLabel ? 'text-white' : 'text-gray-400 italic';
     return (
-      <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
-          <div className="flex items-center gap-2">
+      <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-2 px-4 py-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(18rem,1fr)_4.5rem] sm:items-baseline">
+          <div className="flex items-baseline gap-2">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Date
             </span>
@@ -1001,108 +1049,117 @@ export function GameLogs({
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Deck
             </span>
-            <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
-              {deckLabel}
-            </h4>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-              Result
-            </span>
-            <span
-              className={`text-xs font-semibold uppercase tracking-wide ${
-              log.result === 'win'
-                ? 'text-emerald-300'
-                : log.result === 'loss'
-                    ? 'text-rose-300'
-                    : 'text-gray-300'
-              }`}
-            >
-              {log.result ?? 'pending'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-300">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-              Game Length
-            </span>
-            <span>{formatGameLength(log.durationMinutes, log.turns)}</span>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
+                {deckLabel}
+              </h4>
+              {renderCommanderInline(log.commanderNames, log.commanderLinks)}
+            </div>
           </div>
           <div className="flex items-center justify-start gap-1 sm:justify-end">
             {actions}
           </div>
         </div>
 
+        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+          <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+            Result:
+          </span>
+          <span
+            className={`whitespace-nowrap text-xs font-semibold uppercase tracking-wide ${
+            log.result === 'win'
+              ? 'text-emerald-300'
+              : log.result === 'loss'
+                  ? 'text-rose-300'
+                  : 'text-gray-300'
+            }`}
+          >
+            {log.result ?? 'pending'}
+          </span>
+        </div>
+
+        {formatGameLength(log.durationMinutes, log.turns) && (
+          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+            <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+              Length:
+            </span>
+            <span className="text-gray-300">{formatGameLength(log.durationMinutes, log.turns)}</span>
+          </div>
+        )}
+
         {log.opponents.length > 0 && (
-          <div className="flex flex-col gap-1">
-            {log.opponents.map((opponent, index) => (
-              <div
-                key={`${keyPrefix}-${log.id}-opponent-${index}`}
-                className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10ch,18ch)_5.5rem_minmax(10rem,1fr)] sm:items-center"
-              >
-                <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
-                  {index === 0 ? 'Opponents:' : ''}
-                </span>
-                <span className="truncate font-medium" title={opponent.name || undefined}>
-                  {opponent.name
-                    ? truncateLabel(getOpponentDisplayName(opponent.name))
-                    : `Opponent ${index + 1}`}
-                </span>
-                <div className="flex items-center justify-start">
-                  {opponent.colorIdentity ? (
-                    <ColorIdentityIcons colors={opponent.colorIdentity} />
-                  ) : null}
-                </div>
-                <span className="text-gray-400">
-                  {opponent.deckName ? (
-                    <>
-                      {opponent.deckUrl ? (
-                        <a
-                          href={opponent.deckUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-cyan-200 hover:text-cyan-100"
-                        >
-                          {opponent.deckName}
-                        </a>
-                      ) : (
-                        opponent.deckName
-                      )}
-                      {opponent.commanderNames.length > 0 && ' — '}
-                    </>
-                  ) : null}
-                  {opponent.commanderNames.length > 0
-                    ? opponent.commanderNames.map((cmdName, cmdIndex) => (
-                      <span key={cmdIndex}>
-                        {cmdIndex > 0 && ' / '}
-                        {opponent.commanderLinks[cmdIndex] ? (
+          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+            <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+              Opponents:
+            </span>
+            <div className="flex flex-col gap-1">
+              {log.opponents.map((opponent, index) => (
+                <div
+                  key={`${keyPrefix}-${log.id}-opponent-${index}`}
+                  className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(10ch,18ch)_5.5rem_minmax(10rem,1fr)] sm:items-center"
+                >
+                  <span className="truncate font-medium" title={opponent.name || undefined}>
+                    {opponent.name
+                      ? truncateLabel(getOpponentDisplayName(opponent.name))
+                      : `Opponent ${index + 1}`}
+                  </span>
+                  <div className="flex items-center justify-start">
+                    {opponent.colorIdentity ? (
+                      <ColorIdentityIcons colors={opponent.colorIdentity} />
+                    ) : null}
+                  </div>
+                  <span className="text-gray-400">
+                    {opponent.deckName ? (
+                      <>
+                        {opponent.deckUrl ? (
                           <a
-                            href={opponent.commanderLinks[cmdIndex]!}
+                            href={opponent.deckUrl}
                             target="_blank"
                             rel="noreferrer"
                             className="text-cyan-200 hover:text-cyan-100"
-                            onMouseEnter={(event) => {
-                              anchorRef.current = event.currentTarget;
-                              const rect = event.currentTarget.getBoundingClientRect();
-                              setHoverCard({ label: cmdName, rect });
-                            }}
                           >
-                            {cmdName}
+                            {opponent.deckName}
                           </a>
                         ) : (
-                          cmdName
+                          opponent.deckName
                         )}
-                      </span>
-                    ))
-                    : ''}
-                </span>
-              </div>
-            ))}
+                        {opponent.commanderNames.length > 0 && ' — '}
+                      </>
+                    ) : null}
+                    {opponent.commanderNames.length > 0
+                      ? opponent.commanderNames.map((cmdName, cmdIndex) => (
+                        <span key={cmdIndex}>
+                          {cmdIndex > 0 && ' / '}
+                          {opponent.commanderLinks[cmdIndex] ? (
+                            <a
+                              href={opponent.commanderLinks[cmdIndex]!}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-cyan-200 hover:text-cyan-100"
+                              onMouseEnter={(event) => {
+                                anchorRef.current = event.currentTarget;
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                setHoverCard({ label: cmdName, rect });
+                              }}
+                            >
+                              {cmdName}
+                            </a>
+                          ) : (
+                            cmdName
+                          )}
+                        </span>
+                      ))
+                      : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         {log.tags.length > 0 && (
           <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+            <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
               Tags:
             </span>
             <div className="flex flex-wrap gap-1">
