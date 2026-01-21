@@ -14,6 +14,8 @@ export type SharedGameLogEntry = {
   deckId: string | null;
   deckName: string | null;
   deckUrl: string | null;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   playedAt: string;
   turns: number | null;
   durationMinutes: number | null;
@@ -33,6 +35,8 @@ export type SharedGameLogInput = {
   deckId: string | null;
   deckName: string | null;
   deckUrl: string | null;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   playedAt: string;
   turns: number | null;
   durationMinutes: number | null;
@@ -52,6 +56,8 @@ type SharedGameLogRow = {
   deck_id: string | null;
   deck_name: string | null;
   deck_url: string | null;
+  commander_names: unknown;
+  commander_links: unknown;
   played_at: string | Date;
   turns: number | null;
   duration_minutes: number | null;
@@ -64,10 +70,36 @@ type SharedGameLogRow = {
   updated_at: string | Date;
 };
 
+function normalizeCommanderSnapshot(
+  names: unknown,
+  links: unknown
+): { commanderNames: string[]; commanderLinks: Array<string | null> } {
+  const commanderNames = Array.isArray(names)
+    ? names
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => value.trim())
+        .slice(0, 2)
+    : [];
+  let commanderLinks: Array<string | null> = [];
+  if (Array.isArray(links)) {
+    commanderLinks = links
+      .slice(0, commanderNames.length)
+      .map((value) => (typeof value === 'string' && value.trim() ? value.trim() : null));
+  }
+  while (commanderLinks.length < commanderNames.length) {
+    commanderLinks.push(null);
+  }
+  return { commanderNames, commanderLinks };
+}
+
 function mapSharedGameLogRow(row: SharedGameLogRow): SharedGameLogEntry {
   const playedAt = normalizeDateInput(row.played_at);
   const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at;
   const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at;
+  const { commanderNames, commanderLinks } = normalizeCommanderSnapshot(
+    row.commander_names,
+    row.commander_links
+  );
   return {
     id: row.id,
     recipientUserId: row.recipient_user_id,
@@ -76,6 +108,8 @@ function mapSharedGameLogRow(row: SharedGameLogRow): SharedGameLogEntry {
     deckId: row.deck_id ?? null,
     deckName: row.deck_name ?? null,
     deckUrl: row.deck_url ?? null,
+    commanderNames,
+    commanderLinks,
     playedAt,
     turns: row.turns ?? null,
     durationMinutes: row.duration_minutes ?? null,
@@ -95,8 +129,9 @@ export async function listSharedGameLogs(
 ): Promise<SharedGameLogEntry[]> {
   const db = getPool();
   const result = await db.query<SharedGameLogRow>(
-    `SELECT id, recipient_user_id, shared_by_user_id, source_log_id, deck_id, deck_name, deck_url, played_at,
-            turns, duration_minutes, opponents_count, opponents, result, tags, status, created_at, updated_at
+    `SELECT id, recipient_user_id, shared_by_user_id, source_log_id, deck_id, deck_name, deck_url,
+            commander_names, commander_links, played_at, turns, duration_minutes, opponents_count, opponents,
+            result, tags, status, created_at, updated_at
      FROM shared_game_logs
      WHERE recipient_user_id = $1 AND status = $2
      ORDER BY created_at DESC`,
@@ -111,8 +146,9 @@ export async function getSharedGameLogById(
 ): Promise<SharedGameLogEntry | null> {
   const db = getPool();
   const result = await db.query<SharedGameLogRow>(
-    `SELECT id, recipient_user_id, shared_by_user_id, source_log_id, deck_id, deck_name, deck_url, played_at,
-            turns, duration_minutes, opponents_count, opponents, result, tags, status, created_at, updated_at
+    `SELECT id, recipient_user_id, shared_by_user_id, source_log_id, deck_id, deck_name, deck_url,
+            commander_names, commander_links, played_at, turns, duration_minutes, opponents_count, opponents,
+            result, tags, status, created_at, updated_at
      FROM shared_game_logs
      WHERE recipient_user_id = $1 AND id = $2`,
     [recipientUserId, sharedLogId]
@@ -133,6 +169,8 @@ export async function createSharedGameLog(input: SharedGameLogInput): Promise<bo
       deck_id,
       deck_name,
       deck_url,
+      commander_names,
+      commander_links,
       played_at,
       turns,
       duration_minutes,
@@ -144,7 +182,7 @@ export async function createSharedGameLog(input: SharedGameLogInput): Promise<bo
       created_at,
       updated_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12::jsonb, $13, $14::jsonb, 'pending', NOW(), NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::date, $11, $12, $13, $14::jsonb, $15, $16::jsonb, 'pending', NOW(), NOW())
     ON CONFLICT (recipient_user_id, source_log_id)
     DO NOTHING`,
     [
@@ -155,6 +193,8 @@ export async function createSharedGameLog(input: SharedGameLogInput): Promise<bo
       input.deckId,
       input.deckName,
       input.deckUrl,
+      JSON.stringify(input.commanderNames ?? []),
+      JSON.stringify(input.commanderLinks ?? []),
       input.playedAt,
       input.turns,
       input.durationMinutes,
@@ -195,20 +235,24 @@ export async function reopenSharedGameLog(input: SharedGameLogInput): Promise<bo
      SET deck_id = $1,
          deck_name = $2,
          deck_url = $3,
-         played_at = $4::date,
-         turns = $5,
-         duration_minutes = $6,
-         opponents_count = $7,
-         opponents = $8::jsonb,
-         result = $9,
-         tags = $10::jsonb,
+         commander_names = $4::jsonb,
+         commander_links = $5::jsonb,
+         played_at = $6::date,
+         turns = $7,
+         duration_minutes = $8,
+         opponents_count = $9,
+         opponents = $10::jsonb,
+         result = $11,
+         tags = $12::jsonb,
          status = 'pending',
          updated_at = NOW()
-     WHERE recipient_user_id = $11 AND source_log_id = $12 AND status = 'rejected'`,
+     WHERE recipient_user_id = $13 AND source_log_id = $14 AND status = 'rejected'`,
     [
       input.deckId,
       input.deckName,
       input.deckUrl,
+      JSON.stringify(input.commanderNames ?? []),
+      JSON.stringify(input.commanderLinks ?? []),
       input.playedAt,
       input.turns,
       input.durationMinutes,
@@ -234,21 +278,26 @@ export async function updateSharedGameLog(
      SET deck_id = $1,
          deck_name = $2,
          deck_url = $3,
-         played_at = $4::date,
-         turns = $5,
-         duration_minutes = $6,
-         opponents_count = $7,
-         opponents = $8::jsonb,
-         result = $9,
-         tags = $10::jsonb,
+         commander_names = $4::jsonb,
+         commander_links = $5::jsonb,
+         played_at = $6::date,
+         turns = $7,
+         duration_minutes = $8,
+         opponents_count = $9,
+         opponents = $10::jsonb,
+         result = $11,
+         tags = $12::jsonb,
          updated_at = NOW()
-     WHERE recipient_user_id = $11 AND id = $12 AND status = 'pending'
-     RETURNING id, recipient_user_id, shared_by_user_id, source_log_id, deck_id, deck_name, deck_url, played_at,
-               turns, duration_minutes, opponents_count, opponents, result, tags, status, created_at, updated_at`,
+     WHERE recipient_user_id = $13 AND id = $14 AND status = 'pending'
+     RETURNING id, recipient_user_id, shared_by_user_id, source_log_id, deck_id, deck_name, deck_url,
+               commander_names, commander_links, played_at, turns, duration_minutes, opponents_count, opponents,
+               result, tags, status, created_at, updated_at`,
     [
       input.deckId,
       input.deckName,
       input.deckUrl,
+      JSON.stringify(input.commanderNames ?? []),
+      JSON.stringify(input.commanderLinks ?? []),
       input.playedAt,
       input.turns,
       input.durationMinutes,

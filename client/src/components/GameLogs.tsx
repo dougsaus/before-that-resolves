@@ -102,7 +102,8 @@ function formatOpponentUserLabel(user: { name?: string | null; email?: string | 
 
 function renderCommanderInline(
   commanderNames: string[] | undefined,
-  commanderLinks: Array<string | null> | undefined
+  commanderLinks: Array<string | null> | undefined,
+  onHover?: (event: React.MouseEvent<HTMLAnchorElement>, name: string) => void
 ) {
   if (!commanderNames || commanderNames.length === 0) {
     return null;
@@ -119,6 +120,7 @@ function renderCommanderInline(
                 target="_blank"
                 rel="noreferrer"
                 className="text-cyan-200 hover:text-cyan-100"
+                onMouseEnter={onHover ? (event) => onHover(event, name) : undefined}
               >
                 {name}
               </a>
@@ -1053,7 +1055,11 @@ export function GameLogs({
               <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
                 {deckLabel}
               </h4>
-              {renderCommanderInline(log.commanderNames, log.commanderLinks)}
+              {renderCommanderInline(log.commanderNames, log.commanderLinks, (event, name) => {
+                anchorRef.current = event.currentTarget;
+                const rect = event.currentTarget.getBoundingClientRect();
+                setHoverCard({ label: name, rect });
+              })}
             </div>
           </div>
           <div className="flex items-center justify-start gap-1 sm:justify-end">

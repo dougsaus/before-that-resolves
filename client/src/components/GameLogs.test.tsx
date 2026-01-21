@@ -534,6 +534,8 @@ describe('GameLogs', () => {
           deckId: null,
           deckName: null,
           deckUrl: null,
+          commanderNames: [],
+          commanderLinks: [],
           playedAt: '2026-01-12',
           turns: null,
           durationMinutes: null,

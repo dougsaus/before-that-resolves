@@ -95,6 +95,8 @@ const schemaQueries = [
     deck_id TEXT,
     deck_name TEXT,
     deck_url TEXT,
+    commander_names JSONB NOT NULL DEFAULT '[]'::jsonb,
+    commander_links JSONB NOT NULL DEFAULT '[]'::jsonb,
     played_at DATE NOT NULL,
     turns INTEGER,
     duration_minutes INTEGER,
@@ -106,6 +108,8 @@ const schemaQueries = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
+  `ALTER TABLE shared_game_logs ADD COLUMN IF NOT EXISTS commander_names JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+  `ALTER TABLE shared_game_logs ADD COLUMN IF NOT EXISTS commander_links JSONB NOT NULL DEFAULT '[]'::jsonb;`,
   `CREATE UNIQUE INDEX IF NOT EXISTS shared_game_logs_recipient_source_idx
     ON shared_game_logs (recipient_user_id, source_log_id);`,
   `CREATE INDEX IF NOT EXISTS shared_game_logs_recipient_status_idx
