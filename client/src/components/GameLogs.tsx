@@ -77,13 +77,20 @@ function formatColorIdentityValue(colors: string[] | null): string {
 function formatGameLength(durationMinutes: number | null, turns: number | null): string {
   const parts: string[] = [];
   if (durationMinutes) {
-    parts.push(`${durationMinutes}m`);
+    const hours = Math.floor(durationMinutes / 60);
+    const minutes = durationMinutes % 60;
+    if (hours > 0) {
+      parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+    }
+    if (minutes > 0 || hours === 0) {
+      parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+    }
   }
   if (turns) {
     parts.push(`${turns} turns`);
   }
   if (parts.length === 0) return '';
-  return `Game Length: ${parts.join(', ')}`;
+  return parts.join(', ');
 }
 
 function formatOpponentUserLabel(user: { name?: string | null; email?: string | null }): string {
@@ -1031,8 +1038,8 @@ export function GameLogs({
     const deckLabelClass = hasDeckLabel ? 'text-white' : 'text-gray-400 italic';
     return (
       <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-2 px-4 py-2">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(18rem,1fr)_4.5rem] sm:items-start">
-          <div className="flex items-center gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(18rem,1fr)_4.5rem] sm:items-baseline">
+          <div className="flex items-baseline gap-2">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Date
             </span>
@@ -1055,7 +1062,7 @@ export function GameLogs({
         </div>
 
         <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+          <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
             Result:
           </span>
           <span
@@ -1071,16 +1078,18 @@ export function GameLogs({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
-            Length:
-          </span>
-          <span className="text-gray-300">{formatGameLength(log.durationMinutes, log.turns)}</span>
-        </div>
+        {formatGameLength(log.durationMinutes, log.turns) && (
+          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
+            <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+              Length:
+            </span>
+            <span className="text-gray-300">{formatGameLength(log.durationMinutes, log.turns)}</span>
+          </div>
+        )}
 
         {log.opponents.length > 0 && (
           <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+            <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
               Opponents:
             </span>
             <div className="flex flex-col gap-1">
@@ -1150,7 +1159,7 @@ export function GameLogs({
 
         {log.tags.length > 0 && (
           <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
+            <span className="pl-2 text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
               Tags:
             </span>
             <div className="flex flex-wrap gap-1">
