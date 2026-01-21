@@ -1031,7 +1031,7 @@ export function GameLogs({
     const deckLabelClass = hasDeckLabel ? 'text-white' : 'text-gray-400 italic';
     return (
       <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-start">
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Date
