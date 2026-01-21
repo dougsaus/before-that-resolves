@@ -713,9 +713,16 @@ export function createApp(deps: AppDeps = {}) {
         });
         return;
       }
-      const session = await createSession(user.id);
-      setSessionCookie(res, session.sessionId, session.expiresAt);
-      res.json({ success: true, user });
+      try {
+        const session = await createSession(user.id);
+        setSessionCookie(res, session.sessionId, session.expiresAt);
+        res.json({ success: true, user });
+      } catch (error: unknown) {
+        res.status(500).json({
+          success: false,
+          error: getErrorMessage(error, 'Failed to create session')
+        });
+      }
     } catch (error: unknown) {
       res.status(401).json({
         success: false,
