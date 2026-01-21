@@ -53,7 +53,11 @@ function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [pendingDeckUrl, setPendingDeckUrl] = useState<string | undefined>(undefined);
   const deckCollection = useDeckCollection();
-  const sharedLogsState = useSharedGameLogs(deckCollection.idToken);
+  const authStatus = deckCollection.sessionStatus;
+  const sharedLogsState = useSharedGameLogs({
+    authStatus,
+    onAuthExpired: deckCollection.markAuthExpired
+  });
   const mainRef = useRef<HTMLElement | null>(null);
   const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
   const supportsVerbosity = models.find((model) => model.id === selectedModel)?.verbosity ?? false;
@@ -135,8 +139,7 @@ function App() {
     }
   ];
   const decksEnabled = Boolean(deckCollection.googleClientId);
-  const profileLabel =
-    deckCollection.user?.name || deckCollection.user?.email || 'Profile';
+  const profileLabel = deckCollection.user?.name || deckCollection.user?.email || 'Profile';
   const profileInitials = getInitials(deckCollection.user?.name || deckCollection.user?.email);
   const handleNavSelect = (nextView: AppView) => {
     setView(nextView);
@@ -310,7 +313,10 @@ function App() {
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <DeckCollection
                     enabled={decksEnabled}
-                    idToken={deckCollection.idToken}
+                    authStatus={authStatus}
+                    authError={deckCollection.authError}
+                    authButtonRef={deckCollection.buttonRef}
+                    onAuthExpired={deckCollection.markAuthExpired}
                     decks={deckCollection.decks}
                     loading={deckCollection.loading}
                     deckError={deckCollection.deckError}
@@ -332,7 +338,9 @@ function App() {
               {view === 'logs' && (
                 <GameLogs
                   enabled={decksEnabled}
-                  idToken={deckCollection.idToken}
+                  authStatus={authStatus}
+                  authButtonRef={deckCollection.buttonRef}
+                  onAuthExpired={deckCollection.markAuthExpired}
                   decks={deckCollection.decks}
                   decksLoading={deckCollection.loading}
                   sharedLogs={sharedLogsState.sharedLogs}
@@ -354,7 +362,7 @@ function App() {
                   </div>
                   <DeckAuthPanel
                     enabled={decksEnabled}
-                    idToken={deckCollection.idToken}
+                    authStatus={authStatus}
                     user={deckCollection.user}
                     authError={deckCollection.authError}
                     loading={deckCollection.loading}

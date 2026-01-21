@@ -65,6 +65,24 @@ export async function upsertUser(user: GoogleUser): Promise<void> {
   );
 }
 
+export async function getUserById(userId: string): Promise<GoogleUser | null> {
+  const db = getPool();
+  const result = await db.query<{ id: string; email: string | null; name: string | null; picture: string | null }>(
+    `SELECT id, email, name, picture FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (result.rows.length === 0) {
+    return null;
+  }
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    email: row.email ?? undefined,
+    name: row.name ?? undefined,
+    picture: row.picture ?? undefined
+  };
+}
+
 export async function listDeckCollection(userId: string): Promise<DeckCollectionEntry[]> {
   const db = getPool();
   const result = await db.query<DeckRow>(

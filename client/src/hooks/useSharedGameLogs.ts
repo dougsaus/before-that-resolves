@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
 import type { GameLogOpponent } from './useGameLogs';
+import type { AuthStatus } from '../types/auth';
 
 export type SharedGameLogEntry = {
   id: string;
@@ -49,33 +50,68 @@ type SharedLogsResponse = {
   error?: string;
 };
 
+type AuthState = {
+  authStatus: AuthStatus;
+  onAuthExpired?: (message?: string) => void;
+};
+
 export function useSharedGameLogs(
-  idToken: string | null,
+  auth: AuthState,
   options: { autoLoad?: boolean } = {}
 ) {
+  const { authStatus, onAuthExpired } = auth;
+  const isAuthenticated = authStatus === 'authenticated';
   const [sharedLogs, setSharedLogs] = useState<SharedGameLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const headers = useMemo(() => {
-    if (!idToken) return null;
-    return {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json'
-    };
-  }, [idToken]);
+  const jsonHeaders = useMemo(() => ({
+    'Content-Type': 'application/json'
+  }), []);
+
+  const readPayload = useCallback(async <T extends { success?: boolean; error?: string; code?: string }>(
+    response: Response
+  ): Promise<T> => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error('Unexpected response from server.');
+    }
+  }, []);
+
+  const handleAuthFailure = useCallback((
+    payload: { error?: string; code?: string },
+    response: Response,
+    fallbackMessage: string
+  ): boolean => {
+    if (response.status !== 401) return false;
+    const message = payload.error || fallbackMessage;
+    if (payload.code === 'auth_expired') {
+      onAuthExpired?.(message);
+    }
+    setError(message);
+    return true;
+  }, [onAuthExpired]);
 
   const loadSharedLogs = useCallback(async () => {
-    if (!headers) {
+    if (authStatus === 'unauthenticated') {
       setSharedLogs([]);
       return;
     }
+    if (!isAuthenticated) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(buildApiUrl('/api/game-logs/shared'), { headers });
-      const payload = (await response.json()) as SharedLogsResponse;
+      const response = await fetch(buildApiUrl('/api/game-logs/shared'), {
+        headers: jsonHeaders,
+        credentials: 'include'
+      });
+      const payload = await readPayload<SharedLogsResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to load shared game logs.')) {
+        return;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load shared game logs.');
       }
@@ -86,21 +122,22 @@ export function useSharedGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [authStatus, handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   useEffect(() => {
-    if (!headers) {
+    if (authStatus === 'unauthenticated') {
       setSharedLogs([]);
       return;
     }
+    if (!isAuthenticated) return;
     if (options.autoLoad === false) {
       return;
     }
     void loadSharedLogs();
-  }, [headers, loadSharedLogs, options.autoLoad]);
+  }, [authStatus, isAuthenticated, loadSharedLogs, options.autoLoad]);
 
   const updateSharedLog = useCallback(async (logId: string, input: SharedGameLogUpdate): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to edit shared logs.');
       return false;
     }
@@ -110,10 +147,14 @@ export function useSharedGameLogs(
     try {
       const response = await fetch(buildApiUrl(`/api/game-logs/shared/${logId}`), {
         method: 'PATCH',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify(input)
       });
-      const payload = (await response.json()) as SharedLogsResponse;
+      const payload = await readPayload<SharedLogsResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to update shared game log.')) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to update shared game log.');
       }
@@ -127,10 +168,10 @@ export function useSharedGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const acceptSharedLog = useCallback(async (logId: string): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to accept shared logs.');
       return false;
     }
@@ -140,9 +181,13 @@ export function useSharedGameLogs(
     try {
       const response = await fetch(buildApiUrl(`/api/game-logs/shared/${logId}/accept`), {
         method: 'POST',
-        headers
+        headers: jsonHeaders,
+        credentials: 'include'
       });
-      const payload = (await response.json()) as SharedLogsResponse;
+      const payload = await readPayload<SharedLogsResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to accept shared game log.')) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to accept shared game log.');
       }
@@ -156,10 +201,10 @@ export function useSharedGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const rejectSharedLog = useCallback(async (logId: string): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to reject shared logs.');
       return false;
     }
@@ -169,9 +214,13 @@ export function useSharedGameLogs(
     try {
       const response = await fetch(buildApiUrl(`/api/game-logs/shared/${logId}/reject`), {
         method: 'POST',
-        headers
+        headers: jsonHeaders,
+        credentials: 'include'
       });
-      const payload = (await response.json()) as SharedLogsResponse;
+      const payload = await readPayload<SharedLogsResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to reject shared game log.')) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to reject shared game log.');
       }
@@ -185,7 +234,7 @@ export function useSharedGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   return {
     sharedLogs,

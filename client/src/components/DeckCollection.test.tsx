@@ -19,7 +19,10 @@ const baseDeck = (overrides: Partial<DeckEntry> = {}): DeckEntry => ({
 
 const defaultProps = {
   enabled: true,
-  idToken: 'token-123',
+  authStatus: 'authenticated' as const,
+  authError: null,
+  authButtonRef: vi.fn(),
+  onAuthExpired: vi.fn(),
   decks: [] as DeckEntry[],
   loading: false,
   deckError: null,

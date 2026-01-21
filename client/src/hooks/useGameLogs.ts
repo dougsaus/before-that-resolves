@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
+import type { AuthStatus } from '../types/auth';
 
 export type GameLogOpponent = {
   userId: string | null;
@@ -74,33 +75,70 @@ type ShareLogResponse = {
   error?: string;
 };
 
+type AuthState = {
+  authStatus: AuthStatus;
+  onAuthExpired?: (message?: string) => void;
+};
+
 export function useGameLogs(
-  idToken: string | null,
+  auth: AuthState,
   options: { autoLoad?: boolean } = {}
 ) {
+  const { authStatus, onAuthExpired } = auth;
+  const isAuthenticated = authStatus === 'authenticated';
   const [logs, setLogs] = useState<GameLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const headers = useMemo(() => {
-    if (!idToken) return null;
-    return {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json'
-    };
-  }, [idToken]);
+  const jsonHeaders = useMemo(() => ({
+    'Content-Type': 'application/json'
+  }), []);
+
+  const readPayload = useCallback(async <T extends { success?: boolean; error?: string; code?: string }>(
+    response: Response
+  ): Promise<T> => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error('Unexpected response from server.');
+    }
+  }, []);
+
+  const handleAuthFailure = useCallback((
+    payload: { error?: string; code?: string },
+    response: Response,
+    fallbackMessage: string
+  ): boolean => {
+    if (response.status !== 401) return false;
+    const message = payload.error || fallbackMessage;
+    if (payload.code === 'auth_expired') {
+      onAuthExpired?.(message);
+    }
+    setError(message);
+    return true;
+  }, [onAuthExpired]);
 
   const loadLogs = useCallback(async () => {
-    if (!headers) {
+    if (authStatus === 'unauthenticated') {
       setLogs([]);
+      return;
+    }
+    if (!isAuthenticated) {
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(buildApiUrl('/api/game-logs'), { headers });
-      const payload = (await response.json()) as GameLogResponse;
+      const response = await fetch(buildApiUrl('/api/game-logs'), {
+        headers: jsonHeaders,
+        credentials: 'include'
+      });
+      const payload = await readPayload<GameLogResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to load game logs.')) {
+        return;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load game logs.');
       }
@@ -111,21 +149,22 @@ export function useGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [authStatus, handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   useEffect(() => {
-    if (!headers) {
+    if (authStatus === 'unauthenticated') {
       setLogs([]);
       return;
     }
+    if (!isAuthenticated) return;
     if (options.autoLoad === false) {
       return;
     }
     void loadLogs();
-  }, [headers, loadLogs, options.autoLoad]);
+  }, [authStatus, isAuthenticated, loadLogs, options.autoLoad]);
 
   const addLog = useCallback(async (input: GameLogInput): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to add game logs.');
       return false;
     }
@@ -135,10 +174,14 @@ export function useGameLogs(
     try {
       const response = await fetch(buildApiUrl('/api/game-logs'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify(input)
       });
-      const payload = (await response.json()) as GameLogResponse;
+      const payload = await readPayload<GameLogResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to add game log.')) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to add game log.');
       }
@@ -152,10 +195,10 @@ export function useGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const removeLog = useCallback(async (logId: string): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to remove game logs.');
       return false;
     }
@@ -165,9 +208,13 @@ export function useGameLogs(
     try {
       const response = await fetch(buildApiUrl(`/api/game-logs/${logId}`), {
         method: 'DELETE',
-        headers
+        headers: jsonHeaders,
+        credentials: 'include'
       });
-      const payload = (await response.json()) as GameLogResponse;
+      const payload = await readPayload<GameLogResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to remove game log.')) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to remove game log.');
       }
@@ -181,10 +228,10 @@ export function useGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const updateLog = useCallback(async (logId: string, input: GameLogUpdate): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to edit game logs.');
       return false;
     }
@@ -194,10 +241,14 @@ export function useGameLogs(
     try {
       const response = await fetch(buildApiUrl(`/api/game-logs/${logId}`), {
         method: 'PATCH',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify(input)
       });
-      const payload = (await response.json()) as GameLogResponse;
+      const payload = await readPayload<GameLogResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to update game log.')) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to update game log.');
       }
@@ -211,13 +262,13 @@ export function useGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const shareLog = useCallback(async (
     logId: string,
     options: { confirmReshare?: boolean; reshareRecipientIds?: string[] } = {}
   ): Promise<ShareLogResponse | null> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setError('Sign in with Google to share game logs.');
       return null;
     }
@@ -227,13 +278,17 @@ export function useGameLogs(
     try {
       const response = await fetch(buildApiUrl(`/api/game-logs/${logId}/share`), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           confirmReshare: options.confirmReshare ?? false,
           reshareRecipientIds: options.reshareRecipientIds ?? null
         })
       });
-      const payload = (await response.json()) as ShareLogResponse;
+      const payload = await readPayload<ShareLogResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to share game log.')) {
+        return null;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to share game log.');
       }
@@ -270,7 +325,7 @@ export function useGameLogs(
     } finally {
       setLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   return {
     logs,

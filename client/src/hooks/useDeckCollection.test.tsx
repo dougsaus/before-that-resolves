@@ -4,8 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { buildApiUrl } from '../utils/api';
 import { useDeckCollection } from './useDeckCollection';
 
-const TOKEN_STORAGE_KEY = 'btr_google_id_token';
-
 type GoogleCredentialResponse = {
   credential?: string;
 };
@@ -22,11 +20,12 @@ type GoogleApi = {
 };
 
 function HookHarness() {
-  const { idToken, user, buttonRef, signOut } = useDeckCollection();
+  const { sessionStatus, user, authError, buttonRef, signOut } = useDeckCollection();
   return (
     <div>
-      <div data-testid="token">{idToken ?? ''}</div>
+      <div data-testid="status">{sessionStatus}</div>
       <div data-testid="user">{user?.id ?? ''}</div>
+      <div data-testid="auth-error">{authError ?? ''}</div>
       <div ref={buttonRef} />
       <button type="button" onClick={signOut}>
         Sign out
@@ -35,8 +34,9 @@ function HookHarness() {
   );
 }
 
-const mockJsonResponse = (payload: unknown, ok: boolean = true) => ({
+const mockJsonResponse = (payload: unknown, ok: boolean = true, status?: number) => ({
   ok,
+  status: status ?? (ok ? 200 : 400),
   text: async () => JSON.stringify(payload)
 });
 
@@ -75,8 +75,7 @@ describe('useDeckCollection', () => {
     delete (window as Window & { google?: GoogleApi }).google;
   });
 
-  it('restores a stored token and loads decks', async () => {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'token-123');
+  it('loads decks when a session is valid', async () => {
     fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-1' }, decks: [] }));
 
     render(<HookHarness />);
@@ -85,17 +84,24 @@ describe('useDeckCollection', () => {
       expect(fetchMock).toHaveBeenCalledWith(
         buildApiUrl('/api/decks'),
         expect.objectContaining({
-          headers: { Authorization: 'Bearer token-123' }
+          credentials: 'include'
         })
       );
     });
 
-    expect(screen.getByTestId('token').textContent).toBe('token-123');
+    expect(screen.getByTestId('status').textContent).toBe('authenticated');
     expect(screen.getByTestId('user').textContent).toBe('user-1');
   });
 
-  it('persists token after Google login callback', async () => {
-    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-2' }, decks: [] }));
+  it('exchanges Google credentials for a session', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: false,
+        error: 'Authentication required.',
+        code: 'auth_required'
+      }, false, 401))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-2' } }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-2' }, decks: [] }));
 
     render(<HookHarness />);
 
@@ -107,49 +113,60 @@ describe('useDeckCollection', () => {
     });
 
     await waitFor(() => {
-      expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('token-abc');
-    });
-
-    await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        buildApiUrl('/api/decks'),
+        buildApiUrl('/api/auth/google'),
         expect.objectContaining({
-          headers: { Authorization: 'Bearer token-abc' }
+          method: 'POST',
+          credentials: 'include'
         })
       );
     });
-  });
-
-  it('clears a stored token if loading decks fails', async () => {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'token-bad');
-    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: false, error: 'Invalid token' }, false));
-
-    render(<HookHarness />);
 
     await waitFor(() => {
-      expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+      expect(screen.getByTestId('status').textContent).toBe('authenticated');
+      expect(screen.getByTestId('user').textContent).toBe('user-2');
     });
-
-    expect(screen.getByTestId('token').textContent).toBe('');
   });
 
-  it('clears token on sign out', async () => {
-    const user = userEvent.setup();
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'token-321');
-    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-3' }, decks: [] }));
+  it('marks the session as expired when the server returns auth_expired', async () => {
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({
+      success: false,
+      error: 'Session expired. Please sign in again.',
+      code: 'auth_expired'
+    }, false, 401));
 
     render(<HookHarness />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('token').textContent).toBe('token-321');
+      expect(screen.getByTestId('status').textContent).toBe('expired');
+    });
+    expect(screen.getByTestId('auth-error').textContent).toBe('Session expired. Please sign in again.');
+  });
+
+  it('signs out and clears the session state', async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'user-3' }, decks: [] }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true }));
+
+    render(<HookHarness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('authenticated');
     });
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
     await waitFor(() => {
-      expect(window.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+      expect(fetchMock).toHaveBeenCalledWith(
+        buildApiUrl('/api/auth/logout'),
+        expect.objectContaining({
+          method: 'POST',
+          credentials: 'include'
+        })
+      );
     });
 
-    expect(screen.getByTestId('token').textContent).toBe('');
+    expect(screen.getByTestId('status').textContent).toBe('unauthenticated');
   });
 });

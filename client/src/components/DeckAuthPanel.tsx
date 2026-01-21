@@ -1,4 +1,5 @@
 import type { RefCallback } from 'react';
+import type { AuthStatus } from '../types/auth';
 
 type GoogleUser = {
   id: string;
@@ -9,7 +10,7 @@ type GoogleUser = {
 
 type DeckAuthPanelProps = {
   enabled: boolean;
-  idToken: string | null;
+  authStatus: AuthStatus;
   user: GoogleUser | null;
   authError: string | null;
   loading: boolean;
@@ -19,18 +20,20 @@ type DeckAuthPanelProps = {
 
 export function DeckAuthPanel({
   enabled,
-  idToken,
+  authStatus,
   user,
   authError,
   loading,
   buttonRef,
   onSignOut
 }: DeckAuthPanelProps) {
+  const isAuthenticated = authStatus === 'authenticated';
+  const authExpired = authStatus === 'expired';
   return (
     <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 text-sm text-gray-200">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Account</span>
-        {idToken && (
+        {isAuthenticated && (
           <button
             type="button"
             onClick={onSignOut}
@@ -47,15 +50,19 @@ export function DeckAuthPanel({
         </p>
       )}
 
-      {enabled && !idToken && (
+      {enabled && !isAuthenticated && authStatus !== 'unknown' && (
         <div className="flex flex-col gap-3">
-          <p className="text-gray-200">Sign in to save decks to your collection.</p>
+          <p className="text-gray-200">
+            {authExpired
+              ? 'Session expired. Sign in again to continue saving decks.'
+              : 'Sign in to save decks to your collection.'}
+          </p>
           <div ref={buttonRef} />
           {authError && <p className="text-red-400 text-xs">{authError}</p>}
         </div>
       )}
 
-      {enabled && idToken && (
+      {enabled && isAuthenticated && (
         <div className="flex items-center gap-3">
           {user?.picture && (
             <img
@@ -70,6 +77,9 @@ export function DeckAuthPanel({
             {loading && <p className="text-xs text-gray-400">Syncing decks...</p>}
           </div>
         </div>
+      )}
+      {enabled && authStatus === 'unknown' && (
+        <p className="text-gray-300">Checking session...</p>
       )}
     </div>
   );

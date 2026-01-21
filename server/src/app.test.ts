@@ -178,14 +178,83 @@ describe('app routes', () => {
     expect(response.body.error).toBe('messages are required');
   });
 
-  it('requires a Google token to access deck collections', async () => {
+  it('requires authentication to access deck collections', async () => {
     const app = createApp();
 
     const response = await request(app)
       .get('/api/decks')
       .expect(401);
 
-    expect(response.body.error).toBe('Google ID token is required.');
+    expect(response.body.error).toBe('Authentication required.');
+  });
+
+  it('exchanges a Google token for a session cookie', async () => {
+    const verifyGoogleIdToken = vi.fn().mockResolvedValue({ id: 'user-42', email: 'user@test.dev' });
+    const upsertUser = vi.fn().mockResolvedValue(undefined);
+    const createSession = vi.fn().mockResolvedValue({
+      sessionId: 'session-abc',
+      expiresAt: new Date('2030-01-01T00:00:00.000Z')
+    });
+    const app = createApp({ verifyGoogleIdToken, upsertUser, createSession });
+
+    const response = await request(app)
+      .post('/api/auth/google')
+      .send({ idToken: 'token-abc' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.user.id).toBe('user-42');
+    expect(createSession).toHaveBeenCalledWith('user-42');
+    expect(response.headers['set-cookie']?.[0]).toContain('btr_session=session-abc');
+  });
+
+  it('authenticates requests with a session cookie', async () => {
+    const futureExpiry = new Date(Date.now() + 1000 * 60 * 60);
+    const refreshedExpiry = new Date(Date.now() + 1000 * 60 * 60 * 2);
+    const getSession = vi.fn().mockResolvedValue({
+      userId: 'user-99',
+      expiresAt: futureExpiry,
+      lastSeenAt: new Date()
+    });
+    const getUserById = vi.fn().mockResolvedValue({ id: 'user-99', email: 'user@test.dev' });
+    const touchSession = vi.fn().mockResolvedValue(refreshedExpiry);
+    const listDeckCollection = vi.fn().mockResolvedValue([]);
+    const getDeckStats = vi.fn().mockResolvedValue(new Map());
+    const app = createApp({
+      getSession,
+      getUserById,
+      touchSession,
+      listDeckCollection,
+      getDeckStats
+    });
+
+    const response = await request(app)
+      .get('/api/decks')
+      .set('Cookie', 'btr_session=session-xyz')
+      .expect(200);
+
+    expect(getSession).toHaveBeenCalledWith('session-xyz');
+    expect(getUserById).toHaveBeenCalledWith('user-99');
+    expect(touchSession).toHaveBeenCalledWith('session-xyz');
+    expect(response.headers['set-cookie']?.[0]).toContain('btr_session=session-xyz');
+  });
+
+  it('returns auth_expired when the session has expired', async () => {
+    const getSession = vi.fn().mockResolvedValue({
+      userId: 'user-77',
+      expiresAt: new Date(Date.now() - 1000),
+      lastSeenAt: new Date(Date.now() - 2000)
+    });
+    const deleteSession = vi.fn().mockResolvedValue(undefined);
+    const app = createApp({ getSession, deleteSession });
+
+    const response = await request(app)
+      .get('/api/decks')
+      .set('Cookie', 'btr_session=session-expired')
+      .expect(401);
+
+    expect(response.body.code).toBe('auth_expired');
+    expect(deleteSession).toHaveBeenCalledWith('session-expired');
   });
 
   it('lists decks for an authenticated user', async () => {
@@ -770,14 +839,14 @@ describe('app routes', () => {
     });
   });
 
-  it('requires a Google token to access game logs', async () => {
+  it('requires authentication to access game logs', async () => {
     const app = createApp();
 
     const response = await request(app)
       .get('/api/game-logs')
       .expect(401);
 
-    expect(response.body.error).toBe('Google ID token is required.');
+    expect(response.body.error).toBe('Authentication required.');
   });
 
   it('lists game logs for a user', async () => {

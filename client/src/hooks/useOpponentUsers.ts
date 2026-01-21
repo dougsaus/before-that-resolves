@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
+import type { AuthStatus } from '../types/auth';
 
 export type OpponentUser = {
   id: string;
@@ -14,18 +15,14 @@ type OpponentSearchResponse = {
   error?: string;
 };
 
-const readPayload = async <T extends { success?: boolean; error?: string }>(
-  response: Response
-): Promise<T> => {
-  const text = await response.text();
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error('Unexpected response from server.');
-  }
+type AuthState = {
+  authStatus: AuthStatus;
+  onAuthExpired?: (message?: string) => void;
 };
 
-export function useOpponentUsers(idToken: string | null) {
+export function useOpponentUsers(auth: AuthState) {
+  const { authStatus, onAuthExpired } = auth;
+  const isAuthenticated = authStatus === 'authenticated';
   const [recentOpponents, setRecentOpponents] = useState<OpponentUser[]>([]);
   const [recentError, setRecentError] = useState<string | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
@@ -33,24 +30,53 @@ export function useOpponentUsers(idToken: string | null) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
 
-  const headers = useMemo(() => {
-    if (!idToken) return null;
-    return {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json'
-    };
-  }, [idToken]);
+  const jsonHeaders = useMemo(() => ({
+    'Content-Type': 'application/json'
+  }), []);
+
+  const readPayload = useCallback(async <T extends { success?: boolean; error?: string; code?: string }>(
+    response: Response
+  ): Promise<T> => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error('Unexpected response from server.');
+    }
+  }, []);
+
+  const handleAuthFailure = useCallback((
+    payload: { error?: string; code?: string },
+    response: Response,
+    fallbackMessage: string,
+    setMessage: (message: string) => void
+  ): boolean => {
+    if (response.status !== 401) return false;
+    const message = payload.error || fallbackMessage;
+    if (payload.code === 'auth_expired') {
+      onAuthExpired?.(message);
+    }
+    setMessage(message);
+    return true;
+  }, [onAuthExpired]);
 
   const loadRecentOpponents = useCallback(async () => {
-    if (!headers) {
+    if (authStatus === 'unauthenticated') {
       setRecentOpponents([]);
       return;
     }
+    if (!isAuthenticated) return;
     setRecentLoading(true);
     setRecentError(null);
     try {
-      const response = await fetch(buildApiUrl('/api/opponents/recent'), { headers });
+      const response = await fetch(buildApiUrl('/api/opponents/recent'), {
+        headers: jsonHeaders,
+        credentials: 'include'
+      });
       const payload = await readPayload<OpponentSearchResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to load recent opponents.', setRecentError)) {
+        return;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load recent opponents.');
       }
@@ -61,10 +87,10 @@ export function useOpponentUsers(idToken: string | null) {
     } finally {
       setRecentLoading(false);
     }
-  }, [headers]);
+  }, [authStatus, handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const searchOpponents = useCallback(async (query: string): Promise<OpponentUser[]> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setSearchResults([]);
       return [];
     }
@@ -76,8 +102,14 @@ export function useOpponentUsers(idToken: string | null) {
     setSearchLoading(true);
     setSearchError(null);
     try {
-      const response = await fetch(buildApiUrl(`/api/users/search?query=${encodeURIComponent(trimmed)}`), { headers });
+      const response = await fetch(buildApiUrl(`/api/users/search?query=${encodeURIComponent(trimmed)}`), {
+        headers: jsonHeaders,
+        credentials: 'include'
+      });
       const payload = await readPayload<OpponentSearchResponse>(response);
+      if (handleAuthFailure(payload, response, 'Unable to search users.', setSearchError)) {
+        return [];
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to search users.');
       }
@@ -91,7 +123,7 @@ export function useOpponentUsers(idToken: string | null) {
     } finally {
       setSearchLoading(false);
     }
-  }, [headers]);
+  }, [handleAuthFailure, isAuthenticated, jsonHeaders, readPayload]);
 
   const clearSearch = useCallback(() => {
     setSearchResults([]);

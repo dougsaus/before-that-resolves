@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
 import { useGameLogs, type GameLogEntry } from '../hooks/useGameLogs';
@@ -9,6 +9,7 @@ import { buildApiUrl } from '../utils/api';
 import { sortColorsForDisplay } from '../utils/color-identity';
 import { parseLocalDate } from '../utils/date';
 import type { DeckEntry } from './DeckCollection';
+import type { AuthStatus } from '../types/auth';
 
 const PREDEFINED_TAGS = [
   'mulligan',
@@ -26,7 +27,9 @@ function getScryfallImageUrl(cardName: string) {
 
 type GameLogsProps = {
   enabled: boolean;
-  idToken: string | null;
+  authStatus: AuthStatus;
+  authButtonRef: RefCallback<HTMLDivElement>;
+  onAuthExpired: (message?: string) => void;
   decks: DeckEntry[];
   decksLoading: boolean;
   sharedLogs: SharedGameLogEntry[];
@@ -137,7 +140,9 @@ type OpponentForm = {
 
 export function GameLogs({
   enabled,
-  idToken,
+  authStatus,
+  authButtonRef,
+  onAuthExpired,
   decks,
   decksLoading,
   sharedLogs,
@@ -148,6 +153,8 @@ export function GameLogs({
   acceptSharedLog,
   rejectSharedLog
 }: GameLogsProps) {
+  const isAuthenticated = authStatus === 'authenticated';
+  const authExpired = authStatus === 'expired';
   const {
     logs,
     loading,
@@ -158,7 +165,7 @@ export function GameLogs({
     updateLog,
     shareLog,
     refreshLogs
-  } = useGameLogs(idToken);
+  } = useGameLogs({ authStatus, onAuthExpired });
   const {
     recentOpponents,
     recentError,
@@ -169,13 +176,13 @@ export function GameLogs({
     loadRecentOpponents,
     searchOpponents,
     clearSearch
-  } = useOpponentUsers(idToken);
+  } = useOpponentUsers({ authStatus, onAuthExpired });
   const {
     decksByUserId,
     loadingByUserId: decksLoadingByUserId,
     errorByUserId: decksErrorByUserId,
     loadOpponentDecks
-  } = useOpponentDecks(idToken);
+  } = useOpponentDecks({ authStatus, onAuthExpired });
   const [recentOpenIndex, setRecentOpenIndex] = useState<number | null>(null);
   const [searchOpenIndex, setSearchOpenIndex] = useState<number | null>(null);
   type SortKey = 'playedAt' | 'deckName' | 'result' | 'durationMinutes' | 'turns';
@@ -231,6 +238,20 @@ export function GameLogs({
   const popupRef = useRef<HTMLDivElement | null>(null);
   const opponentDropdownRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const jsonHeaders = useMemo(() => ({
+    'Content-Type': 'application/json'
+  }), []);
+  const handleAuthFailure = (payload: { error?: string; code?: string }, response: Response, onError?: (message: string) => void) => {
+    if (response.status !== 401) return false;
+    const message = payload.error || 'Session expired. Sign in again to continue.';
+    if (payload.code === 'auth_expired') {
+      onAuthExpired(message);
+    }
+    if (onError) {
+      onError(message);
+    }
+    return true;
+  };
 
   useEffect(() => {
     const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
@@ -252,15 +273,15 @@ export function GameLogs({
   }, [clearSearch, recentOpenIndex, searchOpenIndex]);
 
   useEffect(() => {
-    if (!editTarget || !idToken) return;
+    if (!editTarget || !isAuthenticated) return;
     void loadRecentOpponents();
-  }, [editTarget, idToken, loadRecentOpponents]);
+  }, [editTarget, isAuthenticated, loadRecentOpponents]);
 
   useEffect(() => {
-    if (!idToken) return;
+    if (!isAuthenticated) return;
     void refreshLogs();
     void refreshSharedLogs();
-  }, [idToken, refreshLogs, refreshSharedLogs]);
+  }, [isAuthenticated, refreshLogs, refreshSharedLogs]);
 
   useEffect(() => {
     if (!editTarget) return;
@@ -502,7 +523,7 @@ export function GameLogs({
   };
 
   const handleEditOpponentSearch = async (opponentIndex: number) => {
-    if (!idToken) {
+    if (!isAuthenticated) {
       setEditFormError('Sign in with Google to search opponents.');
       return;
     }
@@ -548,7 +569,7 @@ export function GameLogs({
   };
 
   const openRecentOpponents = async (opponentIndex: number) => {
-    if (!idToken) {
+    if (!isAuthenticated) {
       setEditFormError('Sign in with Google to view recent opponents.');
       return;
     }
@@ -599,7 +620,7 @@ export function GameLogs({
         ? deck.commanderNames.map((name, idx) => ({
             name,
             link: deck.commanderLinks[idx] ?? null,
-            lookupStatus: deck.commanderLinks[idx] ? 'found' as const : idToken ? 'loading' as const : 'idle' as const
+            lookupStatus: deck.commanderLinks[idx] ? 'found' as const : isAuthenticated ? 'loading' as const : 'idle' as const
           }))
         : [{ name: '', link: null, lookupStatus: 'idle' as const }];
       next[opponentIndex] = {
@@ -652,7 +673,7 @@ export function GameLogs({
   };
 
   const lookupOpponentCommander = async (opponentIndex: number, commanderIndex: number) => {
-    if (!idToken) {
+    if (!isAuthenticated) {
       setEditFormError('Sign in with Google to search commanders.');
       return;
     }
@@ -674,13 +695,14 @@ export function GameLogs({
     try {
       const response = await fetch(buildApiUrl('/api/scryfall/lookup'), {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify({ name: commanderName })
       });
       const payload = await response.json() as { success?: boolean; error?: string; card?: { name: string; scryfallUrl: string | null } | null };
+      if (handleAuthFailure(payload, response, setEditFormError)) {
+        return;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to lookup commander.');
       }
@@ -731,7 +753,7 @@ export function GameLogs({
     opponentId: string,
     commanders: Array<{ name: string; link: string | null }>
   ) => {
-    if (!idToken) return;
+    if (!isAuthenticated) return;
     const missing = commanders
       .map((commander, index) => ({ ...commander, index }))
       .filter((commander) => commander.name.trim().length > 0 && !commander.link);
@@ -741,17 +763,19 @@ export function GameLogs({
         missing.map(async (commander) => {
           const response = await fetch(buildApiUrl('/api/scryfall/lookup'), {
             method: 'POST',
-            headers: {
-              Authorization: `Bearer ${idToken}`,
-              'Content-Type': 'application/json'
-            },
+            headers: jsonHeaders,
+            credentials: 'include',
             body: JSON.stringify({ name: commander.name })
           });
           const payload = await response.json() as {
             success?: boolean;
             error?: string;
+            code?: string;
             card?: { name: string; scryfallUrl: string | null } | null;
           };
+          if (handleAuthFailure(payload, response, setEditFormError)) {
+            return { index: commander.index, name: commander.name, link: null, status: 'error' as const };
+          }
           if (!response.ok || !payload.success) {
             return { index: commander.index, name: commander.name, link: null, status: 'error' as const };
           }
@@ -790,21 +814,23 @@ export function GameLogs({
   };
 
   const refreshOpponentDeckSummary = async (opponentId: string, deckUrl: string) => {
-    if (!idToken || !deckUrl.trim()) return;
+    if (!isAuthenticated || !deckUrl.trim()) return;
     try {
       const response = await fetch(buildApiUrl('/api/decks/preview'), {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify({ deckUrl })
       });
       const payload = await response.json() as {
         success?: boolean;
         error?: string;
+        code?: string;
         deck?: { commanderNames?: string[]; colorIdentity?: string[] } | null;
       };
+      if (handleAuthFailure(payload, response, setEditFormError)) {
+        return;
+      }
       if (!response.ok || !payload.success || !payload.deck) return;
       const commanderNames = Array.isArray(payload.deck.commanderNames)
         ? payload.deck.commanderNames
@@ -822,7 +848,7 @@ export function GameLogs({
           ? commanderNames.map((name) => ({
               name,
               link: null,
-              lookupStatus: idToken ? 'loading' as const : 'idle' as const
+              lookupStatus: isAuthenticated ? 'loading' as const : 'idle' as const
             }))
           : opponent.commanders;
         next[index] = {
@@ -1172,7 +1198,7 @@ export function GameLogs({
     );
   }
 
-  if (!idToken) {
+  if (authStatus === 'unauthenticated') {
     return (
       <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <h2 className="text-2xl font-semibold mb-3">Game Logs</h2>
@@ -1182,9 +1208,28 @@ export function GameLogs({
       </div>
     );
   }
+  if (authStatus === 'unknown') {
+    return (
+      <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
+        <h2 className="text-2xl font-semibold mb-3">Game Logs</h2>
+        <p className="text-gray-300">Checking session...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex h-full min-h-0 flex-col gap-6">
+    <div className="relative w-full max-w-6xl mx-auto flex h-full min-h-0 flex-col gap-6">
+      {authExpired && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/80 backdrop-blur">
+          <div className="mx-4 flex w-full max-w-md flex-col gap-3 rounded-2xl border border-gray-800 bg-gray-900/90 p-6 text-center">
+            <h3 className="text-lg font-semibold text-white">Session expired</h3>
+            <p className="text-sm text-gray-300">
+              Sign in again to continue. Your edits are still here.
+            </p>
+            <div className="flex justify-center pt-2" ref={authButtonRef} />
+          </div>
+        </div>
+      )}
       {error && <p className="text-red-400">{error}</p>}
       {sharedLogs.length > 0 && (
         <div className="flex flex-col overflow-hidden bg-gray-900/70 border border-cyan-700/40 rounded-2xl p-6 sm:p-8 max-h-[50vh]">

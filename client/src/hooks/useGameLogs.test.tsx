@@ -5,6 +5,11 @@ import { useGameLogs } from './useGameLogs';
 
 describe('useGameLogs', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
+  const mockJsonResponse = (payload: unknown, ok: boolean = true, status?: number) => ({
+    ok,
+    status: status ?? (ok ? 200 : 400),
+    text: async () => JSON.stringify(payload)
+  });
 
   beforeEach(() => {
     fetchMock = vi.fn();
@@ -16,29 +21,26 @@ describe('useGameLogs', () => {
   });
 
   it('loads logs when a token is provided', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        logs: [
-          {
-            id: 'log-1',
-            deckId: 'deck-1',
-            deckName: 'Test Deck',
-            playedAt: '2025-02-14',
-            turns: null,
-            durationMinutes: null,
-            opponentsCount: 2,
-            opponents: [],
-            result: null,
-            tags: [],
-            createdAt: '2025-02-14T00:00:00.000Z'
-          }
-          ]
-      })
-    });
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      logs: [
+        {
+          id: 'log-1',
+          deckId: 'deck-1',
+          deckName: 'Test Deck',
+          playedAt: '2025-02-14',
+          turns: null,
+          durationMinutes: null,
+          opponentsCount: 2,
+          opponents: [],
+          result: null,
+          tags: [],
+          createdAt: '2025-02-14T00:00:00.000Z'
+        }
+      ]
+    }));
 
-    const { result } = renderHook(() => useGameLogs('token-123'));
+    const { result } = renderHook(() => useGameLogs({ authStatus: 'authenticated' }));
 
     await waitFor(() => {
       expect(result.current.logs).toHaveLength(1);
@@ -48,42 +50,36 @@ describe('useGameLogs', () => {
       buildApiUrl('/api/game-logs'),
       expect.objectContaining({
         headers: {
-          Authorization: 'Bearer token-123',
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       })
     );
   });
 
   it('adds a log and updates the list', async () => {
     fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true, logs: [] })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          logs: [
-            {
-              id: 'log-2',
-              deckId: 'deck-2',
-              deckName: 'Second Deck',
-              playedAt: '2025-03-01',
-              turns: null,
-              durationMinutes: null,
-              opponentsCount: 1,
-              opponents: [],
-              result: null,
-              tags: [],
-              createdAt: '2025-03-01T00:00:00.000Z'
-            }
-          ]
-        })
-      });
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, logs: [] }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        logs: [
+          {
+            id: 'log-2',
+            deckId: 'deck-2',
+            deckName: 'Second Deck',
+            playedAt: '2025-03-01',
+            turns: null,
+            durationMinutes: null,
+            opponentsCount: 1,
+            opponents: [],
+            result: null,
+            tags: [],
+            createdAt: '2025-03-01T00:00:00.000Z'
+          }
+        ]
+      }));
 
-    const { result } = renderHook(() => useGameLogs('token-456'));
+    const { result } = renderHook(() => useGameLogs({ authStatus: 'authenticated' }));
 
     await waitFor(() => {
       expect(result.current.logs).toHaveLength(0);
@@ -123,50 +119,44 @@ describe('useGameLogs', () => {
 
   it('updates a log and refreshes results', async () => {
     fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          logs: [
-            {
-              id: 'log-3',
-              deckId: 'deck-3',
-              deckName: 'Third Deck',
-              playedAt: '2025-03-02',
-              turns: null,
-              durationMinutes: null,
-              opponentsCount: 3,
-              opponents: [],
-              result: null,
-              tags: [],
-              createdAt: '2025-03-02T00:00:00.000Z'
-            }
-          ]
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          logs: [
-            {
-              id: 'log-3',
-              deckId: 'deck-3',
-              deckName: 'Third Deck',
-              playedAt: '2025-03-02',
-              turns: null,
-              durationMinutes: null,
-              opponentsCount: 3,
-              opponents: [],
-              result: 'win',
-              tags: [],
-              createdAt: '2025-03-02T00:00:00.000Z'
-            }
-          ]
-        })
-      });
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        logs: [
+          {
+            id: 'log-3',
+            deckId: 'deck-3',
+            deckName: 'Third Deck',
+            playedAt: '2025-03-02',
+            turns: null,
+            durationMinutes: null,
+            opponentsCount: 3,
+            opponents: [],
+            result: null,
+            tags: [],
+            createdAt: '2025-03-02T00:00:00.000Z'
+          }
+        ]
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        logs: [
+          {
+            id: 'log-3',
+            deckId: 'deck-3',
+            deckName: 'Third Deck',
+            playedAt: '2025-03-02',
+            turns: null,
+            durationMinutes: null,
+            opponentsCount: 3,
+            opponents: [],
+            result: 'win',
+            tags: [],
+            createdAt: '2025-03-02T00:00:00.000Z'
+          }
+        ]
+      }));
 
-    const { result } = renderHook(() => useGameLogs('token-789'));
+    const { result } = renderHook(() => useGameLogs({ authStatus: 'authenticated' }));
 
     await waitFor(() => {
       expect(result.current.logs).toHaveLength(1);
