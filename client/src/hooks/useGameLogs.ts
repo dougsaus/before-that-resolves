@@ -18,6 +18,8 @@ export type GameLogEntry = {
   id: string;
   deckId: string;
   deckName: string;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   playedAt: string;
   turns: number | null;
   durationMinutes: number | null;

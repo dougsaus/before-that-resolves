@@ -1190,11 +1190,11 @@ export function createApp(deps: AppDeps = {}) {
       userId: user.id,
       name: user.name ?? null,
       email: user.email ?? null,
-      deckId: deck?.id ?? log.deckId,
-      deckName: deck?.name ?? log.deckName,
+      deckId: log.deckId,
+      deckName: log.deckName,
       deckUrl: deck?.url ?? null,
-      commanderNames: deck?.commanderNames ?? [],
-      commanderLinks: deck?.commanderLinks ?? [],
+      commanderNames: log.commanderNames ?? [],
+      commanderLinks: log.commanderLinks ?? [],
       colorIdentity: deck?.colorIdentity ?? null
     };
     const sharedResult: 'win' | 'loss' | null = log.result === 'win' ? 'loss' : null;
@@ -1327,6 +1327,8 @@ export function createApp(deps: AppDeps = {}) {
     const logInput: GameLogInput = {
       deckId: deck.id,
       deckName: deck.name,
+      commanderNames: deck.commanderNames,
+      commanderLinks: deck.commanderLinks,
       playedAt: normalizeDateInput(datePlayed),
       turns: parseOptionalNumber(turns),
       durationMinutes: parseOptionalNumber(durationMinutes),
@@ -1512,6 +1514,8 @@ export function createApp(deps: AppDeps = {}) {
     await createLog(user.id, {
       deckId: deck.id,
       deckName: deck.name,
+      commanderNames: [],
+      commanderLinks: [],
       playedAt: sharedLog.playedAt,
       turns: sharedLog.turns,
       durationMinutes: sharedLog.durationMinutes,

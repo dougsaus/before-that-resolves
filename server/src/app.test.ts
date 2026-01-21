@@ -857,6 +857,8 @@ describe('app routes', () => {
         id: 'log-1',
         deckId: 'deck-1',
         deckName: 'Esper Knights',
+        commanderNames: ['Sidar Jabari'],
+        commanderLinks: [],
         playedAt: '2025-02-14',
         opponentsCount: 2,
         opponents: [],
@@ -970,6 +972,8 @@ describe('app routes', () => {
         id: 'log-1',
         deckId: 'deck-1',
         deckName: 'Esper Knights',
+        commanderNames: ['Sidar Jabari'],
+        commanderLinks: [],
         playedAt: '2025-02-14',
         opponentsCount: 2,
         opponents: [
@@ -1017,6 +1021,8 @@ describe('app routes', () => {
     expect(createGameLog).toHaveBeenCalledWith('user-888', expect.objectContaining({
       deckId: 'deck-1',
       deckName: 'Esper Knights',
+      commanderNames: ['Sidar Jabari'],
+      commanderLinks: [],
       playedAt: '2025-02-14',
       opponentsCount: 2,
         opponents: [
@@ -1044,6 +1050,8 @@ describe('app routes', () => {
         id: 'log-5',
         deckId: 'deck-1',
         deckName: 'Esper Knights',
+        commanderNames: ['Sidar Jabari'],
+        commanderLinks: [],
         playedAt: '2025-02-15',
         opponentsCount: 3,
         opponents: [],
@@ -1090,6 +1098,8 @@ describe('app routes', () => {
       id: 'log-22',
       deckId: 'deck-22',
       deckName: 'Mono Blue',
+      commanderNames: ['Talrand, Sky Summoner'],
+      commanderLinks: ['https://scryfall.com/card/m13/72/talrand-sky-summoner'],
       playedAt: '2025-03-10',
       turns: 7,
       durationMinutes: 55,
@@ -1177,6 +1187,8 @@ describe('app routes', () => {
       id: 'log-22',
       deckId: 'deck-22',
       deckName: 'Mono Blue',
+      commanderNames: ['Talrand, Sky Summoner'],
+      commanderLinks: [],
       playedAt: '2025-03-10',
       turns: null,
       durationMinutes: null,
@@ -1305,6 +1317,8 @@ describe('app routes', () => {
     expect(createGameLog).toHaveBeenCalledWith('user-333', expect.objectContaining({
       deckId: 'deck-99',
       deckName: 'Izzet Spells',
+      commanderNames: [],
+      commanderLinks: [],
       playedAt: '2025-04-01'
     }));
     expect(setSharedGameLogStatus).toHaveBeenCalledWith('user-333', 'shared-1', 'accepted');

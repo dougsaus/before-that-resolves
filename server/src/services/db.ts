@@ -81,6 +81,8 @@ const schemaQueries = [
        ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS turns INTEGER;
        ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS duration_minutes INTEGER;
        ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'::jsonb;
+       ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS commander_names JSONB NOT NULL DEFAULT '[]'::jsonb;
+       ALTER TABLE game_logs ADD COLUMN IF NOT EXISTS commander_links JSONB NOT NULL DEFAULT '[]'::jsonb;
      END IF;
    END $$;`,
   `CREATE INDEX IF NOT EXISTS game_logs_user_played_at_idx

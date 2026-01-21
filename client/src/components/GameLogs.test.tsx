@@ -24,6 +24,8 @@ const baseLog = (overrides: Partial<GameLogEntry> = {}): GameLogEntry => ({
   id: 'log-1',
   deckId: 'deck-1',
   deckName: 'Alpha Deck',
+  commanderNames: [],
+  commanderLinks: [],
   playedAt: '2026-01-12',
   turns: null,
   durationMinutes: null,
@@ -216,7 +218,13 @@ describe('GameLogs', () => {
   it('shows commander names next to the deck in the log list', () => {
     mockUseGameLogs.mockReturnValue({
       logs: [
-        baseLog({ id: 'log-1', deckId: 'deck-1', deckName: 'Old Deck Name' })
+        baseLog({
+          id: 'log-1',
+          deckId: 'deck-1',
+          deckName: 'Old Deck Name',
+          commanderNames: ['Atraxa, Praetors\' Voice', 'Tevesh Szat, Doom of Fools'],
+          commanderLinks: ['https://scryfall.com/card/2xm/205/atraxa-praetors-voice', null]
+        })
       ],
       loading: false,
       error: null,
@@ -234,8 +242,8 @@ describe('GameLogs', () => {
           id: 'deck-1',
           name: 'Alpha Deck',
           url: null,
-          commanderNames: ['Atraxa, Praetors\' Voice', 'Tevesh Szat, Doom of Fools'],
-          commanderLinks: ['https://scryfall.com/card/2xm/205/atraxa-praetors-voice', null],
+          commanderNames: ['Different Commander'],
+          commanderLinks: [null],
           colorIdentity: ['W', 'U', 'B', 'G'],
           source: 'manual',
           addedAt: '2026-01-12T00:00:00.000Z',
@@ -244,14 +252,48 @@ describe('GameLogs', () => {
       ]
     });
 
-    expect(screen.getByText('Alpha Deck')).toBeInTheDocument();
-    expect(screen.queryByText('Old Deck Name')).not.toBeInTheDocument();
+    expect(screen.getByText('Old Deck Name')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha Deck')).not.toBeInTheDocument();
     expect(screen.getByText('Atraxa, Praetors\' Voice')).toBeInTheDocument();
     expect(screen.getByText('Tevesh Szat, Doom of Fools')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Atraxa, Praetors\' Voice' })).toHaveAttribute(
       'href',
       'https://scryfall.com/card/2xm/205/atraxa-praetors-voice'
     );
+  });
+
+  it('falls back to current deck name when the snapshot name is missing', () => {
+    mockUseGameLogs.mockReturnValue({
+      logs: [
+        baseLog({ id: 'log-1', deckId: 'deck-1', deckName: '' })
+      ],
+      loading: false,
+      error: null,
+      statusMessage: null,
+      addLog: vi.fn(),
+      removeLog: vi.fn(),
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
+    });
+
+    renderGameLogs({
+      decks: [
+        {
+          id: 'deck-1',
+          name: 'Current Deck Name',
+          url: null,
+          commanderNames: [],
+          commanderLinks: [],
+          colorIdentity: ['U'],
+          source: 'manual',
+          addedAt: '2026-01-12T00:00:00.000Z',
+          stats: null
+        }
+      ]
+    });
+
+    expect(screen.getByText('Current Deck Name')).toBeInTheDocument();
   });
 
   it('creates a new game log after selecting a deck', async () => {

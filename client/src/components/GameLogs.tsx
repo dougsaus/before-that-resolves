@@ -93,17 +93,19 @@ function formatOpponentUserLabel(user: { name?: string | null; email?: string | 
   return name || email || 'Unknown user';
 }
 
-function renderCommanderInline(deck: DeckEntry | null) {
-  if (!deck) return null;
-  if (deck.commanderNames.length === 0) {
-    return <span className="truncate text-xs text-gray-400 sm:text-sm">—</span>;
+function renderCommanderInline(
+  commanderNames: string[] | undefined,
+  commanderLinks: Array<string | null> | undefined
+) {
+  if (!commanderNames || commanderNames.length === 0) {
+    return null;
   }
   return (
     <span className="truncate text-xs text-gray-400 sm:text-sm">
-      {deck.commanderNames.map((name, index) => {
-        const link = deck.commanderLinks?.[index] ?? null;
+      {commanderNames.map((name, index) => {
+        const link = commanderLinks?.[index] ?? null;
         return (
-          <span key={`${deck.id}-commander-${index}`} className="inline-flex items-center">
+          <span key={`${name}-${index}`} className="inline-flex items-center">
             {link ? (
               <a
                 href={link}
@@ -116,7 +118,7 @@ function renderCommanderInline(deck: DeckEntry | null) {
             ) : (
               <span>{name}</span>
             )}
-            {index < deck.commanderNames.length - 1 && <span className="text-gray-500"> / </span>}
+            {index < commanderNames.length - 1 && <span className="text-gray-500"> / </span>}
           </span>
         );
       })}
@@ -1009,6 +1011,8 @@ export function GameLogs({
       id: string;
       deckName: string | null;
       deckId: string | null;
+      commanderNames?: string[];
+      commanderLinks?: Array<string | null>;
       playedAt: string;
       opponents: GameLogEntry['opponents'];
       tags: string[];
@@ -1019,11 +1023,12 @@ export function GameLogs({
     actions: ReactNode,
     keyPrefix: string
   ) => {
-    const deckEntry = log.deckId ? deckById.get(log.deckId) ?? null : null;
-    const deckLabel = deckEntry?.name ?? log.deckName ?? 'Select deck';
-    const hasDeckLabel = Boolean(deckEntry?.name ?? log.deckName);
+    const fallbackDeckName = log.deckId ? deckById.get(log.deckId)?.name : null;
+    const snapshotDeckName =
+      typeof log.deckName === 'string' && log.deckName.trim().length > 0 ? log.deckName : null;
+    const deckLabel = snapshotDeckName ?? fallbackDeckName ?? 'Select deck';
+    const hasDeckLabel = Boolean(snapshotDeckName ?? fallbackDeckName);
     const deckLabelClass = hasDeckLabel ? 'text-white' : 'text-gray-400 italic';
-    const deckCommander = deckEntry;
     return (
       <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">
@@ -1041,7 +1046,7 @@ export function GameLogs({
               <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
                 {deckLabel}
               </h4>
-              {renderCommanderInline(deckCommander)}
+              {renderCommanderInline(log.commanderNames, log.commanderLinks)}
             </div>
           </div>
           <div className="flex items-center gap-2">

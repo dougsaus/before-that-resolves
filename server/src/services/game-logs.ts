@@ -18,6 +18,8 @@ export type GameLogEntry = {
   id: string;
   deckId: string;
   deckName: string;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   playedAt: string;
   turns: number | null;
   durationMinutes: number | null;
@@ -31,6 +33,8 @@ export type GameLogEntry = {
 export type GameLogInput = {
   deckId: string;
   deckName: string;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   playedAt: string;
   turns: number | null;
   durationMinutes: number | null;
@@ -40,12 +44,14 @@ export type GameLogInput = {
   tags: string[];
 };
 
-export type GameLogUpdate = Omit<GameLogInput, 'deckId' | 'deckName'>;
+export type GameLogUpdate = Omit<GameLogInput, 'deckId' | 'deckName' | 'commanderNames' | 'commanderLinks'>;
 
 type GameLogRow = {
   id: string;
   deck_id: string;
   deck_name: string;
+  commander_names: unknown;
+  commander_links: unknown;
   played_at: string | Date;
   turns: number | null;
   duration_minutes: number | null;
@@ -125,6 +131,28 @@ function normalizeOpponent(entry: unknown): GameLogOpponent | null {
   };
 }
 
+function normalizeCommanderSnapshot(
+  names: unknown,
+  links: unknown
+): { commanderNames: string[]; commanderLinks: Array<string | null> } {
+  const commanderNames = Array.isArray(names)
+    ? names
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => value.trim())
+        .slice(0, 2)
+    : [];
+  let commanderLinks: Array<string | null> = [];
+  if (Array.isArray(links)) {
+    commanderLinks = links
+      .slice(0, commanderNames.length)
+      .map((value) => (typeof value === 'string' && value.trim() ? value.trim() : null));
+  }
+  while (commanderLinks.length < commanderNames.length) {
+    commanderLinks.push(null);
+  }
+  return { commanderNames, commanderLinks };
+}
+
 export function normalizeOpponents(input: unknown): GameLogOpponent[] {
   if (!Array.isArray(input)) return [];
   return input
@@ -143,10 +171,16 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
   const playedAt = normalizeDateInput(row.played_at);
   const createdAt =
     row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at;
+  const { commanderNames, commanderLinks } = normalizeCommanderSnapshot(
+    row.commander_names,
+    row.commander_links
+  );
   return {
     id: row.id,
     deckId: row.deck_id,
     deckName: row.deck_name,
+    commanderNames,
+    commanderLinks,
     playedAt,
     turns: row.turns ?? null,
     durationMinutes: row.duration_minutes ?? null,
@@ -161,7 +195,7 @@ function mapGameLogRow(row: GameLogRow): GameLogEntry {
 export async function listGameLogs(userId: string): Promise<GameLogEntry[]> {
   const db = getPool();
   const result = await db.query<GameLogRow>(
-    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, tags, created_at
+    `SELECT id, deck_id, deck_name, commander_names, commander_links, played_at, turns, duration_minutes, opponents_count, opponents, result, tags, created_at
      FROM game_logs
      WHERE user_id = $1
      ORDER BY played_at DESC, created_at DESC`,
@@ -176,7 +210,7 @@ export async function getGameLogById(
 ): Promise<GameLogEntry | null> {
   const db = getPool();
   const result = await db.query<GameLogRow>(
-    `SELECT id, deck_id, deck_name, played_at, turns, duration_minutes, opponents_count, opponents, result, tags, created_at
+    `SELECT id, deck_id, deck_name, commander_names, commander_links, played_at, turns, duration_minutes, opponents_count, opponents, result, tags, created_at
      FROM game_logs
      WHERE user_id = $1 AND id = $2`,
     [userId, logId]
@@ -194,6 +228,8 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       user_id,
       deck_id,
       deck_name,
+      commander_names,
+      commander_links,
       played_at,
       turns,
       duration_minutes,
@@ -203,12 +239,14 @@ export async function createGameLog(userId: string, input: GameLogInput): Promis
       tags,
       created_at
     )
-    VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb, $10, $11::jsonb, NOW())`,
+    VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::date, $8, $9, $10, $11::jsonb, $12, $13::jsonb, NOW())`,
     [
       id,
       userId,
       input.deckId,
       input.deckName,
+      JSON.stringify(input.commanderNames ?? []),
+      JSON.stringify(input.commanderLinks ?? []),
       input.playedAt,
       input.turns,
       input.durationMinutes,
