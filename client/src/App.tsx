@@ -340,6 +340,7 @@ function App() {
                 <GameLogs
                   enabled={decksEnabled}
                   authStatus={authStatus}
+                  authError={deckCollection.authError}
                   authButtonRef={deckCollection.buttonRef}
                   onAuthExpired={deckCollection.markAuthExpired}
                   decks={deckCollection.decks}

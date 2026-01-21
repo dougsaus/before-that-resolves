@@ -28,6 +28,7 @@ function getScryfallImageUrl(cardName: string) {
 type GameLogsProps = {
   enabled: boolean;
   authStatus: AuthStatus;
+  authError?: string | null;
   authButtonRef: RefCallback<HTMLDivElement>;
   onAuthExpired: (message?: string) => void;
   decks: DeckEntry[];
@@ -141,6 +142,7 @@ type OpponentForm = {
 export function GameLogs({
   enabled,
   authStatus,
+  authError,
   authButtonRef,
   onAuthExpired,
   decks,
@@ -1207,6 +1209,7 @@ export function GameLogs({
         </p>
         <div className="mt-4 flex flex-col gap-2">
           <div ref={authButtonRef} />
+          {authError && <p className="text-xs text-red-400">{authError}</p>}
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
       </div>
@@ -1231,6 +1234,7 @@ export function GameLogs({
               Sign in again to continue. Your edits are still here.
             </p>
             <div className="flex justify-center pt-2" ref={authButtonRef} />
+            {authError && <p className="text-xs text-red-400">{authError}</p>}
           </div>
         </div>
       )}
