@@ -213,6 +213,45 @@ describe('GameLogs', () => {
     expect(deckNames[0]).toBe('Loss Deck');
   });
 
+  it('shows commander names next to the deck in the log list', () => {
+    mockUseGameLogs.mockReturnValue({
+      logs: [
+        baseLog({ id: 'log-1', deckId: 'deck-1', deckName: 'Alpha Deck' })
+      ],
+      loading: false,
+      error: null,
+      statusMessage: null,
+      addLog: vi.fn(),
+      removeLog: vi.fn(),
+      updateLog: vi.fn(),
+      shareLog: vi.fn(),
+      refreshLogs: vi.fn()
+    });
+
+    renderGameLogs({
+      decks: [
+        {
+          id: 'deck-1',
+          name: 'Alpha Deck',
+          url: null,
+          commanderNames: ['Atraxa, Praetors\' Voice', 'Tevesh Szat, Doom of Fools'],
+          commanderLinks: ['https://scryfall.com/card/2xm/205/atraxa-praetors-voice', null],
+          colorIdentity: ['W', 'U', 'B', 'G'],
+          source: 'manual',
+          addedAt: '2026-01-12T00:00:00.000Z',
+          stats: null
+        }
+      ]
+    });
+
+    expect(screen.getByText('Atraxa, Praetors\' Voice')).toBeInTheDocument();
+    expect(screen.getByText('Tevesh Szat, Doom of Fools')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Atraxa, Praetors\' Voice' })).toHaveAttribute(
+      'href',
+      'https://scryfall.com/card/2xm/205/atraxa-praetors-voice'
+    );
+  });
+
   it('creates a new game log after selecting a deck', async () => {
     const user = userEvent.setup();
     const addLog = vi.fn().mockResolvedValue(true);
