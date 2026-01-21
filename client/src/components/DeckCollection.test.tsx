@@ -40,6 +40,14 @@ describe('DeckCollection', () => {
     localStorage.clear();
   });
 
+  it('shows the deck count in the header', () => {
+    const decks = [baseDeck({ id: 'deck-1' }), baseDeck({ id: 'deck-2', name: 'Beta' })];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    expect(screen.getByText('2 total')).toBeInTheDocument();
+  });
+
   it('renders sort controls and sorts cards', async () => {
     const user = userEvent.setup();
     const decks = [
