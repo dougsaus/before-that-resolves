@@ -1019,9 +1019,11 @@ export function GameLogs({
     actions: ReactNode,
     keyPrefix: string
   ) => {
-    const deckLabel = log.deckName ?? 'Select deck';
-    const deckLabelClass = log.deckName ? 'text-white' : 'text-gray-400 italic';
-    const deckCommander = log.deckId ? deckById.get(log.deckId) ?? null : null;
+    const deckEntry = log.deckId ? deckById.get(log.deckId) ?? null : null;
+    const deckLabel = deckEntry?.name ?? log.deckName ?? 'Select deck';
+    const hasDeckLabel = Boolean(deckEntry?.name ?? log.deckName);
+    const deckLabelClass = hasDeckLabel ? 'text-white' : 'text-gray-400 italic';
+    const deckCommander = deckEntry;
     return (
       <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-center">

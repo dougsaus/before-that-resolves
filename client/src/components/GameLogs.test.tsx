@@ -216,7 +216,7 @@ describe('GameLogs', () => {
   it('shows commander names next to the deck in the log list', () => {
     mockUseGameLogs.mockReturnValue({
       logs: [
-        baseLog({ id: 'log-1', deckId: 'deck-1', deckName: 'Alpha Deck' })
+        baseLog({ id: 'log-1', deckId: 'deck-1', deckName: 'Old Deck Name' })
       ],
       loading: false,
       error: null,
@@ -244,6 +244,8 @@ describe('GameLogs', () => {
       ]
     });
 
+    expect(screen.getByText('Alpha Deck')).toBeInTheDocument();
+    expect(screen.queryByText('Old Deck Name')).not.toBeInTheDocument();
     expect(screen.getByText('Atraxa, Praetors\' Voice')).toBeInTheDocument();
     expect(screen.getByText('Tevesh Szat, Doom of Fools')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Atraxa, Praetors\' Voice' })).toHaveAttribute(
