@@ -312,6 +312,7 @@ function App() {
               {view === 'decks' && (
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <DeckCollection
+                    key={`decks-${authStatus}`}
                     enabled={decksEnabled}
                     authStatus={authStatus}
                     authError={deckCollection.authError}
