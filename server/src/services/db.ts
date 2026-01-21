@@ -11,6 +11,15 @@ const schemaQueries = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
+  `CREATE TABLE IF NOT EXISTS user_sessions (
+    session_id_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id);`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx ON user_sessions (expires_at);`,
   `CREATE TABLE IF NOT EXISTS decks (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     deck_id TEXT NOT NULL,

@@ -14,6 +14,7 @@ import {
 } from './services/deck';
 import type { DeckCollectionInput } from './services/deck-collection';
 import {
+  getUserById,
   listDeckCollection,
   removeDeckFromCollection,
   upsertDeckInCollection,
@@ -41,6 +42,13 @@ import {
 import type { OpponentUser } from './services/opponents';
 import { listRecentOpponents, recordRecentOpponents, searchOpponentUsers } from './services/opponents';
 import { verifyGoogleIdToken, type GoogleUser } from './services/google-auth';
+import {
+  createSession as createSessionService,
+  deleteSession as deleteSessionService,
+  getSession as getSessionService,
+  touchSession as touchSessionService,
+  SESSION_COOKIE_NAME
+} from './services/session';
 import { getOrCreateConversationId, resetConversation } from './utils/conversation-store';
 import { normalizeDateInput } from './utils/date';
 import { generateChatPdf } from './services/pdf';
@@ -117,6 +125,11 @@ type AppDeps = {
     addedAt: string;
   }>>;
   upsertUser?: (user: GoogleUser) => Promise<void>;
+  getUserById?: (userId: string) => Promise<GoogleUser | null>;
+  createSession?: (userId: string) => Promise<{ sessionId: string; expiresAt: Date }>;
+  getSession?: (sessionId: string) => Promise<{ userId: string; expiresAt: Date; lastSeenAt: Date } | null>;
+  touchSession?: (sessionId: string) => Promise<Date | null>;
+  deleteSession?: (sessionId: string) => Promise<void>;
   listGameLogs?: (userId: string) => Promise<GameLogEntry[]>;
   getGameLogById?: (userId: string, logId: string) => Promise<GameLogEntry | null>;
   createGameLog?: (userId: string, log: GameLogInput) => Promise<GameLogEntry[]>;
@@ -208,6 +221,11 @@ export function createApp(deps: AppDeps = {}) {
   const addDeckToCollection = deps.upsertDeckInCollection ?? upsertDeckInCollection;
   const removeDeckFromUser = deps.removeDeckFromCollection ?? removeDeckFromCollection;
   const saveUser = deps.upsertUser ?? upsertUser;
+  const loadUser = deps.getUserById ?? getUserById;
+  const createSession = deps.createSession ?? createSessionService;
+  const getSession = deps.getSession ?? getSessionService;
+  const touchSession = deps.touchSession ?? touchSessionService;
+  const deleteSession = deps.deleteSession ?? deleteSessionService;
   const listLogs = deps.listGameLogs ?? listGameLogs;
   const getLogById = deps.getGameLogById ?? getGameLogById;
   const createLog = deps.createGameLog ?? createGameLog;
@@ -231,6 +249,45 @@ export function createApp(deps: AppDeps = {}) {
       return error.message;
     }
     return fallback;
+  };
+  const isProd = process.env.NODE_ENV === 'production';
+  const sessionCookieOptions = (expiresAt?: Date) => ({
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: isProd,
+    path: '/',
+    ...(expiresAt ? { expires: expiresAt } : {})
+  });
+  const setSessionCookie = (res: express.Response, sessionId: string, expiresAt: Date) => {
+    res.cookie(SESSION_COOKIE_NAME, sessionId, sessionCookieOptions(expiresAt));
+  };
+  const clearSessionCookie = (res: express.Response) => {
+    res.clearCookie(SESSION_COOKIE_NAME, sessionCookieOptions());
+  };
+  const parseCookieHeader = (header?: string | null): Record<string, string> => {
+    if (!header) return {};
+    return header.split(';').reduce<Record<string, string>>((acc, part) => {
+      const [rawKey, ...rest] = part.trim().split('=');
+      if (!rawKey) return acc;
+      const rawValue = rest.join('=');
+      if (!rawValue) {
+        acc[rawKey] = '';
+        return acc;
+      }
+      try {
+        acc[rawKey] = decodeURIComponent(rawValue);
+      } catch {
+        acc[rawKey] = rawValue;
+      }
+      return acc;
+    }, {});
+  };
+  const getCookieValue = (req: express.Request, name: string): string | null => {
+    const cookies = parseCookieHeader(req.header('cookie'));
+    return cookies[name] ?? null;
+  };
+  const sendAuthError = (res: express.Response, code: 'auth_required' | 'auth_expired' | 'auth_invalid', message: string) => {
+    res.status(401).json({ success: false, error: message, code });
   };
   const normalizeDeckUrl = (input: unknown): string | null => {
     if (typeof input !== 'string') return null;
@@ -445,12 +502,40 @@ export function createApp(deps: AppDeps = {}) {
     return authorization.slice('Bearer '.length).trim() || null;
   };
   const requireGoogleUser = async (req: express.Request, res: express.Response) => {
+    const sessionId = getCookieValue(req, SESSION_COOKIE_NAME);
+    if (sessionId) {
+      const session = await getSession(sessionId);
+      if (!session) {
+        clearSessionCookie(res);
+        sendAuthError(res, 'auth_required', 'Authentication required.');
+        return null;
+      }
+      if (session.expiresAt.getTime() <= Date.now()) {
+        await deleteSession(sessionId);
+        clearSessionCookie(res);
+        sendAuthError(res, 'auth_expired', 'Session expired. Please sign in again.');
+        return null;
+      }
+      const user = await loadUser(session.userId);
+      if (!user) {
+        await deleteSession(sessionId);
+        clearSessionCookie(res);
+        sendAuthError(res, 'auth_required', 'Authentication required.');
+        return null;
+      }
+      const refreshedExpiresAt = await touchSession(sessionId);
+      if (refreshedExpiresAt) {
+        setSessionCookie(res, sessionId, refreshedExpiresAt);
+      }
+      return user;
+    }
+
     const token =
       req.header('x-google-id-token') ||
       getBearerToken(req.header('authorization')) ||
       '';
     if (!token) {
-      res.status(401).json({ success: false, error: 'Google ID token is required.' });
+      sendAuthError(res, 'auth_required', 'Authentication required.');
       return null;
     }
     try {
@@ -464,12 +549,17 @@ export function createApp(deps: AppDeps = {}) {
         });
         return null;
       }
+      try {
+        const session = await createSession(user.id);
+        setSessionCookie(res, session.sessionId, session.expiresAt);
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('Failed to create session from bearer token', error);
+        }
+      }
       return user;
     } catch (error: unknown) {
-      res.status(401).json({
-        success: false,
-        error: getErrorMessage(error, 'Invalid Google ID token')
-      });
+      sendAuthError(res, 'auth_invalid', getErrorMessage(error, 'Invalid Google ID token'));
       return null;
     }
   };
@@ -506,7 +596,24 @@ export function createApp(deps: AppDeps = {}) {
     });
   };
 
-  app.use(cors());
+  const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.length === 0) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+  }));
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
@@ -587,6 +694,50 @@ export function createApp(deps: AppDeps = {}) {
     const cleared = reset(conversationId);
     resetDeckCache(conversationId);
     res.json({ success: true, cleared });
+  });
+
+  app.post('/api/auth/google', async (req, res) => {
+    const idToken = typeof req.body?.idToken === 'string' ? req.body.idToken.trim() : '';
+    if (!idToken) {
+      res.status(400).json({ success: false, error: 'idToken is required' });
+      return;
+    }
+    try {
+      const user = await verifyGoogleToken(idToken);
+      try {
+        await saveUser(user);
+      } catch (error: unknown) {
+        res.status(500).json({
+          success: false,
+          error: getErrorMessage(error, 'Failed to save user')
+        });
+        return;
+      }
+      const session = await createSession(user.id);
+      setSessionCookie(res, session.sessionId, session.expiresAt);
+      res.json({ success: true, user });
+    } catch (error: unknown) {
+      res.status(401).json({
+        success: false,
+        error: getErrorMessage(error, 'Invalid Google ID token'),
+        code: 'auth_invalid'
+      });
+    }
+  });
+
+  app.get('/api/auth/me', async (req, res) => {
+    const user = await requireGoogleUser(req, res);
+    if (!user) return;
+    res.json({ success: true, user });
+  });
+
+  app.post('/api/auth/logout', async (req, res) => {
+    const sessionId = getCookieValue(req, SESSION_COOKIE_NAME);
+    if (sessionId) {
+      await deleteSession(sessionId);
+    }
+    clearSessionCookie(res);
+    res.json({ success: true });
   });
 
   app.post('/api/deck/cache', async (req, res) => {

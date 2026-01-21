@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildApiUrl } from '../utils/api';
+import type { AuthStatus } from '../types/auth';
 import type {
   DeckEntry,
   DeckFormInput,
@@ -33,7 +34,6 @@ type GoogleApi = {
 };
 
 const GOOGLE_SCRIPT_ID = 'google-identity-service';
-const TOKEN_STORAGE_KEY = 'btr_google_id_token';
 
 let googleScriptPromise: Promise<void> | null = null;
 
@@ -68,7 +68,7 @@ export function useDeckCollection() {
   const buttonRef = useCallback((node: HTMLDivElement | null) => {
     setButtonEl(node);
   }, []);
-  const [idToken, setIdToken] = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<AuthStatus>('unknown');
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [decks, setDecks] = useState<DeckEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,20 +76,17 @@ export function useDeckCollection() {
   const [deckError, setDeckError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const headers = useMemo(() => {
-    if (!idToken) return null;
-    return {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json'
-    };
-  }, [idToken]);
+  const isAuthenticated = sessionStatus === 'authenticated';
+  const jsonHeaders = useMemo(() => ({
+    'Content-Type': 'application/json'
+  }), []);
 
   const resetDeckMessages = () => {
     setDeckError(null);
     setStatusMessage(null);
   };
 
-  const readPayload = async <T extends { success?: boolean; error?: string }>(
+  const readPayload = useCallback(async <T extends { success?: boolean; error?: string; code?: string }>(
     response: Response
   ): Promise<T> => {
     const text = await response.text();
@@ -98,32 +95,63 @@ export function useDeckCollection() {
     } catch {
       throw new Error('Unexpected response from server.');
     }
-  };
+  }, []);
 
-  const loadDecks = useCallback(async (token: string): Promise<boolean> => {
+  const handleAuthFailure = useCallback((
+    payload: { error?: string; code?: string },
+    response: Response,
+    options: { fallbackMessage?: string; showError?: boolean } = {}
+  ): boolean => {
+    if (response.status !== 401) return false;
+    const message = payload.error || options.fallbackMessage || 'Authentication required.';
+    if (payload.code === 'auth_expired') {
+      setSessionStatus('expired');
+      setAuthError(message);
+      return true;
+    }
+    setSessionStatus('unauthenticated');
+    if (options.showError) {
+      setAuthError(message);
+    }
+    return true;
+  }, []);
+  const authExpired = sessionStatus === 'expired';
+  const markAuthExpired = useCallback((message?: string) => {
+    setSessionStatus('expired');
+    if (message) {
+      setAuthError(message);
+    }
+  }, []);
+
+  const loadDecks = useCallback(async (options: { showAuthError?: boolean } = {}): Promise<boolean> => {
     setLoading(true);
     setAuthError(null);
     try {
       const response = await fetch(buildApiUrl('/api/decks'), {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       const payload = await readPayload<{ success?: boolean; error?: string; user?: GoogleUser; decks?: DeckEntry[] }>(response);
+      if (handleAuthFailure(payload, response, { showError: options.showAuthError })) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load your decks.');
       }
       setUser(payload.user ?? null);
       setDecks(Array.isArray(payload.decks) ? payload.decks : []);
+      setSessionStatus('authenticated');
       return true;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to load your decks.';
-      setAuthError(message);
+      if (options.showAuthError) {
+        setAuthError(message);
+      }
+      setSessionStatus((current) => (current === 'unknown' ? 'unauthenticated' : current));
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [handleAuthFailure, readPayload]);
 
   const googleApiRef = useRef<GoogleApi | null>(null);
   const hasInitRef = useRef(false);
@@ -147,52 +175,41 @@ export function useDeckCollection() {
       setAuthError('Google login failed. Please try again.');
       return;
     }
-    setIdToken(credential);
-    try {
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, credential);
-    } catch {
-      // Ignore storage errors.
-    }
-    void loadDecks(credential).then((success) => {
-      if (!success) {
-        setIdToken(null);
-        try {
-          window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-        } catch {
-          // Ignore storage errors.
+    setAuthError(null);
+    void (async () => {
+      try {
+        const response = await fetch(buildApiUrl('/api/auth/google'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({ idToken: credential })
+        });
+        const payload = await readPayload<{ success?: boolean; error?: string; user?: GoogleUser }>(response);
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || 'Google login failed. Please try again.');
         }
+        setUser(payload.user ?? null);
+        setSessionStatus('authenticated');
+        await loadDecks({ showAuthError: true });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Google login failed. Please try again.';
+        setAuthError(message);
+        setSessionStatus('unauthenticated');
       }
-    });
-  }, [loadDecks]);
+    })();
+  }, [loadDecks, readPayload]);
 
   useEffect(() => {
-    if (!googleClientId || idToken) {
+    if (!googleClientId || sessionStatus !== 'unknown') {
       return;
     }
-    let storedToken: string | null = null;
-    try {
-      storedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
-    } catch {
-      storedToken = null;
-    }
-    if (!storedToken) {
-      return;
-    }
-    setIdToken(storedToken);
-    void loadDecks(storedToken).then((success) => {
-      if (!success) {
-        setIdToken(null);
-        try {
-          window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-        } catch {
-          // Ignore storage errors.
-        }
-      }
-    });
-  }, [googleClientId, idToken, loadDecks]);
+    void loadDecks();
+  }, [googleClientId, sessionStatus, loadDecks]);
 
   useEffect(() => {
-    if (!googleClientId || idToken) {
+    if (!googleClientId || sessionStatus === 'authenticated') {
       return;
     }
 
@@ -227,10 +244,10 @@ export function useDeckCollection() {
     return () => {
       cancelled = true;
     };
-  }, [googleClientId, idToken, buttonEl, handleCredentialResponse, renderGoogleButton]);
+  }, [googleClientId, sessionStatus, buttonEl, handleCredentialResponse, renderGoogleButton]);
 
   const previewDeck = async (deckUrl: string): Promise<DeckPreviewResult> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       const message = 'Sign in with Google to load decks.';
       setDeckError(message);
       return { error: message };
@@ -238,10 +255,14 @@ export function useDeckCollection() {
     try {
       const response = await fetch(buildApiUrl('/api/decks/preview'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify({ deckUrl })
       });
       const payload = await readPayload<{ success?: boolean; error?: string; deck?: DeckPreview }>(response);
+      if (handleAuthFailure(payload, response, { showError: true })) {
+        return { error: payload.error || 'Sign in with Google to load decks.' };
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load deck.');
       }
@@ -253,7 +274,7 @@ export function useDeckCollection() {
   };
 
   const previewBulkDecks = async (profileUrl: string): Promise<DeckImportPreviewResult> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       const message = 'Sign in with Google to load decks.';
       setDeckError(message);
       return { error: message };
@@ -261,10 +282,14 @@ export function useDeckCollection() {
     try {
       const response = await fetch(buildApiUrl('/api/decks/bulk/preview'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify({ profileUrl })
       });
       const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckImportCandidate[] }>(response);
+      if (handleAuthFailure(payload, response, { showError: true })) {
+        return { error: payload.error || 'Sign in with Google to load decks.' };
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to load decks.');
       }
@@ -276,7 +301,7 @@ export function useDeckCollection() {
   };
 
   const importBulkDecks = async (deckUrls: string[]): Promise<DeckImportResult> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       const message = 'Sign in with Google to import decks.';
       setDeckError(message);
       return { success: false, error: message };
@@ -286,7 +311,8 @@ export function useDeckCollection() {
     try {
       const response = await fetch(buildApiUrl('/api/decks/bulk'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify({ deckUrls })
       });
       const payload = await readPayload<{
@@ -295,6 +321,9 @@ export function useDeckCollection() {
         decks?: DeckEntry[];
         failures?: Array<{ deckUrl: string; error: string }>;
       }>(response);
+      if (handleAuthFailure(payload, response, { showError: true })) {
+        return { success: false, error: payload.error || 'Sign in with Google to import decks.' };
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to import decks.');
       }
@@ -310,7 +339,7 @@ export function useDeckCollection() {
   };
 
   const createDeck = async (input: DeckFormInput): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setDeckError('Sign in with Google to add decks.');
       return false;
     }
@@ -319,10 +348,14 @@ export function useDeckCollection() {
     try {
       const response = await fetch(buildApiUrl('/api/decks/manual'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify(input)
       });
       const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckEntry[] }>(response);
+      if (handleAuthFailure(payload, response, { showError: true })) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to add deck.');
       }
@@ -339,7 +372,7 @@ export function useDeckCollection() {
   };
 
   const updateDeck = async (deckId: string, input: DeckFormInput): Promise<boolean> => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setDeckError('Sign in with Google to manage decks.');
       return false;
     }
@@ -348,10 +381,14 @@ export function useDeckCollection() {
     try {
       const response = await fetch(buildApiUrl(`/api/decks/${deckId}`), {
         method: 'PUT',
-        headers,
+        headers: jsonHeaders,
+        credentials: 'include',
         body: JSON.stringify(input)
       });
       const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckEntry[] }>(response);
+      if (handleAuthFailure(payload, response, { showError: true })) {
+        return false;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to update deck.');
       }
@@ -368,7 +405,7 @@ export function useDeckCollection() {
   };
 
   const removeDeck = async (deckId: string) => {
-    if (!headers) {
+    if (!isAuthenticated) {
       setDeckError('Sign in with Google to manage decks.');
       return;
     }
@@ -377,9 +414,12 @@ export function useDeckCollection() {
     try {
       const response = await fetch(buildApiUrl(`/api/decks/${deckId}`), {
         method: 'DELETE',
-        headers
+        credentials: 'include'
       });
       const payload = await readPayload<{ success?: boolean; error?: string; decks?: DeckEntry[] }>(response);
+      if (handleAuthFailure(payload, response, { showError: true })) {
+        return;
+      }
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'Unable to remove deck.');
       }
@@ -393,27 +433,38 @@ export function useDeckCollection() {
   };
 
   const signOut = () => {
-    setIdToken(null);
-    setUser(null);
-    setDecks([]);
-    setAuthError(null);
-    setDeckError(null);
-    setStatusMessage('Signed out.');
-    try {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    } catch {
-      // Ignore storage errors.
-    }
+    setLoading(true);
+    void (async () => {
+      try {
+        await fetch(buildApiUrl('/api/auth/logout'), {
+          method: 'POST',
+          credentials: 'include'
+        });
+      } catch {
+        // Ignore logout failures.
+      } finally {
+        setSessionStatus('unauthenticated');
+        setUser(null);
+        setDecks([]);
+        setAuthError(null);
+        setDeckError(null);
+        setStatusMessage('Signed out.');
+        setLoading(false);
+      }
+    })();
   };
 
   const refreshDecks = useCallback(async () => {
-    if (!idToken) return;
-    await loadDecks(idToken);
-  }, [idToken, loadDecks]);
+    if (!isAuthenticated) return;
+    await loadDecks({ showAuthError: true });
+  }, [isAuthenticated, loadDecks]);
 
   return {
     googleClientId,
-    idToken,
+    sessionStatus,
+    isAuthenticated,
+    authExpired,
+    markAuthExpired,
     user,
     decks,
     loading,

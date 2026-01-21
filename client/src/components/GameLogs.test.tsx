@@ -9,15 +9,15 @@ const mockUseOpponentUsers = vi.fn();
 const mockUseOpponentDecks = vi.fn();
 
 vi.mock('../hooks/useGameLogs', () => ({
-  useGameLogs: (idToken: string | null) => mockUseGameLogs(idToken)
+  useGameLogs: (auth: { authStatus: string }) => mockUseGameLogs(auth)
 }));
 
 vi.mock('../hooks/useOpponentUsers', () => ({
-  useOpponentUsers: (idToken: string | null) => mockUseOpponentUsers(idToken)
+  useOpponentUsers: (auth: { authStatus: string }) => mockUseOpponentUsers(auth)
 }));
 
 vi.mock('../hooks/useOpponentDecks', () => ({
-  useOpponentDecks: (idToken: string | null) => mockUseOpponentDecks(idToken)
+  useOpponentDecks: (auth: { authStatus: string }) => mockUseOpponentDecks(auth)
 }));
 
 const baseLog = (overrides: Partial<GameLogEntry> = {}): GameLogEntry => ({
@@ -39,7 +39,9 @@ const renderGameLogs = (overrides: Partial<Parameters<typeof GameLogs>[0]> = {})
   return render(
     <GameLogs
       enabled
-      idToken="token-123"
+      authStatus="authenticated"
+      authButtonRef={vi.fn()}
+      onAuthExpired={vi.fn()}
       decks={[]}
       decksLoading={false}
       sharedLogs={[]}
