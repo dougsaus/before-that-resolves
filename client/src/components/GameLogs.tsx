@@ -1031,14 +1031,25 @@ export function GameLogs({
     const deckLabelClass = hasDeckLabel ? 'text-white' : 'text-gray-400 italic';
     return (
       <div key={`${keyPrefix}-${log.id}`} className="flex flex-col gap-1 px-4 py-2">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(5.5rem,5.5rem)_minmax(14rem,1fr)_minmax(10rem,1fr)_auto] sm:items-baseline">
-          <div className="flex items-baseline gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10rem,1fr)_minmax(4.5rem,4.5rem)_minmax(12rem,1fr)_auto] sm:items-start">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Date
             </span>
             <span className="text-xs text-gray-400">{formatDate(log.playedAt)}</span>
           </div>
-          <div className="flex items-baseline gap-2">
+          <div className="min-w-0">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
+              Deck
+            </span>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
+                {deckLabel}
+              </h4>
+              {renderCommanderInline(log.commanderNames, log.commanderLinks)}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Result
             </span>
@@ -1054,24 +1065,13 @@ export function GameLogs({
               {log.result ?? 'pending'}
             </span>
           </div>
-          <div className="min-w-0 self-baseline">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
-              Deck
-            </span>
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h4 className={`truncate text-sm font-semibold sm:text-base ${deckLabelClass}`}>
-                {deckLabel}
-              </h4>
-              {renderCommanderInline(log.commanderNames, log.commanderLinks)}
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 text-xs text-gray-300">
+          <div className="flex items-center gap-2 text-xs text-gray-300">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:hidden">
               Game Length
             </span>
             <span>{formatGameLength(log.durationMinutes, log.turns)}</span>
           </div>
-          <div className="flex items-baseline justify-start gap-1 sm:justify-end">
+          <div className="flex items-center justify-start gap-1 sm:justify-end">
             {actions}
           </div>
         </div>
@@ -1081,9 +1081,8 @@ export function GameLogs({
             {log.opponents.map((opponent, index) => (
               <div
                 key={`${keyPrefix}-${log.id}-opponent-${index}`}
-                className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(5.5rem,5.5rem)_minmax(14rem,1fr)_minmax(10rem,1fr)] sm:items-start"
+                className="grid grid-cols-1 gap-2 text-xs text-gray-200 sm:grid-cols-[minmax(6rem,6.5rem)_minmax(10ch,18ch)_5.5rem_minmax(10rem,1fr)] sm:items-center"
               >
-                <span className="hidden sm:block" aria-hidden="true" />
                 <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
                   {index === 0 ? 'Opponents:' : ''}
                 </span>
@@ -1092,12 +1091,12 @@ export function GameLogs({
                     ? truncateLabel(getOpponentDisplayName(opponent.name))
                     : `Opponent ${index + 1}`}
                 </span>
-                <span className="text-gray-400">
+                <div className="flex items-center justify-start">
                   {opponent.colorIdentity ? (
-                    <span className="me-2 inline-flex align-middle">
-                      <ColorIdentityIcons colors={opponent.colorIdentity} />
-                    </span>
+                    <ColorIdentityIcons colors={opponent.colorIdentity} />
                   ) : null}
+                </div>
+                <span className="text-gray-400">
                   {opponent.deckName ? (
                     <>
                       {opponent.deckUrl ? (
@@ -1146,12 +1145,11 @@ export function GameLogs({
         )}
 
         {log.tags.length > 0 && (
-          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_minmax(5.5rem,5.5rem)_minmax(14rem,1fr)_minmax(10rem,1fr)] sm:items-start">
-            <span className="hidden sm:block" aria-hidden="true" />
+          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-[minmax(6rem,6.5rem)_1fr] sm:items-start">
             <span className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-[11px]">
               Tags:
             </span>
-            <div className="flex flex-wrap gap-1 sm:col-span-2">
+            <div className="flex flex-wrap gap-1">
               {log.tags.map((tag) => (
                 <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-gray-700/60 text-gray-300">
                   {tag}
