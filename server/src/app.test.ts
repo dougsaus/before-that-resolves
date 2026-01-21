@@ -1158,6 +1158,8 @@ describe('app routes', () => {
       deckId: 'deck-77',
       deckName: 'Gruul Smash',
       deckUrl: 'https://moxfield.com/decks/opp',
+      commanderNames: ['Xenagos, God of Revels'],
+      commanderLinks: [null],
       result: 'loss',
       tags: [],
       opponents: expect.arrayContaining([
@@ -1257,6 +1259,8 @@ describe('app routes', () => {
       deckId: 'deck-99',
       deckName: 'Izzet Spells',
       deckUrl: 'https://moxfield.com/decks/izzet',
+      commanderNames: ['Mizzix of the Izmagnus'],
+      commanderLinks: [null],
       playedAt: '2025-04-01',
       turns: 6,
       durationMinutes: 50,
@@ -1317,8 +1321,8 @@ describe('app routes', () => {
     expect(createGameLog).toHaveBeenCalledWith('user-333', expect.objectContaining({
       deckId: 'deck-99',
       deckName: 'Izzet Spells',
-      commanderNames: [],
-      commanderLinks: [],
+      commanderNames: ['Mizzix of the Izmagnus'],
+      commanderLinks: [null],
       playedAt: '2025-04-01'
     }));
     expect(setSharedGameLogStatus).toHaveBeenCalledWith('user-333', 'shared-1', 'accepted');

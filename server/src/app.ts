@@ -144,6 +144,8 @@ type AppDeps = {
     deckId: string | null;
     deckName: string | null;
     deckUrl: string | null;
+    commanderNames: string[];
+    commanderLinks: Array<string | null>;
     playedAt: string;
     turns: number | null;
     durationMinutes: number | null;
@@ -1243,6 +1245,8 @@ export function createApp(deps: AppDeps = {}) {
         deckId: recipientOpponent?.deckId ?? null,
         deckName: recipientOpponent?.deckName ?? null,
         deckUrl: recipientOpponent?.deckUrl ?? null,
+        commanderNames: recipientOpponent?.commanderNames ?? [],
+        commanderLinks: recipientOpponent?.commanderLinks ?? [],
         playedAt: log.playedAt,
         turns: log.turns,
         durationMinutes: log.durationMinutes,
@@ -1442,6 +1446,8 @@ export function createApp(deps: AppDeps = {}) {
       deckId: parsedDeckId,
       deckName: selectedDeck?.name ?? null,
       deckUrl: selectedDeck?.url ?? null,
+      commanderNames: selectedDeck?.commanderNames ?? [],
+      commanderLinks: selectedDeck?.commanderLinks ?? [],
       playedAt: normalizeDateInput(datePlayed),
       turns: parseOptionalNumber(turns),
       durationMinutes: parseOptionalNumber(durationMinutes),
@@ -1511,11 +1517,15 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
 
+    const snapshotDeckName =
+      typeof sharedLog.deckName === 'string' && sharedLog.deckName.trim().length > 0
+        ? sharedLog.deckName
+        : null;
     await createLog(user.id, {
       deckId: deck.id,
-      deckName: deck.name,
-      commanderNames: [],
-      commanderLinks: [],
+      deckName: snapshotDeckName ?? deck.name,
+      commanderNames: sharedLog.commanderNames ?? [],
+      commanderLinks: sharedLog.commanderLinks ?? [],
       playedAt: sharedLog.playedAt,
       turns: sharedLog.turns,
       durationMinutes: sharedLog.durationMinutes,

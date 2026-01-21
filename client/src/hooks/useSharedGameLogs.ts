@@ -11,6 +11,8 @@ export type SharedGameLogEntry = {
   deckId: string | null;
   deckName: string | null;
   deckUrl: string | null;
+  commanderNames: string[];
+  commanderLinks: Array<string | null>;
   playedAt: string;
   turns: number | null;
   durationMinutes: number | null;
