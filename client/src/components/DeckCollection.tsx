@@ -1397,6 +1397,7 @@ export function DeckCollection({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {decks.length > 0 && <span className="text-xs text-gray-500">{decks.length} total</span>}
             <button
               type="button"
               onClick={openAddModal}
