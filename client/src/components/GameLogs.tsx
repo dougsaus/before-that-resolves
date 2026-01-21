@@ -1203,8 +1203,12 @@ export function GameLogs({
       <div className="w-full max-w-3xl mx-auto bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
         <h2 className="text-2xl font-semibold mb-3">Game Logs</h2>
         <p className="text-gray-300">
-          Sign in from the Profile page to start logging games.
+          Sign in to start logging games.
         </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <div ref={authButtonRef} />
+          {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
       </div>
     );
   }
