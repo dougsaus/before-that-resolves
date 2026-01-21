@@ -246,6 +246,13 @@ export function useDeckCollection() {
     };
   }, [googleClientId, sessionStatus, buttonEl, handleCredentialResponse, renderGoogleButton]);
 
+  useEffect(() => {
+    if (sessionStatus !== 'authenticated' || !buttonEl) {
+      return;
+    }
+    buttonEl.innerHTML = '';
+  }, [buttonEl, sessionStatus]);
+
   const previewDeck = async (deckUrl: string): Promise<DeckPreviewResult> => {
     if (!isAuthenticated) {
       const message = 'Sign in with Google to load decks.';
