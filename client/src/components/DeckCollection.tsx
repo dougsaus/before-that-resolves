@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorIdentityIcons, ColorIdentitySelect } from './ColorIdentitySelect';
-import { getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
+import { COLOR_OPTIONS, getColorIdentityLabel, sortColorsForDisplay } from '../utils/color-identity';
 import { useGameLogs } from '../hooks/useGameLogs';
 import { useOpponentDecks, type OpponentDeck } from '../hooks/useOpponentDecks';
 import { useOpponentUsers, type OpponentUser } from '../hooks/useOpponentUsers';
@@ -17,6 +17,25 @@ const PREDEFINED_TAGS = [
   'bad opening hand',
   'scooped'
 ] as const;
+
+type ChallengeIdentity = {
+  key: string;
+  label: string;
+  colors: string[];
+};
+
+const CHALLENGE_IDENTITIES: ChallengeIdentity[] = COLOR_OPTIONS
+  .filter((option): option is { value: string; label: string; colors: string[] } => option.colors !== null)
+  .map((option) => ({
+    key: option.colors.length === 0 ? 'C' : sortColorsForDisplay(option.colors).join(''),
+    label: option.label,
+    colors: option.colors
+  }));
+
+const CHALLENGE_IDENTITY_KEYS = new Set(CHALLENGE_IDENTITIES.map((identity) => identity.key));
+const CHALLENGE_MULTICOLOR_IDENTITIES = CHALLENGE_IDENTITIES.filter((identity) => identity.colors.length >= 3);
+const CHALLENGE_SMALLER_IDENTITIES = CHALLENGE_IDENTITIES.filter((identity) => identity.colors.length <= 2);
+const CHALLENGE_COLUMNS = [CHALLENGE_MULTICOLOR_IDENTITIES, CHALLENGE_SMALLER_IDENTITIES];
 
 function formatWinRate(winRate: number | null): string {
   if (winRate === null) return '—';
@@ -486,6 +505,37 @@ export function DeckCollection({
     });
     return sorted;
   }, [decks, sortDir, sortKey]);
+  const challengeDecksByIdentity = useMemo(() => {
+    const decksByIdentity = new Map<string, DeckEntry[]>();
+    CHALLENGE_IDENTITIES.forEach((identity) => {
+      decksByIdentity.set(identity.key, []);
+    });
+
+    const decksByName = [...decks].sort((left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+    );
+    decksByName.forEach((deck) => {
+      const colorKey = formatColorValue(deck.colorIdentity);
+      if (!colorKey || !CHALLENGE_IDENTITY_KEYS.has(colorKey)) {
+        return;
+      }
+      const existing = decksByIdentity.get(colorKey);
+      if (!existing) {
+        return;
+      }
+      existing.push(deck);
+    });
+    return decksByIdentity;
+  }, [decks]);
+  const challengeCompletedCount = useMemo(() => {
+    let completed = 0;
+    CHALLENGE_IDENTITIES.forEach((identity) => {
+      if ((challengeDecksByIdentity.get(identity.key) ?? []).length > 0) {
+        completed += 1;
+      }
+    });
+    return completed;
+  }, [challengeDecksByIdentity]);
   const updateScrollHint = () => {
     const list = deckListRef.current;
     if (!list) return;
@@ -1415,6 +1465,39 @@ export function DeckCollection({
             </button>
           </div>
         </div>
+        <section className="mt-6 rounded-xl border border-gray-800 bg-gray-950/60 p-4 sm:p-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-200">32 Deck Challenge</h4>
+            <p className="text-sm text-cyan-200">{challengeCompletedCount} of 32 colors completed</p>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {CHALLENGE_COLUMNS.map((column, columnIndex) => (
+              <div key={`challenge-column-${columnIndex}`} className="space-y-1">
+                {column.map((identity) => {
+                  const matchingDecks = challengeDecksByIdentity.get(identity.key) ?? [];
+                  return (
+                    <div key={identity.key} className="flex items-start gap-2 text-xs">
+                      <div className="pt-0.5">
+                        <ColorIdentityIcons colors={identity.colors} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] uppercase tracking-wide text-gray-500">{identity.label}</p>
+                        {matchingDecks.length === 0 && (
+                          <p className="h-5 border-b border-gray-800" aria-hidden="true" />
+                        )}
+                        {matchingDecks.map((deck) => (
+                          <p key={`${identity.key}-${deck.id}`} className="truncate border-b border-gray-800 pb-0.5 text-gray-200">
+                            {deck.name} — {formatCommanderList(deck.commanderNames)}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </section>
         <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
           {loading && <p className="text-gray-400">Loading...</p>}
           {!loading && decks.length === 0 && (

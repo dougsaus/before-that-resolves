@@ -40,12 +40,36 @@ describe('DeckCollection', () => {
     localStorage.clear();
   });
 
+  const getDeckOrder = () =>
+    screen
+      .getAllByRole('button', { name: /^Edit / })
+      .map((button) => (button.getAttribute('aria-label') || '').replace(/^Edit /, ''));
+
   it('shows the deck count in the header', () => {
     const decks = [baseDeck({ id: 'deck-1' }), baseDeck({ id: 'deck-2', name: 'Beta' })];
 
     render(<DeckCollection {...defaultProps} decks={decks} />);
 
     expect(screen.getByText('2 total')).toBeInTheDocument();
+  });
+
+  it('shows 32 challenge progress and deck lines by color identity', () => {
+    const decks = [
+      baseDeck({ id: 'deck-w-1', name: 'White One', commanderNames: ['Giada'], colorIdentity: ['W'] }),
+      baseDeck({ id: 'deck-w-2', name: 'White Two', commanderNames: ['Adeline'], colorIdentity: ['W'] }),
+      baseDeck({ id: 'deck-ub', name: 'Dimir Deck', commanderNames: ['Yuriko'], colorIdentity: ['U', 'B'] }),
+      baseDeck({ id: 'deck-c', name: 'Colorless Deck', commanderNames: ['Kozilek'], colorIdentity: [] }),
+      baseDeck({ id: 'deck-unknown', name: 'Unknown Colors', commanderNames: ['Mystery'], colorIdentity: null })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    expect(screen.getByText('32 Deck Challenge')).toBeInTheDocument();
+    expect(screen.getByText('3 of 32 colors completed')).toBeInTheDocument();
+    expect(screen.getByText('White One — Giada')).toBeInTheDocument();
+    expect(screen.getByText('White Two — Adeline')).toBeInTheDocument();
+    expect(screen.getByText('Dimir Deck — Yuriko')).toBeInTheDocument();
+    expect(screen.getByText('Colorless Deck — Kozilek')).toBeInTheDocument();
   });
 
   it('renders sort controls and sorts cards', async () => {
@@ -60,17 +84,17 @@ describe('DeckCollection', () => {
     const sortSelect = screen.getByLabelText('Sort');
     expect(sortSelect).toBeInTheDocument();
 
-    let deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    let deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('Alpha');
 
     await user.selectOptions(sortSelect, 'commander');
 
-    deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('Beta');
 
     await user.click(screen.getByRole('button', { name: /Sort descending/ }));
 
-    deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('Alpha');
   });
 
@@ -94,12 +118,12 @@ describe('DeckCollection', () => {
     const sortSelect = screen.getByLabelText('Sort');
     await user.selectOptions(sortSelect, 'games');
 
-    let deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    let deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('High Stats');
 
     await user.selectOptions(sortSelect, 'lastPlayed');
 
-    deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('High Stats');
   });
 
@@ -123,7 +147,7 @@ describe('DeckCollection', () => {
     const sortSelect = screen.getByLabelText('Sort') as HTMLSelectElement;
     expect(sortSelect.value).toBe('games');
 
-    const deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    const deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('High Stats');
   });
 
