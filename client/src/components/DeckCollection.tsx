@@ -1529,8 +1529,8 @@ export function DeckCollection({
                     {column.map((identity) => {
                       const matchingDecks = challengeDecksByIdentity.get(identity.key) ?? [];
                       return (
-                        <div key={identity.key} className="flex items-start gap-2 text-xs">
-                          <div className="pt-0.5">
+                        <div key={identity.key} className="grid grid-cols-[5.75rem_minmax(0,1fr)] items-start gap-2 text-xs">
+                          <div className="flex justify-end pt-0.5">
                             <ColorIdentityIcons colors={identity.colors} />
                           </div>
                           <div className="min-w-0 flex-1">
