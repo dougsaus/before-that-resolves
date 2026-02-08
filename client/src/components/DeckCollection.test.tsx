@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DeckCollection, type DeckEntry } from './DeckCollection';
 import { buildApiUrl } from '../utils/api';
@@ -40,12 +40,57 @@ describe('DeckCollection', () => {
     localStorage.clear();
   });
 
+  const getDeckOrder = () =>
+    screen
+      .getAllByRole('button', { name: /^Edit / })
+      .map((button) => (button.getAttribute('aria-label') || '').replace(/^Edit /, ''));
+
   it('shows the deck count in the header', () => {
     const decks = [baseDeck({ id: 'deck-1' }), baseDeck({ id: 'deck-2', name: 'Beta' })];
 
     render(<DeckCollection {...defaultProps} decks={decks} />);
 
     expect(screen.getByText('2 total')).toBeInTheDocument();
+  });
+
+  it('shows 32 challenge collapsed by default and expands with progress/details', async () => {
+    const user = userEvent.setup();
+    const decks = [
+      baseDeck({
+        id: 'deck-w-1',
+        name: 'White One',
+        url: 'https://archidekt.com/decks/1',
+        commanderNames: ['Giada'],
+        commanderLinks: ['https://scryfall.com/card/one/giada'],
+        colorIdentity: ['W']
+      }),
+      baseDeck({ id: 'deck-w-2', name: 'White Two', commanderNames: ['Adeline'], colorIdentity: ['W'] }),
+      baseDeck({ id: 'deck-ub', name: 'Dimir Deck', commanderNames: ['Yuriko'], colorIdentity: ['U', 'B'] }),
+      baseDeck({ id: 'deck-c', name: 'Colorless Deck', commanderNames: ['Kozilek'], colorIdentity: [] }),
+      baseDeck({ id: 'deck-unknown', name: 'Unknown Colors', commanderNames: ['Mystery'], colorIdentity: null })
+    ];
+
+    render(<DeckCollection {...defaultProps} decks={decks} />);
+
+    expect(screen.queryByText('3 of 32 colors completed')).not.toBeInTheDocument();
+    expect(screen.queryByText('White One — Giada')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /32 Deck Challenge \(3\/32\)/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /32 Deck Challenge \(3\/32\)/ }));
+
+    const challengePanel = document.getElementById('challenge-panel-content');
+    expect(challengePanel).not.toBeNull();
+    const challenge = within(challengePanel as HTMLElement);
+
+    expect(screen.getByText('3 of 32 colors completed')).toBeInTheDocument();
+    expect(challenge.getByText('White Two')).toBeInTheDocument();
+    expect(challenge.getByText('Adeline')).toBeInTheDocument();
+    expect(challenge.getByText('Dimir Deck')).toBeInTheDocument();
+    expect(challenge.getByText('Yuriko')).toBeInTheDocument();
+    expect(challenge.getByText('Colorless Deck')).toBeInTheDocument();
+    expect(challenge.getByText('Kozilek')).toBeInTheDocument();
+    expect(challenge.getByRole('link', { name: 'White One' })).toHaveAttribute('href', 'https://archidekt.com/decks/1');
+    expect(challenge.getByRole('link', { name: 'Giada' })).toHaveAttribute('href', 'https://scryfall.com/card/one/giada');
   });
 
   it('renders sort controls and sorts cards', async () => {
@@ -60,17 +105,17 @@ describe('DeckCollection', () => {
     const sortSelect = screen.getByLabelText('Sort');
     expect(sortSelect).toBeInTheDocument();
 
-    let deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    let deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('Alpha');
 
     await user.selectOptions(sortSelect, 'commander');
 
-    deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('Beta');
 
     await user.click(screen.getByRole('button', { name: /Sort descending/ }));
 
-    deckNames = screen.getAllByText(/Alpha|Beta/).map((node) => node.textContent);
+    deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('Alpha');
   });
 
@@ -94,12 +139,12 @@ describe('DeckCollection', () => {
     const sortSelect = screen.getByLabelText('Sort');
     await user.selectOptions(sortSelect, 'games');
 
-    let deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    let deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('High Stats');
 
     await user.selectOptions(sortSelect, 'lastPlayed');
 
-    deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('High Stats');
   });
 
@@ -123,7 +168,7 @@ describe('DeckCollection', () => {
     const sortSelect = screen.getByLabelText('Sort') as HTMLSelectElement;
     expect(sortSelect.value).toBe('games');
 
-    const deckNames = screen.getAllByText(/Low Stats|High Stats/).map((node) => node.textContent);
+    const deckNames = getDeckOrder();
     expect(deckNames[0]).toBe('High Stats');
   });
 
