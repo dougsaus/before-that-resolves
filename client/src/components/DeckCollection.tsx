@@ -1523,13 +1523,13 @@ export function DeckCollection({
           {!challengeCollapsed && (
             <div id="challenge-panel-content" className="border-t border-gray-800 px-4 py-4 sm:px-5 sm:py-5">
               <p className="mb-4 text-sm text-cyan-200">{challengeCompletedCount} of 32 colors completed</p>
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 {[CHALLENGE_LEFT_COLUMN, CHALLENGE_RIGHT_COLUMN].map((column, columnIndex) => (
                   <div key={`challenge-column-${columnIndex}`} className="space-y-1">
                     {column.map((identity) => {
                       const matchingDecks = challengeDecksByIdentity.get(identity.key) ?? [];
                       return (
-                        <div key={identity.key} className="grid grid-cols-[5.75rem_minmax(0,1fr)] items-start gap-2 text-xs">
+                        <div key={identity.key} className="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-2 text-xs sm:grid-cols-[5.75rem_minmax(0,1fr)]">
                           <div className="flex justify-end pt-0.5">
                             <ColorIdentityIcons colors={identity.colors} />
                           </div>
@@ -1539,7 +1539,7 @@ export function DeckCollection({
                               <p className="h-5 border-b border-gray-800" aria-hidden="true" />
                             )}
                             {matchingDecks.map((deck) => (
-                              <div key={`${identity.key}-${deck.id}`} className="truncate border-b border-gray-800 pb-0.5 text-gray-200">
+                              <div key={`${identity.key}-${deck.id}`} className="border-b border-gray-800 pb-0.5 text-gray-200 break-words">
                                 {deck.url ? (
                                   <a
                                     href={deck.url}
