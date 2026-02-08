@@ -1539,9 +1539,23 @@ export function DeckCollection({
                               <p className="h-5 border-b border-gray-800" aria-hidden="true" />
                             )}
                             {matchingDecks.map((deck) => (
-                              <p key={`${identity.key}-${deck.id}`} className="truncate border-b border-gray-800 pb-0.5 text-gray-200">
-                                {deck.name} — {formatCommanderList(deck.commanderNames)}
-                              </p>
+                              <div key={`${identity.key}-${deck.id}`} className="truncate border-b border-gray-800 pb-0.5 text-gray-200">
+                                {deck.url ? (
+                                  <a
+                                    href={deck.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-cyan-200 hover:text-cyan-100"
+                                  >
+                                    {deck.name}
+                                  </a>
+                                ) : (
+                                  <span>{deck.name}</span>
+                                )}
+                                {deck.commanderNames.length > 0 && (
+                                  <span className="text-gray-300"> — {renderCommanderList(deck)}</span>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </div>

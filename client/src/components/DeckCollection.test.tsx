@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DeckCollection, type DeckEntry } from './DeckCollection';
 import { buildApiUrl } from '../utils/api';
@@ -56,7 +56,14 @@ describe('DeckCollection', () => {
   it('shows 32 challenge collapsed by default and expands with progress/details', async () => {
     const user = userEvent.setup();
     const decks = [
-      baseDeck({ id: 'deck-w-1', name: 'White One', commanderNames: ['Giada'], colorIdentity: ['W'] }),
+      baseDeck({
+        id: 'deck-w-1',
+        name: 'White One',
+        url: 'https://archidekt.com/decks/1',
+        commanderNames: ['Giada'],
+        commanderLinks: ['https://scryfall.com/card/one/giada'],
+        colorIdentity: ['W']
+      }),
       baseDeck({ id: 'deck-w-2', name: 'White Two', commanderNames: ['Adeline'], colorIdentity: ['W'] }),
       baseDeck({ id: 'deck-ub', name: 'Dimir Deck', commanderNames: ['Yuriko'], colorIdentity: ['U', 'B'] }),
       baseDeck({ id: 'deck-c', name: 'Colorless Deck', commanderNames: ['Kozilek'], colorIdentity: [] }),
@@ -71,11 +78,19 @@ describe('DeckCollection', () => {
 
     await user.click(screen.getByRole('button', { name: /32 Deck Challenge \(3\/32\)/ }));
 
+    const challengePanel = document.getElementById('challenge-panel-content');
+    expect(challengePanel).not.toBeNull();
+    const challenge = within(challengePanel as HTMLElement);
+
     expect(screen.getByText('3 of 32 colors completed')).toBeInTheDocument();
-    expect(screen.getByText('White One — Giada')).toBeInTheDocument();
-    expect(screen.getByText('White Two — Adeline')).toBeInTheDocument();
-    expect(screen.getByText('Dimir Deck — Yuriko')).toBeInTheDocument();
-    expect(screen.getByText('Colorless Deck — Kozilek')).toBeInTheDocument();
+    expect(challenge.getByText('White Two')).toBeInTheDocument();
+    expect(challenge.getByText('Adeline')).toBeInTheDocument();
+    expect(challenge.getByText('Dimir Deck')).toBeInTheDocument();
+    expect(challenge.getByText('Yuriko')).toBeInTheDocument();
+    expect(challenge.getByText('Colorless Deck')).toBeInTheDocument();
+    expect(challenge.getByText('Kozilek')).toBeInTheDocument();
+    expect(challenge.getByRole('link', { name: 'White One' })).toHaveAttribute('href', 'https://archidekt.com/decks/1');
+    expect(challenge.getByRole('link', { name: 'Giada' })).toHaveAttribute('href', 'https://scryfall.com/card/one/giada');
   });
 
   it('renders sort controls and sorts cards', async () => {
