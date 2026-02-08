@@ -18,6 +18,9 @@ const PREDEFINED_TAGS = [
   'scooped'
 ] as const;
 
+const CHALLENGE_TEMPLATE_IMAGE_URL =
+  'https://github.com/user-attachments/assets/544b6796-ac23-47d8-8dc7-ea07ad10d00b';
+
 type ChallengeIdentity = {
   key: string;
   label: string;
@@ -32,10 +35,51 @@ const CHALLENGE_IDENTITIES: ChallengeIdentity[] = COLOR_OPTIONS
     colors: option.colors
   }));
 
+const CHALLENGE_IDENTITY_BY_KEY = new Map(CHALLENGE_IDENTITIES.map((identity) => [identity.key, identity]));
 const CHALLENGE_IDENTITY_KEYS = new Set(CHALLENGE_IDENTITIES.map((identity) => identity.key));
-const CHALLENGE_MULTICOLOR_IDENTITIES = CHALLENGE_IDENTITIES.filter((identity) => identity.colors.length >= 3);
-const CHALLENGE_SMALLER_IDENTITIES = CHALLENGE_IDENTITIES.filter((identity) => identity.colors.length <= 2);
-const CHALLENGE_COLUMNS = [CHALLENGE_MULTICOLOR_IDENTITIES, CHALLENGE_SMALLER_IDENTITIES];
+const CHALLENGE_LEFT_COLUMN_KEYS = [
+  'WUBRG',
+  'WUBR',
+  'UBRG',
+  'BRGW',
+  'RGWU',
+  'GWUB',
+  'WUB',
+  'UBR',
+  'BRG',
+  'RGW',
+  'GWU',
+  'WBG',
+  'URW',
+  'BGU',
+  'RWB',
+  'GRU'
+] as const;
+const CHALLENGE_RIGHT_COLUMN_KEYS = [
+  'WU',
+  'UB',
+  'BR',
+  'RG',
+  'GW',
+  'WB',
+  'UR',
+  'BG',
+  'RW',
+  'GU',
+  'W',
+  'U',
+  'B',
+  'R',
+  'G',
+  'C'
+] as const;
+
+const CHALLENGE_LEFT_COLUMN = CHALLENGE_LEFT_COLUMN_KEYS
+  .map((key) => CHALLENGE_IDENTITY_BY_KEY.get(key))
+  .filter((identity): identity is ChallengeIdentity => Boolean(identity));
+const CHALLENGE_RIGHT_COLUMN = CHALLENGE_RIGHT_COLUMN_KEYS
+  .map((key) => CHALLENGE_IDENTITY_BY_KEY.get(key))
+  .filter((identity): identity is ChallengeIdentity => Boolean(identity));
 
 function formatWinRate(winRate: number | null): string {
   if (winRate === null) return '—';
@@ -315,6 +359,7 @@ export function DeckCollection({
   const [showScrollHint, setShowScrollHint] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>(() => initialSort?.key ?? 'name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => initialSort?.dir ?? 'asc');
+  const [challengeModalOpen, setChallengeModalOpen] = useState(false);
   const [hoverCard, setHoverCard] = useState<{ label: string; rect: DOMRect } | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
@@ -1463,41 +1508,15 @@ export function DeckCollection({
             >
               Bulk import
             </button>
+            <button
+              type="button"
+              onClick={() => setChallengeModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-400/60 px-5 py-2 text-sm font-semibold text-emerald-100 hover:border-emerald-300 hover:text-emerald-50"
+            >
+              32 Challenge ({challengeCompletedCount}/32)
+            </button>
           </div>
         </div>
-        <section className="mt-6 rounded-xl border border-gray-800 bg-gray-950/60 p-4 sm:p-5">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-200">32 Deck Challenge</h4>
-            <p className="text-sm text-cyan-200">{challengeCompletedCount} of 32 colors completed</p>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {CHALLENGE_COLUMNS.map((column, columnIndex) => (
-              <div key={`challenge-column-${columnIndex}`} className="space-y-1">
-                {column.map((identity) => {
-                  const matchingDecks = challengeDecksByIdentity.get(identity.key) ?? [];
-                  return (
-                    <div key={identity.key} className="flex items-start gap-2 text-xs">
-                      <div className="pt-0.5">
-                        <ColorIdentityIcons colors={identity.colors} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] uppercase tracking-wide text-gray-500">{identity.label}</p>
-                        {matchingDecks.length === 0 && (
-                          <p className="h-5 border-b border-gray-800" aria-hidden="true" />
-                        )}
-                        {matchingDecks.map((deck) => (
-                          <p key={`${identity.key}-${deck.id}`} className="truncate border-b border-gray-800 pb-0.5 text-gray-200">
-                            {deck.name} — {formatCommanderList(deck.commanderNames)}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </section>
         <div className="mt-6 flex flex-1 min-h-0 flex-col overflow-hidden">
           {loading && <p className="text-gray-400">Loading...</p>}
           {!loading && decks.length === 0 && (
@@ -1711,6 +1730,66 @@ export function DeckCollection({
           )}
       </div>
     </div>
+
+      {challengeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/80 px-3 py-4 sm:items-center sm:px-4 sm:py-6">
+          <div className="w-full max-w-[900px] rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3 sm:px-5">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-white">32 Deck Challenge</h3>
+              <button
+                type="button"
+                onClick={() => setChallengeModalOpen(false)}
+                className="rounded-md px-2 py-1 text-sm text-gray-300 hover:bg-gray-800 hover:text-white"
+                aria-label="Close challenge modal"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-3 sm:p-4">
+              <div
+                className="relative mx-auto w-full overflow-hidden rounded-lg border border-gray-700 bg-cover bg-center"
+                style={{
+                  aspectRatio: '2550 / 3300',
+                  backgroundImage: `url(${CHALLENGE_TEMPLATE_IMAGE_URL})`
+                }}
+              >
+                <div className="absolute inset-0 bg-white/30" />
+                <p className="absolute left-[8.5%] top-[15.6%] z-10 text-[clamp(12px,1.55vw,18px)] font-semibold text-gray-900">
+                  {challengeCompletedCount} of 32 colors completed
+                </p>
+                <div className="absolute left-[17%] top-[35%] z-10 grid h-[53%] w-[30%] grid-rows-16 gap-[0.55%]">
+                  {CHALLENGE_LEFT_COLUMN.map((identity) => {
+                    const matchingDecks = challengeDecksByIdentity.get(identity.key) ?? [];
+                    return (
+                      <div key={`challenge-left-${identity.key}`} className="min-h-0 overflow-hidden text-[clamp(9px,0.94vw,12px)] leading-[1.15] text-gray-900">
+                        {matchingDecks.length > 0 && matchingDecks.map((deck) => (
+                          <p key={`${identity.key}-${deck.id}`} className="truncate">
+                            {deck.name} — {formatCommanderList(deck.commanderNames)}
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="absolute left-[67%] top-[35%] z-10 grid h-[53%] w-[24%] grid-rows-16 gap-[0.55%]">
+                  {CHALLENGE_RIGHT_COLUMN.map((identity) => {
+                    const matchingDecks = challengeDecksByIdentity.get(identity.key) ?? [];
+                    return (
+                      <div key={`challenge-right-${identity.key}`} className="min-h-0 overflow-hidden text-[clamp(9px,0.94vw,12px)] leading-[1.15] text-gray-900">
+                        {matchingDecks.length > 0 && matchingDecks.map((deck) => (
+                          <p key={`${identity.key}-${deck.id}`} className="truncate">
+                            {deck.name} — {formatCommanderList(deck.commanderNames)}
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deckModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">

@@ -53,7 +53,8 @@ describe('DeckCollection', () => {
     expect(screen.getByText('2 total')).toBeInTheDocument();
   });
 
-  it('shows 32 challenge progress and deck lines by color identity', () => {
+  it('shows 32 challenge in a modal and renders deck lines by color identity', async () => {
+    const user = userEvent.setup();
     const decks = [
       baseDeck({ id: 'deck-w-1', name: 'White One', commanderNames: ['Giada'], colorIdentity: ['W'] }),
       baseDeck({ id: 'deck-w-2', name: 'White Two', commanderNames: ['Adeline'], colorIdentity: ['W'] }),
@@ -64,7 +65,11 @@ describe('DeckCollection', () => {
 
     render(<DeckCollection {...defaultProps} decks={decks} />);
 
-    expect(screen.getByText('32 Deck Challenge')).toBeInTheDocument();
+    expect(screen.queryByText('3 of 32 colors completed')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '32 Challenge (3/32)' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '32 Challenge (3/32)' }));
+
     expect(screen.getByText('3 of 32 colors completed')).toBeInTheDocument();
     expect(screen.getByText('White One — Giada')).toBeInTheDocument();
     expect(screen.getByText('White Two — Adeline')).toBeInTheDocument();
