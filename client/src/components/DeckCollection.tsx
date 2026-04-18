@@ -1782,8 +1782,9 @@ export function DeckCollection({
     </div>
 
       {deckModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
-          <div className="w-full max-w-xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-950/70 px-4 py-6 sm:py-8">
+          <div className="flex min-h-full items-start justify-center">
+            <div className="w-full max-w-xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div>
                 <h3 className="text-lg font-semibold">{editTarget ? 'Edit deck' : 'Add deck'}</h3>
@@ -1938,11 +1939,13 @@ export function DeckCollection({
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {bulkModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
-          <div className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-950/70 px-4 py-6 sm:py-8">
+          <div className="flex min-h-full items-start justify-center">
+            <div className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div>
                 <h3 className="text-lg font-semibold">Bulk import decks</h3>
@@ -2065,11 +2068,13 @@ export function DeckCollection({
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {logTarget && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
-          <div className="w-full max-w-3xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-950/70 px-4 py-6 sm:py-8">
+          <div className="flex min-h-full items-start justify-center">
+            <div className="w-full max-w-3xl rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -2491,11 +2496,13 @@ export function DeckCollection({
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-950/70 px-4 py-6 sm:items-center sm:py-8">
-          <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-950/70 px-4 py-6 sm:py-8">
+          <div className="flex min-h-full items-start justify-center">
+            <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 sm:p-8">
             <div className="flex flex-col gap-4">
               <div>
                 <h3 className="text-lg font-semibold">Remove deck?</h3>
@@ -2525,6 +2532,7 @@ export function DeckCollection({
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
       {hoverCard && imageUrl && hoverPosition && createPortal(
