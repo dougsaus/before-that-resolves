@@ -1,84 +1,137 @@
 # AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository.
 
 ## Project Overview
 
-Before That Resolves is a Magic: The Gathering assistant web app. Users chat with "The Oracle" to look up cards, check commander legality, explain interactions, and analyze decklists from Archidekt or Moxfield. The app uses OpenAI's API for AI responses and Scryfall for card data.
+Before That Resolves is a Magic: The Gathering assistant web app. Users chat with "The Oracle" to look up cards, check commander legality, explain interactions, analyze decks, and track game logs/deck collections.
+
+Primary integrations:
+- OpenAI API (agent responses)
+- Scryfall API (card data)
+- Archidekt/Moxfield APIs (deck loading/import)
+- PostgreSQL (auth sessions, deck collections, game logs)
 
 ## Monorepo Structure
 
 This is an npm workspaces monorepo with two packages:
-- **`/client`** - React 19 frontend (Vite, TypeScript, Tailwind CSS)
+- **`/client`** - React 19 frontend (Vite, TypeScript, Tailwind CSS v4)
 - **`/server`** - Express 5 backend (TypeScript, PostgreSQL, OpenAI Agents SDK)
+
+Key directories/files:
+- `client/src/components/CardOracle.tsx` - main chat UI
+- `client/src/utils/api.ts` - API base URL + URL builder
+- `server/src/app.ts` - Express app, routes, dependency injection entrypoint
+- `server/src/agents/card-oracle/index.ts` - main agent orchestration
+- `server/src/services/deck.ts` - Archidekt/Moxfield loading + in-memory deck cache
+- `server/src/utils/conversation-store.ts` - conversation state (`lastResponseId`) storage
+- `server/src/services/db.ts` - Postgres pool + schema initialization
+- `docs/architecture.md`, `docs/agents.md`, `docs/interaction.md` - architecture and flows
 
 ## Common Commands
 
 ```bash
 # Development
-npm install                          # Install all dependencies
-docker compose -f deploy/docker-compose.yml up -d  # Start PostgreSQL
-npm run dev                          # Start client (5173) + server (3001) concurrently
+npm install
+docker compose -f deploy/docker-compose.yml up -d   # Start PostgreSQL
+npm run dev                                          # Client (5173) + server (3001)
 
 # Testing
-npm test                             # Run all tests (server + client)
-npm run test --workspace=client      # Client tests only
-npm run test --workspace=server      # Server tests only
-npm run test:integration --workspace=server  # DB integration tests (requires Docker)
+npm test                                             # Server + client tests
+npm run test --workspace=client
+npm run test --workspace=server
+npm run test:integration --workspace=server          # RUN_INTEGRATION_TESTS=1
+npm run test:live --workspace=server                 # RUN_LIVE_TESTS=1, requires OPENAI_API_KEY
 
-# Run a single test file
+# Single test file
 npx vitest run path/to/file.test.ts --workspace=client
 npx vitest run path/to/file.test.ts --workspace=server
 
-# Build & Lint
-npm run build                        # Build both packages
-npm run lint                         # Lint both packages
+# Build & lint
+npm run build
+npm run lint
 ```
 
 ## Environment Setup
 
-Required environment variable:
+Core env for local development:
 ```bash
 export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
 ```
 
+Important env behavior:
+- App chat requests use per-request `x-openai-key` from the UI; server does not require a global `OPENAI_API_KEY` for normal local usage.
+- `OPENAI_API_KEY` is still needed for server live tests and standalone test scripts.
+- `MOXFIELD_USER_AGENT` must be set for Moxfield deck fetch/import endpoints.
+- `GOOGLE_CLIENT_ID` is required for Google auth flows.
+
+See `.env.example` for full list.
+
 ## Architecture
 
-**Agent System:** The Card Oracle agent is the main entry point. It has direct tools (card search, rulings, deck loading) and two sub-agents exposed as tools:
-- Commander Bracket Expert - bracket system analysis
-- Goldfish Expert - deck simulation with zone manipulation
+**Agent System:**
+- Card Oracle agent is the main entry point.
+- Direct tools include card lookup/search/rulings and loaded-deck tools.
+- Sub-agents exposed as tools:
+  - Commander Bracket Expert
+  - Goldfish Expert
 
-**Data Flow:**
-1. Client sends queries to `/api/agent/query`
-2. Server runs the Card Oracle agent via OpenAI Agents SDK
-3. Agent uses tools that call Scryfall API and read from in-memory deck cache
-4. Conversation history tracked per conversation ID via `lastResponseId`
+**Core data flow:**
+1. Client sends query to `/api/agent/query`.
+2. Server resolves/creates `conversationId` and forwards to Card Oracle.
+3. Agent runs tools (Scryfall, deck cache access, sub-agents).
+4. Server returns response plus `conversationId`; conversation history uses `lastResponseId`.
 
-**Key Services:**
-- Deck cache: In-memory storage for loaded Archidekt or Moxfield decks (resets on server restart)
-- Conversation store: Tracks OpenAI conversation history per user
-- Game logs & deck collections: PostgreSQL persistence with Google OAuth
+**State model:**
+- Conversation state is in-memory and keyed by `conversationId`.
+- Deck cache is also in-memory and keyed by `conversationId`.
+- `/api/agent/reset` clears both conversation state and deck cache for that conversation.
+
+## API Surface (High Value Routes)
+
+- `POST /api/agent/query` - main oracle chat endpoint (`x-openai-key` supported)
+- `POST /api/agent/reset` - reset conversation + deck cache for `conversationId`
+- `POST /api/deck/cache` - cache deck for a conversation
+- `POST /api/chat/export-pdf` - export chat transcript PDF
+- Auth/deck/game-log routes in `server/src/app.ts` back persisted features (Google auth, deck collection, logs, sharing)
 
 ## Testing Patterns
 
-- Unit tests colocated with source files (`.test.ts` / `.test.tsx`)
-- Server uses dependency injection in `app.ts` for testability
-- Integration tests use Testcontainers for PostgreSQL
-- Live tests (calling OpenAI API) require `OPENAI_API_KEY` env var
+- Unit tests colocated with source (`.test.ts` / `.test.tsx`)
+- Server app uses dependency injection via `createApp(deps)` in `server/src/app.ts`
+- Integration tests use Testcontainers + PostgreSQL and are gated by `RUN_INTEGRATION_TESTS=1`
+- Live OpenAI tests are gated by `RUN_LIVE_TESTS=1` and require `OPENAI_API_KEY`
 
 ## Domain Conventions
 
-- Color identity uses WUBRG order: `W|U|B|R|G` (White, Blue, Black, Red, Green)
-- Date-only strings (e.g., "2025-01-10") should be parsed as local time, not UTC
-- Deck state is conversation-scoped and cached in memory
+- Color identity order is WUBRG: `W|U|B|R|G`
+- Date-only strings (e.g. `2025-01-10`) should be parsed as local time, not UTC
+- Deck and conversation runtime state are conversation-scoped and in-memory
 
 ## Workflow Rules
 
-- **Always work in a new branch from main:** Ensure `main` is up to date before starting work
-- **Add tests for new functionality:** Ensure new features or behaviors include appropriate test coverage
-- **Never commit/push code that doesn't pass:** Always run `npm test`, `npm run build`, and `npm run lint` before committing
-- **Stop at PR creation:** Create the PR and wait for user approval before merging
-- **Ask before merging:** Always get explicit permission before merging a PR
-- **Rebase before merging:** Ensure your branch is up to date with `main` before merging a PR; rebase if needed
-- **Delete branches on merge:** When merging a PR, choose to delete the branch afterward
-- **Close related issues:** When merging a PR that fixes an issue, close the issue with a comment mentioning the PR/commit that resolved it
+- Work in a branch from `main`; sync `main` first
+- Add/adjust tests for behavior changes
+- Before commit/PR: run `npm test`, `npm run build`, and `npm run lint`
+- Create PR and wait for explicit approval before merge
+- Rebase on latest `main` before merging
+- Delete branch after merge
+- Close related issues with a note referencing the resolving PR/commit
+
+## Agent Working Notes (/init-style)
+
+When starting a task:
+1. Confirm scope by locating affected files with `rg`.
+2. Read tests near changed code first.
+3. Prefer minimal, targeted edits consistent with existing patterns.
+4. Validate with the smallest relevant test command, then full required checks.
+
+When touching these areas, run at least:
+- Agent/query/deck tools: `npm run test --workspace=server`
+- Client UI/state/hooks: `npm run test --workspace=client`
+- DB/auth/game logs/deck collection: `npm run test:integration --workspace=server` (Docker required)
+
+Operational gotchas:
+- Moxfield calls fail without `MOXFIELD_USER_AGENT`.
+- In-memory caches reset on server restart; persistent behavior should be implemented in DB services.
+- Keep date handling local-time safe to avoid off-by-one-day regressions.
