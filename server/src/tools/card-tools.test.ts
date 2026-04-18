@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunContext } from '@openai/agents';
+import type { FunctionTool, RunContext, ToolInputParameters } from '@openai/agents';
 import type { Card } from '../types/shared';
 
 const mockSearchCardByName = vi.fn();
@@ -18,9 +18,7 @@ vi.mock('../services/scryfall', () => ({
   }
 }));
 
-type ToolInvoker = {
-  invoke: (runContext: RunContext<unknown>, input: string, details?: { toolCall: unknown }) => Promise<unknown>;
-};
+type ToolInvoker = Pick<FunctionTool<unknown, ToolInputParameters, unknown>, 'invoke'>;
 
 type ToolCard = {
   name: string;
