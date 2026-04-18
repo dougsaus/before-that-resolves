@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunContext } from '@openai/agents';
+import type { FunctionTool, RunContext, ToolInputParameters } from '@openai/agents';
 
 const mockGetLastCachedDeck = vi.fn();
 const mockGetLastCachedDeckRaw = vi.fn();
@@ -9,9 +9,7 @@ vi.mock('../services/deck', () => ({
   getLastCachedDeckRaw: mockGetLastCachedDeckRaw
 }));
 
-type ToolInvoker = {
-  invoke: (runContext: RunContext<unknown>, input: string, details?: { toolCall: unknown }) => Promise<unknown>;
-};
+type ToolInvoker = Pick<FunctionTool<unknown, ToolInputParameters, unknown>, 'invoke'>;
 
 async function invokeTool<TInput, TResult>(
   tool: ToolInvoker,

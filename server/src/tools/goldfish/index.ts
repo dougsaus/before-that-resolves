@@ -176,7 +176,7 @@ export const reset = tool({
 
     resetZones();
     cardIdCounter = 1;
-    setSeed(seed);
+    setSeed(seed ?? undefined);
 
     const library = expandDeckList(deckList);
     const removedCommander = removeFirstByName(library, commanderName);
@@ -284,7 +284,7 @@ export const moveById = tool({
   }),
   execute: async ({ cardId, fromZone, toZone, toLibraryPosition }) => {
     const destination = toZone as Zone;
-    if (!canMoveToLibrary(toZone, toLibraryPosition)) {
+    if (!canMoveToLibrary(toZone, toLibraryPosition ?? undefined)) {
       console.warn(`⚠️ Goldfish moveById invalid library position for ${cardId}.`);
       return { ok: false };
     }
@@ -328,7 +328,7 @@ export const findAndMoveByName = tool({
     const destination = (toZone ?? 'hand') as Zone;
     const shouldShuffle = shuffleLibraryAfter ?? true;
 
-    if (!canMoveToLibrary(destination, toLibraryPosition)) {
+    if (!canMoveToLibrary(destination, toLibraryPosition ?? undefined)) {
       console.warn(`⚠️ Goldfish findAndMoveByName invalid library position for ${cardName}.`);
       return { ok: false, movedCard: null };
     }
