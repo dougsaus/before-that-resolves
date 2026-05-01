@@ -46,10 +46,7 @@ async function testCardOracle() {
         query,
         false,
         conversationId,
-        undefined,
-        undefined,
-        undefined,
-        openAiKey
+        { provider: 'openai', apiKey: openAiKey }
       );
 
       if (result.success && 'toolCalls' in result) {

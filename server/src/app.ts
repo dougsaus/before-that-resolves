@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { executeCardOracle, exampleQueries } from './agents/card-oracle';
+import type { ModelProviderKind, OracleModelSelection } from './types/provider';
 import {
   cacheDeckFromUrl,
   fetchDeckImportCandidates as fetchDeckImportCandidatesService,
@@ -623,13 +624,16 @@ export function createApp(deps: AppDeps = {}) {
   });
 
   app.post('/api/agent/query', async (req, res) => {
-    const { query, devMode, conversationId, model, reasoningEffort, verbosity, deckUrl } = req.body;
+    const { query, devMode, conversationId, model, reasoningEffort, verbosity, deckUrl, provider } = req.body;
     const headerKey = req.header('x-openai-key');
+    const anthropicKey = req.header('x-anthropic-key');
     const authorization = req.header('authorization');
     const bearerKey = authorization?.startsWith('Bearer ')
       ? authorization.slice('Bearer '.length).trim()
       : undefined;
-    const requestApiKey = headerKey || bearerKey;
+
+    const resolvedProvider: ModelProviderKind = provider === 'anthropic' ? 'anthropic' : 'openai';
+    const requestApiKey = resolvedProvider === 'anthropic' ? anthropicKey : (headerKey || bearerKey);
 
     if (!query) {
       res.status(400).json({
@@ -641,10 +645,20 @@ export function createApp(deps: AppDeps = {}) {
     if (!requestApiKey) {
       res.status(401).json({
         success: false,
-        error: 'OpenAI API key is required. Provide one in the UI.'
+        error: resolvedProvider === 'anthropic'
+          ? 'Anthropic API key is required. Provide one in the UI.'
+          : 'OpenAI API key is required. Provide one in the UI.'
       });
       return;
     }
+
+    const selection: OracleModelSelection = {
+      provider: resolvedProvider,
+      model,
+      apiKey: requestApiKey,
+      reasoningEffort,
+      verbosity
+    };
 
     try {
       const activeConversationId = conversationId || getConversationId();
@@ -666,10 +680,7 @@ export function createApp(deps: AppDeps = {}) {
         query,
         devMode || false,
         activeConversationId,
-        model,
-        reasoningEffort,
-        verbosity,
-        requestApiKey
+        selection
       );
 
       res.json({ ...result, conversationId: activeConversationId });

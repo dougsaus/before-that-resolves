@@ -30,10 +30,7 @@ describe('app routes', () => {
       'Hello there',
       false,
       'conv-123',
-      undefined,
-      undefined,
-      undefined,
-      testApiKey
+      { provider: 'openai', model: undefined, apiKey: testApiKey, reasoningEffort: undefined, verbosity: undefined }
     );
   });
 
@@ -62,10 +59,7 @@ describe('app routes', () => {
       'Ping',
       false,
       'conv-abc',
-      undefined,
-      undefined,
-      undefined,
-      testApiKey
+      { provider: 'openai', model: undefined, apiKey: testApiKey, reasoningEffort: undefined, verbosity: undefined }
     );
   });
 
@@ -91,6 +85,40 @@ describe('app routes', () => {
     expect(response.body.error).toBe('OpenAI API key is required. Provide one in the UI.');
   });
 
+  it('rejects anthropic queries without an anthropic key', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .post('/api/agent/query')
+      .send({ query: 'Hello there', provider: 'anthropic' })
+      .expect(401);
+
+    expect(response.body.error).toBe('Anthropic API key is required. Provide one in the UI.');
+  });
+
+  it('forwards anthropic provider and key to the agent', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      success: true,
+      response: 'ok',
+      toolCalls: 0
+    });
+
+    const app = createApp({ executeCardOracle: execute });
+
+    await request(app)
+      .post('/api/agent/query')
+      .set('x-anthropic-key', 'sk-ant-test')
+      .send({ query: 'Hello there', provider: 'anthropic', model: 'claude-sonnet-4-6' })
+      .expect(200);
+
+    expect(execute).toHaveBeenCalledWith(
+      'Hello there',
+      false,
+      expect.any(String),
+      { provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'sk-ant-test', reasoningEffort: undefined, verbosity: undefined }
+    );
+  });
+
   it('passes through a per-request API key', async () => {
     const execute = vi.fn().mockResolvedValue({
       success: true,
@@ -112,10 +140,7 @@ describe('app routes', () => {
       'Hello there',
       false,
       expect.any(String),
-      undefined,
-      undefined,
-      undefined,
-      'sk-test'
+      { provider: 'openai', model: undefined, apiKey: 'sk-test', reasoningEffort: undefined, verbosity: undefined }
     );
   });
 

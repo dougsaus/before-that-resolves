@@ -2,29 +2,37 @@
 
 Before That Resolves is a local web app that lets you chat with a Magic: The Gathering assistant. It can look up cards and rules, check commander legality, explain interactions, and summarize Commander decklists from Archidekt or Moxfield.
 
-The app runs entirely on your machine and calls OpenAI’s API for answers, so you will need your own OpenAI API key.
+The app runs entirely on your machine and uses an LLM provider for answers. It supports both **OpenAI** and **Anthropic Claude** — you supply your own API key for whichever provider you choose.
 
 ## How It Works
 
 - You open the app in a browser and chat with “The Oracle.”
 - The Oracle uses Scryfall for real card data and can load decklists from Archidekt or Moxfield.
 - Responses include Scryfall links that show a card image on hover.
-- You can choose which OpenAI model to use and (for supported models) set reasoning and text verbosity.
+- You choose a provider (OpenAI or Anthropic) and model in the AI Options panel. Each provider uses its own API key stored locally in your browser.
 
 ## Requirements
 
 - Node.js 18+ and npm
-- An OpenAI API key
+- An API key for either OpenAI or Anthropic (or both)
 
-### Install Node.js and npm (macOS + Homebrew)
+### Install Node.js and npm
 
-If you don’t already have Node.js and npm installed, Homebrew is the easiest way:
+**macOS (Homebrew):**
 
 ```bash
 brew install node
 ```
 
-This installs both `node` and `npm`. You can verify:
+**Windows:**
+
+Download and run the installer from https://nodejs.org (LTS version recommended), or use winget:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+```
+
+Verify either way:
 
 ```bash
 node -v
@@ -33,26 +41,28 @@ npm -v
 
 ## Get an API Key
 
-1. Create an OpenAI account at https://platform.openai.com
-2. Create an API key in your account
-3. Keep it private
+### OpenAI
 
-## Create an OpenAI Account (ChatGPT + API)
+1. Visit https://platform.openai.com and sign in (or create an account).
+2. Go to “API keys” and create a new key.
+3. Copy the key somewhere safe — it starts with `sk-`.
 
-1. Visit https://chat.openai.com and create a ChatGPT account (or sign in if you already have one).
-2. Visit https://platform.openai.com and sign in with the same account.
-3. Go to “API keys” and create a new key.
-4. Copy the key somewhere safe and keep it private.
+### Anthropic Claude
+
+1. Visit https://console.anthropic.com and sign in (or create an account).
+2. Go to “API keys” and create a new key.
+3. Copy the key somewhere safe — it starts with `sk-ant-`.
 
 ## Set the API Key
 
-The app always uses a user-provided key from the UI.
+The app always uses a user-provided key from the UI — keys are never stored server-side.
 
-1. Start the app and open the sidebar section titled "OpenAI API key".
-2. Paste your key.
-3. Optionally check "Store this key in this browser" to keep it in local storage.
+1. Start the app and open the **AI Options** section in the sidebar.
+2. Select your provider (OpenAI or Anthropic) using the toggle at the top.
+3. Paste your key for that provider into the key field.
+4. Optionally check “Store this key in this browser” to persist it in local storage.
 
-The key is sent with each request to the local server and is never stored server-side.
+Switching providers shows the key input for that provider only. Each key is stored independently.
 
 ## Run Locally
 
@@ -66,8 +76,19 @@ Then open http://localhost:5173 in your browser.
 
 Required env (example):
 
+**macOS/Linux:**
 ```bash
 export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:DATABASE_URL="postgresql://btr:btr@localhost:5432/btr"
+```
+
+**Windows (Command Prompt):**
+```cmd
+set DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
 ```
 
 PDF export (optional):
@@ -88,7 +109,7 @@ For local Docker or Cloud Run container notes, see `deploy/README.md`.
 
 ## Troubleshooting
 
-- If you see “OpenAI API key is required,” paste a key in the UI and try again.
+- If you see “OpenAI API key is required” or “Anthropic API key is required,” paste the correct key for your selected provider in the AI Options panel and try again.
 - If the app can’t connect, make sure the server is running on port 3001.
 
 ## Running Tests
@@ -111,9 +132,31 @@ Backend integration tests (requires Docker, uses Testcontainers):
 npm run test:integration --workspace=server
 ```
 
-Live integration tests (calls the OpenAI API; uses a key only for these tests):
+Live integration tests — OpenAI (calls the OpenAI API):
 
+**macOS/Linux:**
 ```bash
-export OPENAI_API_KEY="your_api_key_here"
+export OPENAI_API_KEY="your_openai_key"
+npm run test:live --workspace=server
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:OPENAI_API_KEY="your_openai_key"
+npm run test:live --workspace=server
+```
+
+Live integration tests — Anthropic (calls the Anthropic API; not run in default CI):
+
+**macOS/Linux:**
+```bash
+export ANTHROPIC_API_KEY="your_anthropic_key"
+RUN_ANTHROPIC_LIVE_TESTS=1 npm run test:live --workspace=server
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:ANTHROPIC_API_KEY="your_anthropic_key"
+$env:RUN_ANTHROPIC_LIVE_TESTS="1"
 npm run test:live --workspace=server
 ```
