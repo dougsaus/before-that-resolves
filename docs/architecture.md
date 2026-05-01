@@ -15,11 +15,13 @@ graph TD
     DeckCache[Deck Cache]
     ConvStore[Conversation Store]
     PDF[PDF Export Service]
+    ModelProvider[Model Provider Config]
     Agents[OpenAI Agents SDK]
   end
 
   subgraph External[External Services]
     OpenAI[OpenAI API]
+    Anthropic[Anthropic API]
     Archidekt[Archidekt API]
     Moxfield[Moxfield API]
     Scryfall[Scryfall API]
@@ -33,9 +35,11 @@ graph TD
   API --> DeckCache
   API --> ConvStore
   API --> PDF
-  API --> Agents
+  API --> ModelProvider
+  ModelProvider --> Agents
 
   Agents --> OpenAI
+  Agents -->|via AI SDK adapter| Anthropic
   DeckCache --> Archidekt
   DeckCache --> Moxfield
   Agents --> Scryfall
@@ -46,9 +50,19 @@ graph TD
 - **Web Client**: Collects user input, triggers deck load, analysis/goldfish runs, and PDF export.
 - **Express API**: Orchestrates requests, manages conversation IDs, and forwards agent runs.
 - **Deck Cache**: Stores the most recently loaded deck payload in memory (Archidekt or Moxfield) so tools can query it.
-- **Conversation Store**: Tracks `lastResponseId` per conversation for OpenAI conversation history.
-- **Agents SDK**: Runs the Card Oracle agent and its tools/sub-agents.
+- **Conversation Store**: Tracks provider-aware conversation state per conversation. For OpenAI, stores `lastResponseId` for the Responses API chain. For Anthropic, stores accumulated message history (`AgentInputItem[]`) since Anthropic has no server-side response chain.
+- **Model Provider Config** (`server/src/config/model-provider.ts`): Resolves an `OracleModelSelection` into a model instance compatible with the Agents SDK. Returns a plain model string for OpenAI; wraps an `@ai-sdk/anthropic` model with the `aisdk()` adapter for Anthropic.
+- **Agents SDK**: Runs the Card Oracle agent and its tools/sub-agents. Anthropic models are supported via `@openai/agents-extensions` AI SDK adapter.
 - **PDF Export**: Renders chat transcript (and deck metadata if present) to a PDF.
+
+## Provider Support
+
+The app supports two LLM providers. Provider is selected per-request and defaults to `openai`.
+
+| Provider | Header | Conversation history | Reasoning/verbosity settings |
+|---|---|---|---|
+| `openai` | `x-openai-key` | `previousResponseId` (Responses API) | Supported |
+| `anthropic` | `x-anthropic-key` | Accumulated message history | Not supported (stripped server-side) |
 
 ## Deployment Notes
 

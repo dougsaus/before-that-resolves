@@ -6,6 +6,7 @@ import { RichMTGText } from './RichMTGText';
 import { DeveloperInfo } from './DeveloperInfo';
 
 const OPENAI_KEY_STORAGE_KEY = 'before-that-resolves.openai-key';
+const ANTHROPIC_KEY_STORAGE_KEY = 'before-that-resolves.anthropic-key';
 type ErrorWithResponse = {
   response?: { data?: { error?: string } };
   message?: string;
@@ -21,6 +22,7 @@ function createConversationId() {
 }
 
 type CardOracleProps = {
+  provider?: 'openai' | 'anthropic';
   model?: string;
   reasoningEffort?: 'low' | 'medium' | 'high';
   verbosity?: 'low' | 'medium' | 'high';
@@ -32,6 +34,7 @@ type CardOracleProps = {
 type MobilePanel = 'chat' | 'deck' | 'ai';
 
 export function CardOracle({
+  provider = 'openai',
   model,
   reasoningEffort,
   verbosity,
@@ -95,18 +98,31 @@ export function CardOracle({
   const [openAiKey, setOpenAiKey] = useState('');
   const [saveKeyLocally, setSaveKeyLocally] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [anthropicKey, setAnthropicKey] = useState('');
+  const [saveAnthropicKeyLocally, setSaveAnthropicKeyLocally] = useState(false);
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [messages, setMessages] = useState<
     Array<{ id: string; role: 'user' | 'agent' | 'error'; content: string }>
   >([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
-  const hasApiKey = Boolean(openAiKey.trim());
+  const prevProviderRef = useRef(provider);
+  const activeKey = provider === 'anthropic' ? anthropicKey.trim() : openAiKey.trim();
+  const hasApiKey = Boolean(activeKey);
 
   useEffect(() => {
     const storedKey = window.localStorage.getItem(OPENAI_KEY_STORAGE_KEY);
     if (storedKey) {
       setOpenAiKey(storedKey);
       setSaveKeyLocally(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const storedKey = window.localStorage.getItem(ANTHROPIC_KEY_STORAGE_KEY);
+    if (storedKey) {
+      setAnthropicKey(storedKey);
+      setSaveAnthropicKeyLocally(true);
     }
   }, []);
 
@@ -122,6 +138,26 @@ export function CardOracle({
     }
     window.localStorage.setItem(OPENAI_KEY_STORAGE_KEY, trimmedKey);
   }, [openAiKey, saveKeyLocally]);
+
+  useEffect(() => {
+    if (!saveAnthropicKeyLocally) {
+      window.localStorage.removeItem(ANTHROPIC_KEY_STORAGE_KEY);
+      return;
+    }
+    const trimmedKey = anthropicKey.trim();
+    if (!trimmedKey) {
+      window.localStorage.removeItem(ANTHROPIC_KEY_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(ANTHROPIC_KEY_STORAGE_KEY, trimmedKey);
+  }, [anthropicKey, saveAnthropicKeyLocally]);
+
+  useEffect(() => {
+    if (prevProviderRef.current !== provider) {
+      prevProviderRef.current = provider;
+      setConversationId(createConversationId());
+    }
+  }, [provider]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -161,6 +197,11 @@ export function CardOracle({
 
   const getApiKeyHeaders = () => {
     if (!useOwnKey) return null;
+    if (provider === 'anthropic') {
+      const trimmedKey = anthropicKey.trim();
+      if (!trimmedKey) return null;
+      return { 'x-anthropic-key': trimmedKey };
+    }
     const trimmedKey = openAiKey.trim();
     if (!trimmedKey) return null;
     return { 'x-openai-key': trimmedKey };
@@ -200,8 +241,10 @@ export function CardOracle({
     options?: { hideUserMessage?: boolean; mode?: 'query' | 'analyze' | 'goldfish' }
   ) => {
     if (!text.trim()) return;
-    if (useOwnKey && !openAiKey.trim()) {
-      appendErrorMessage('OpenAI API key is required.');
+    if (useOwnKey && !activeKey) {
+      appendErrorMessage(
+        provider === 'anthropic' ? 'Anthropic API key is required.' : 'OpenAI API key is required.'
+      );
       return;
     }
 
@@ -226,6 +269,7 @@ export function CardOracle({
           query: text,
           devMode: isDevMode,
           conversationId,
+          provider,
           model,
           reasoningEffort: reasoningEffort || undefined,
           verbosity,
@@ -1163,31 +1207,63 @@ export function CardOracle({
       {showModelOptions && (
         <div className="mt-3 flex flex-col gap-4">
           <div className="flex flex-col gap-3 text-sm text-gray-300">
-            <div className="flex items-center gap-2">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={openAiKey}
-                onChange={(e) => setOpenAiKey(e.target.value)}
-                placeholder="sk-..."
-                className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey((prev) => !prev)}
-                className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors"
-              >
-                {showKey ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-gray-400">
-              <input
-                type="checkbox"
-                checked={saveKeyLocally}
-                onChange={(e) => setSaveKeyLocally(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
-              />
-              Store this key in this browser (local storage)
-            </label>
+            {provider === 'anthropic' ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    type={showAnthropicKey ? 'text' : 'password'}
+                    value={anthropicKey}
+                    onChange={(e) => setAnthropicKey(e.target.value)}
+                    placeholder="sk-ant-..."
+                    className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAnthropicKey((prev) => !prev)}
+                    className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors"
+                  >
+                    {showAnthropicKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={saveAnthropicKeyLocally}
+                    onChange={(e) => setSaveAnthropicKeyLocally(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Store this key in this browser (local storage)
+                </label>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={openAiKey}
+                    onChange={(e) => setOpenAiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((prev) => !prev)}
+                    className="text-xs text-gray-300 border border-gray-600 rounded px-2 py-1 hover:text-white hover:border-gray-400 transition-colors"
+                  >
+                    {showKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={saveKeyLocally}
+                    onChange={(e) => setSaveKeyLocally(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Store this key in this browser (local storage)
+                </label>
+              </>
+            )}
             <span className="text-[11px] text-gray-500">
               Keys are required for requests and are never stored by the server. Remove the
               stored key by unchecking the option above and clearing the field.

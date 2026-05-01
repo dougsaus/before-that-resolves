@@ -1,8 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { Agent } from '@openai/agents';
-import { openaiConfig } from '../../config/openai';
-import type { ReasoningEffort, TextVerbosity } from '../card-oracle';
+import { Agent, type Model } from '@openai/agents';
+import type { OracleModelSelection } from '../../types/provider';
 import { toModelReasoningEffort } from '../card-oracle';
 
 function loadPrompt(filename: string): string {
@@ -11,12 +10,12 @@ function loadPrompt(filename: string): string {
 }
 
 export function createCommanderBracketAgent(
-  model?: string,
-  reasoningEffort?: ReasoningEffort,
-  verbosity?: TextVerbosity
+  resolvedModel: string | Model,
+  selection: OracleModelSelection
 ) {
+  const { reasoningEffort, verbosity, provider } = selection;
   const normalizedEffort = toModelReasoningEffort(reasoningEffort);
-  const modelSettings = normalizedEffort || verbosity
+  const modelSettings = provider !== 'anthropic' && (normalizedEffort || verbosity)
     ? {
       ...(normalizedEffort ? { reasoning: { effort: normalizedEffort } } : {}),
       ...(verbosity ? { text: { verbosity } } : {})
@@ -25,7 +24,7 @@ export function createCommanderBracketAgent(
 
   return new Agent({
     name: 'Commander Bracket Expert',
-    model: model || openaiConfig.model || 'gpt-4o',
+    model: resolvedModel,
     modelSettings,
     instructions: loadPrompt('commander-bracket.md')
   });

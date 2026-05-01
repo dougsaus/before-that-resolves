@@ -7,7 +7,8 @@ This file provides guidance to coding agents working in this repository.
 Before That Resolves is a Magic: The Gathering assistant web app. Users chat with "The Oracle" to look up cards, check commander legality, explain interactions, analyze decks, and track game logs/deck collections.
 
 Primary integrations:
-- OpenAI API (agent responses)
+- OpenAI API (agent responses, default provider)
+- Anthropic Claude API (agent responses, via `@openai/agents-extensions` AI SDK adapter)
 - Scryfall API (card data)
 - Archidekt/Moxfield APIs (deck loading/import)
 - PostgreSQL (auth sessions, deck collections, game logs)
@@ -24,7 +25,9 @@ Key directories/files:
 - `server/src/app.ts` - Express app, routes, dependency injection entrypoint
 - `server/src/agents/card-oracle/index.ts` - main agent orchestration
 - `server/src/services/deck.ts` - Archidekt/Moxfield loading + in-memory deck cache
-- `server/src/utils/conversation-store.ts` - conversation state (`lastResponseId`) storage
+- `server/src/utils/conversation-store.ts` - provider-aware conversation state (OpenAI: `lastResponseId`; Anthropic: message history)
+- `server/src/config/model-provider.ts` - resolves `OracleModelSelection` → model instance + runConfig for either provider
+- `server/src/types/provider.ts` - `ModelProviderKind` and `OracleModelSelection` shared types
 - `server/src/services/db.ts` - Postgres pool + schema initialization
 - `docs/architecture.md`, `docs/agents.md`, `docs/interaction.md` - architecture and flows
 
@@ -42,6 +45,7 @@ npm run test --workspace=client
 npm run test --workspace=server
 npm run test:integration --workspace=server          # RUN_INTEGRATION_TESTS=1
 npm run test:live --workspace=server                 # RUN_LIVE_TESTS=1, requires OPENAI_API_KEY
+RUN_ANTHROPIC_LIVE_TESTS=1 npm run test:live --workspace=server  # requires ANTHROPIC_API_KEY
 
 # Single test file
 npx vitest run path/to/file.test.ts --workspace=client
@@ -60,8 +64,9 @@ export DATABASE_URL=postgresql://btr:btr@localhost:5432/btr
 ```
 
 Important env behavior:
-- App chat requests use per-request `x-openai-key` from the UI; server does not require a global `OPENAI_API_KEY` for normal local usage.
-- `OPENAI_API_KEY` is still needed for server live tests and standalone test scripts.
+- App chat requests use per-request `x-openai-key` or `x-anthropic-key` from the UI; server does not require global API keys for normal local usage.
+- `OPENAI_API_KEY` is needed for OpenAI live tests and standalone test scripts.
+- `ANTHROPIC_API_KEY` is needed for Anthropic live tests (gated by `RUN_ANTHROPIC_LIVE_TESTS=1`).
 - `MOXFIELD_USER_AGENT` must be set for Moxfield deck fetch/import endpoints.
 - `GOOGLE_CLIENT_ID` is required for Google auth flows.
 
@@ -77,19 +82,26 @@ See `.env.example` for full list.
   - Goldfish Expert
 
 **Core data flow:**
-1. Client sends query to `/api/agent/query`.
-2. Server resolves/creates `conversationId` and forwards to Card Oracle.
-3. Agent runs tools (Scryfall, deck cache access, sub-agents).
-4. Server returns response plus `conversationId`; conversation history uses `lastResponseId`.
+1. Client sends query to `/api/agent/query` with `provider` (`'openai'` or `'anthropic'`) and the matching API key header.
+2. Server resolves/creates `conversationId`, builds an `OracleModelSelection`, and forwards to Card Oracle.
+3. `buildProviderConfig` resolves the model instance and `runConfig` for the selected provider.
+4. Agent runs tools (Scryfall, deck cache access, sub-agents) — all agents use the same provider.
+5. Server stores conversation state per-provider and returns the response with `conversationId`.
 
 **State model:**
 - Conversation state is in-memory and keyed by `conversationId`.
+  - OpenAI: stores `lastResponseId` (Responses API chain).
+  - Anthropic: stores full message history (`AgentInputItem[]`) passed on the next turn.
 - Deck cache is also in-memory and keyed by `conversationId`.
 - `/api/agent/reset` clears both conversation state and deck cache for that conversation.
 
 ## API Surface (High Value Routes)
 
-- `POST /api/agent/query` - main oracle chat endpoint (`x-openai-key` supported)
+- `POST /api/agent/query` - main oracle chat endpoint
+  - Body: `{ query, conversationId?, provider?, model?, reasoningEffort?, verbosity?, deckUrl? }`
+  - `provider`: `'openai'` (default) or `'anthropic'`
+  - Headers: `x-openai-key` for OpenAI, `x-anthropic-key` for Anthropic
+  - `reasoningEffort` and `verbosity` are OpenAI-only; ignored for Anthropic
 - `POST /api/agent/reset` - reset conversation + deck cache for `conversationId`
 - `POST /api/deck/cache` - cache deck for a conversation
 - `POST /api/chat/export-pdf` - export chat transcript PDF
@@ -101,6 +113,7 @@ See `.env.example` for full list.
 - Server app uses dependency injection via `createApp(deps)` in `server/src/app.ts`
 - Integration tests use Testcontainers + PostgreSQL and are gated by `RUN_INTEGRATION_TESTS=1`
 - Live OpenAI tests are gated by `RUN_LIVE_TESTS=1` and require `OPENAI_API_KEY`
+- Live Anthropic tests are gated by `RUN_ANTHROPIC_LIVE_TESTS=1` and require `ANTHROPIC_API_KEY`; not run in default CI
 
 ## Domain Conventions
 

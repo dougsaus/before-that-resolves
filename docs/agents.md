@@ -43,6 +43,8 @@ graph TD
 - Two sub-agents are exposed as tools to the main agent:
   - **Commander Bracket Expert** for bracket system analysis.
   - **Goldfish Expert** for simulation-based analytics using goldfish tools.
+- All agents (main and sub-agents) use the same provider and model selection. The `OracleModelSelection` (provider, model, apiKey) is threaded through run context so sub-agents are constructed with the same provider as the parent.
+- `agent.asTool()` behavior with the Anthropic AI SDK adapter is verified during live testing. If it proves unreliable, sub-agents may fall back to explicit function tools.
 
 ## Goldfish Agent Toolchain
 

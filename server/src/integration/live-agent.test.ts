@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { run } from '@openai/agents';
 import { executeCardOracle } from '../agents/card-oracle';
 import { createGoldfishAgent } from '../agents/goldfish';
+import { buildProviderConfig } from '../config/model-provider';
 import { buildArchidektDeckData, cacheDeckFromUrl } from '../services/deck';
 import { countToolCalls, extractResponseText } from '../utils/agent-helpers';
 import { getOrCreateConversationId } from '../utils/conversation-store';
+import type { OracleModelSelection } from '../types/provider';
 
 const liveEnabled = process.env.RUN_LIVE_TESTS === '1';
 const openAiKey = process.env.OPENAI_API_KEY;
@@ -35,17 +37,14 @@ describeLive('live integrations', () => {
     'runs the agent with OpenAI conversation memory',
     async () => {
       const conversationId = getOrCreateConversationId();
-      const first = await executeCardOracle('What is Sol Ring?', false, conversationId, undefined, undefined, undefined, openAiKey);
+      const first = await executeCardOracle('What is Sol Ring?', false, conversationId, { provider: 'openai', apiKey: openAiKey });
       expect(first.success).toBe(true);
 
       const followUp = await executeCardOracle(
         'Summarize the previous answer in one sentence.',
         false,
         conversationId,
-        undefined,
-        undefined,
-        undefined,
-        openAiKey
+        { provider: 'openai', apiKey: openAiKey }
       );
       expect(followUp.success).toBe(true);
       expect(followUp.response).toBeTypeOf('string');
@@ -58,7 +57,9 @@ describeLive('live integrations', () => {
     'runs the goldfish agent tool chain against a live model',
     async () => {
       const conversationId = getOrCreateConversationId();
-      const agent = createGoldfishAgent(undefined, undefined, undefined, conversationId);
+      const selection: OracleModelSelection = { provider: 'openai', apiKey: openAiKey };
+      const { model: resolvedModel } = buildProviderConfig(selection);
+      const agent = createGoldfishAgent(resolvedModel, selection, conversationId);
       const prompt = [
         'Goldfish this Commander deck using the goldfish tools only:',
         'https://archidekt.com/decks/17352990/the_world_is_a_vampire',

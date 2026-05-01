@@ -8,12 +8,15 @@ import { DevPanel } from './components/DevPanel';
 import { useDeckCollection } from './hooks/useDeckCollection';
 import { useSharedGameLogs } from './hooks/useSharedGameLogs';
 
+const PROVIDER_STORAGE_KEY = 'before-that-resolves.provider';
+
 const reasoningOptions = {
   'gpt-5': ['low', 'medium', 'high'],
   'gpt-5.1': ['low', 'medium', 'high'],
   'gpt-5.2': ['low', 'medium', 'high']
 } as const;
 
+type Provider = 'openai' | 'anthropic';
 type AppView = 'oracle' | 'decks' | 'logs' | 'profile';
 
 type NavItem = {
@@ -34,7 +37,7 @@ function getInitials(label?: string | null) {
 }
 
 function App() {
-  const models = useMemo(
+  const openaiModels = useMemo(
     () => [
       { id: 'gpt-5', label: 'gpt-5', reasoning: true, verbosity: true },
       { id: 'gpt-5.1', label: 'gpt-5.1', reasoning: true, verbosity: true },
@@ -45,7 +48,28 @@ function App() {
     ],
     []
   );
-  const [selectedModel, setSelectedModel] = useState('gpt-5.2');
+  const anthropicModels = useMemo(
+    () => [
+      { id: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
+      { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+      { id: 'claude-opus-4-7', label: 'claude-opus-4-7' }
+    ],
+    []
+  );
+  const [provider, setProviderState] = useState<Provider>(() => {
+    const stored = window.localStorage.getItem(PROVIDER_STORAGE_KEY);
+    return stored === 'anthropic' ? 'anthropic' : 'openai';
+  });
+  const setProvider = (next: Provider) => {
+    setProviderState(next);
+    window.localStorage.setItem(PROVIDER_STORAGE_KEY, next);
+    setSelectedModel(next === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-5.2');
+  };
+  const models = provider === 'anthropic' ? anthropicModels : openaiModels;
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const stored = window.localStorage.getItem(PROVIDER_STORAGE_KEY);
+    return stored === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-5.2';
+  });
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('medium');
   const [verbosity, setVerbosity] = useState<'low' | 'medium' | 'high'>('medium');
   const [view, setView] = useState<AppView>('oracle');
@@ -59,21 +83,45 @@ function App() {
     onAuthExpired: deckCollection.markAuthExpired
   });
   const mainRef = useRef<HTMLElement | null>(null);
-  const supportsReasoning = models.find((model) => model.id === selectedModel)?.reasoning ?? false;
-  const supportsVerbosity = models.find((model) => model.id === selectedModel)?.verbosity ?? false;
+  const openaiModelMeta = openaiModels.find((m) => m.id === selectedModel);
+  const supportsReasoning = provider === 'openai' && (openaiModelMeta?.reasoning ?? false);
+  const supportsVerbosity = provider === 'openai' && (openaiModelMeta?.verbosity ?? false);
   const effortOptions = useMemo(() => {
-    if (!supportsReasoning) {
-      return [];
-    }
+    if (!supportsReasoning) return [];
     return Array.from(reasoningOptions[selectedModel as keyof typeof reasoningOptions] || []);
   }, [supportsReasoning, selectedModel]);
   const normalizedReasoningEffort =
-    supportsReasoning && effortOptions.includes(reasoningEffort)
-      ? reasoningEffort
-      : 'medium';
+    supportsReasoning && effortOptions.includes(reasoningEffort) ? reasoningEffort : 'medium';
   const normalizedVerbosity = supportsVerbosity ? verbosity : 'medium';
   const modelControls = (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <label className="text-sm text-gray-300">Provider</label>
+        <div className="flex rounded overflow-hidden border border-gray-700 text-sm">
+          <button
+            type="button"
+            onClick={() => setProvider('openai')}
+            className={`flex-1 px-3 py-2 transition-colors ${
+              provider === 'openai'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            OpenAI
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider('anthropic')}
+            className={`flex-1 px-3 py-2 transition-colors ${
+              provider === 'anthropic'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            Anthropic
+          </button>
+        </div>
+      </div>
       <div className="flex flex-col gap-2">
         <label className="text-sm text-gray-300">Model</label>
         <select
@@ -301,6 +349,7 @@ function App() {
               </div>
               {view === 'oracle' && (
                 <CardOracle
+                  provider={provider}
                   model={selectedModel}
                   reasoningEffort={supportsReasoning ? reasoningEffort : undefined}
                   verbosity={supportsVerbosity ? verbosity : undefined}

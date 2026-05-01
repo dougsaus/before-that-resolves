@@ -13,7 +13,7 @@ sequenceDiagram
   participant Archidekt as Archidekt API
   participant Moxfield as Moxfield API
   participant Agent as Card Oracle Agent
-  participant OpenAI as OpenAI API
+  participant LLM as OpenAI or Anthropic API
 
   User->>UI: Enter Archidekt or Moxfield URL
   User->>UI: Click Load Deck
@@ -28,12 +28,12 @@ sequenceDiagram
   API->>Deck: Store cached deck
   API-->>UI: { success: true }
 
-  User->>UI: Select analysis options
+  User->>UI: Select provider, model, and analysis options
   User->>UI: Click Analyze Deck
-  UI->>API: POST /api/agent/query (x-openai-key required)
-  API->>Agent: executeCardOracle(query)
-  Agent->>OpenAI: run() with tools
-  OpenAI-->>Agent: response
+  UI->>API: POST /api/agent/query { provider, model, ... }<br/>(x-openai-key or x-anthropic-key header)
+  API->>Agent: executeCardOracle(query, modelSelection)
+  Agent->>LLM: run() with tools
+  LLM-->>Agent: response
   Agent-->>API: response text
   API-->>UI: response payload
 ```
@@ -49,14 +49,14 @@ sequenceDiagram
   participant SubAgent as Goldfish Agent
   participant Tools as Goldfish Tools
   participant Deck as Deck Cache
-  participant OpenAI as OpenAI API
+  participant LLM as OpenAI or Anthropic API
 
   User->>UI: Choose goldfish options
   User->>UI: Click Goldfish Deck
-  UI->>API: POST /api/agent/query (x-openai-key required)
-  API->>Agent: executeCardOracle(query)
-  Agent->>OpenAI: run() with tools
-  Agent->>SubAgent: commander_goldfish_expert
+  UI->>API: POST /api/agent/query { provider, model, ... }<br/>(x-openai-key or x-anthropic-key header)
+  API->>Agent: executeCardOracle(query, modelSelection)
+  Agent->>LLM: run() with tools
+  Agent->>SubAgent: commander_goldfish_expert (same provider)
   SubAgent->>Tools: loadDeck()
   Tools->>Deck: read cached deck
   SubAgent->>Tools: reset/draw/move/peek...

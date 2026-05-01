@@ -15,7 +15,10 @@
     "test:integration": "RUN_INTEGRATION_TESTS=1 vitest run"
   },
   "dependencies": {
-    "@openai/agents": "^0.8.3",
+    "@ai-sdk/anthropic": "^3.0.72",
+    "@openai/agents": "^0.8.5",
+    "@openai/agents-extensions": "^0.8.5",
+    "ai": "^6.0.170",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
